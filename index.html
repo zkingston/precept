@@ -1,0 +1,1300 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>precept · non-Riemannian color space</title>
+<style>
+  :root { --bg:#101012; --panel:#1c1c1f; --line:#32323a; --fg:#e8e8ec; --dim:#8b8b96; --hot:#ff5b5b; --hud:#33333a; }
+  * { box-sizing:border-box; }
+  body { margin:0; overflow:hidden; background:var(--bg); color:var(--fg); font:13px/1.45 ui-sans-serif,system-ui,sans-serif; }
+  /* the row must be 1fr, not the implicit auto: a sidebar taller than the
+     viewport would otherwise stretch the row and push the canvas off-screen */
+  #app { display:grid; grid-template-columns:1fr 330px; grid-template-rows:1fr; height:100vh; }
+  main, aside { min-height:0; }
+
+  main { position:relative; min-width:0; }
+  #gl { display:block; width:100%; height:100%; touch-action:none; }
+  /* one canvas, four scissored viewports; the HUD is plain DOM on top */
+  .quad { position:absolute; pointer-events:none; }
+  .quad .tag { position:absolute; top:8px; left:10px; font:10px/1 ui-monospace,monospace; letter-spacing:.1em;
+               text-transform:uppercase; color:var(--hud); }
+  .quad .sl { position:absolute; bottom:8px; left:10px; right:10px; display:flex; align-items:center; gap:8px;
+              pointer-events:auto; font:11px ui-monospace,monospace; color:var(--hud); }
+  .quad .sl input { flex:1; min-width:0; accent-color:#5f8ba6; }
+  .quad .sl b { font-weight:400; width:32px; text-align:right; }
+  input[type=color] { width:34px; height:24px; padding:1px; background:#26262b;
+                      border:1px solid var(--line); border-radius:4px; }
+  input[type=checkbox] { accent-color:#5f8ba6; width:14px; height:14px; }
+  /* no native dual range exists, so stack two: tracks inert, thumbs live */
+  .dual { position:relative; flex:1; height:18px; min-width:0; }
+  .dual::before { content:''; position:absolute; left:0; right:0; top:8px; height:3px; border-radius:2px; background:#3a3a42; }
+  .dual .fill { position:absolute; top:8px; height:3px; border-radius:2px; background:#7dd3fc; }
+  .dual input { position:absolute; inset:0; width:100%; height:18px; margin:0; background:none;
+                pointer-events:none; -webkit-appearance:none; appearance:none; }
+  .dual input::-webkit-slider-thumb { pointer-events:auto; -webkit-appearance:none; appearance:none;
+    width:13px; height:13px; border-radius:50%; background:#7dd3fc; border:1px solid #1c1c1f; cursor:pointer; }
+  .dual input::-moz-range-thumb { pointer-events:auto; width:13px; height:13px; border-radius:50%;
+    background:#7dd3fc; border:1px solid #1c1c1f; cursor:pointer; }
+  .dual input::-moz-range-track { background:none; }
+  label.chk { display:flex; align-items:center; gap:7px; cursor:pointer; }
+  #mini { position:absolute; right:14px; bottom:14px; cursor:crosshair; touch-action:none; }
+  #hex { flex:1; min-width:0; font:12px ui-monospace,monospace; text-transform:lowercase; }
+
+  aside { background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:14px;
+          display:flex; flex-direction:column; gap:13px; }
+  h1 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0; font-weight:600; }
+  h2 { font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin:0 0 6px; font-weight:600; }
+  section { border-top:1px solid var(--line); padding-top:11px; }
+  section:first-of-type { border-top:0; padding-top:0; }
+
+  .row { display:flex; align-items:center; gap:8px; }
+  .row + .row { margin-top:6px; }
+  label.f { flex:0 0 68px; color:var(--dim); }
+  input[type=range] { flex:1; min-width:0; accent-color:#7dd3fc; }
+  .v { width:32px; text-align:right; font-variant-numeric:tabular-nums; }
+  select, button, textarea { background:#26262b; color:var(--fg); border:1px solid var(--line);
+                             border-radius:4px; padding:4px 6px; font:inherit; }
+  button { cursor:pointer; } button:hover { background:#32323a; }
+  .seg { display:flex; } .seg button { border-radius:0; flex:1; }
+  .seg button:first-child { border-radius:4px 0 0 4px; } .seg button:last-child { border-radius:0 4px 4px 0; }
+  .seg button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
+
+  #strip { width:100%; height:40px; display:block; border-radius:4px; border:1px solid var(--line); }
+  #swatches { display:flex; flex-wrap:wrap; gap:4px; margin-top:7px; }
+  .sw { width:32px; height:32px; border-radius:4px; border:1px solid #0006; cursor:pointer; position:relative; }
+  .sw[data-sel=true] { outline:2px solid #fff; outline-offset:1px; }
+  .sw[data-bad=true]::after { content:'!'; position:absolute; inset:0; display:grid; place-items:center;
+                              color:var(--hot); font-weight:700; text-shadow:0 0 3px #000; }
+
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  td { padding:2px 0; } td:first-child { color:var(--dim); } td:last-child { text-align:right; }
+  td.warn { color:var(--hot); }
+  #metrics td.btns { width:52px; text-align:right; white-space:nowrap; padding-left:6px; }
+  #metrics td.btns button { padding:0 5px; font:11px/1.5 ui-monospace,monospace; margin-left:3px; }
+  textarea { width:100%; height:76px; font:11px/1.4 ui-monospace,monospace; resize:vertical; }
+  code { color:#9fd; }
+  .note { color:var(--dim); font-size:11px; }
+</style>
+
+<div id="app">
+  <main>
+    <canvas id="gl"></canvas>
+    <div class="quad" id="q1"><span class="tag">down L · a→ b↑</span>
+      <div class="sl">L<input type="range" id="sL" min="0" max="100" step="0.5" value="55"><b id="vL">55</b></div></div>
+    <div class="quad" id="q2"><span class="tag">down a · b→ L↑</span>
+      <div class="sl">a<input type="range" id="sA" min="-36" max="36" step="0.5" value="0"><b id="vA">0</b></div></div>
+    <div class="quad" id="q3"><span class="tag">down b · a→ L↑</span>
+      <div class="sl">b<input type="range" id="sB" min="-36" max="36" step="0.5" value="0"><b id="vB">0</b></div></div>
+    <div class="quad" id="q0"><span class="tag">3D · orbit</span></div>
+    <canvas id="mini" width="190" height="172"></canvas>
+  </main>
+
+  <aside>
+    <h1>Non-Riemannian color space</h1>
+
+    <section>
+      <h2>Palette</h2>
+      <div class="seg" id="mode"><button data-v="continuous">Continuous</button><button data-v="discrete">Discrete</button></div>
+      <div class="row" style="margin-top:6px"><label class="f">load</label>
+        <select id="preset" style="flex:1"></select></div>
+      <div class="row"><label class="f">swatches</label>
+        <input type="range" id="n" min="2" max="16" step="1" value="7"><span class="v" id="nv">7</span></div>
+    </section>
+
+    <section>
+      <h2>Tool</h2>
+      <div class="seg" id="tool"><button data-v="edit">Points</button><button data-v="obstacle">Spheres</button><button data-v="plane">Planes</button></div>
+      <div class="row" style="margin-top:6px"><label class="f">radius</label>
+        <input type="range" id="rad" min="2" max="30" step="0.5" value="12"><span class="v" id="radv">12</span></div>
+      <div class="row"><label class="chk"><input type="checkbox" id="lock">lock slices to node</label></div>
+      <div class="note" id="toolnote"></div>
+    </section>
+
+    <section>
+      <h2>Vision</h2>
+      <div class="row"><label class="f">simulate</label>
+        <select id="cvd" style="flex:1">
+          <option value="none">normal</option><option value="protan">protanopia</option>
+          <option value="deutan">deuteranopia</option><option value="tritan">tritanopia</option></select></div>
+      <div class="row"><label class="f">severity</label>
+        <input type="range" id="sev" min="0" max="1" step="0.05" value="1"><span class="v" id="sevv">1.0</span></div>
+    </section>
+
+    <section>
+      <h2>View</h2>
+      <div class="row"><label class="f">space</label><select id="spacesel" style="flex:1"></select></div>
+      <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select></div>
+      <div class="row"><label class="f">solid</label>
+        <input type="range" id="shell" min="0" max="0.8" step="0.02" value="0.38"><span class="v" id="shellv">.38</span></div>
+      <div class="row"><label class="f">slices</label>
+        <input type="range" id="sliceop" min="0.1" max="1" step="0.05" value="0.8"><span class="v" id="sliceopv">.80</span></div>
+      <div class="row"><label class="f">backdrop</label><input type="color" id="bg" value="#f0ead6"></div>
+      <div class="row"><label class="chk"><input type="checkbox" id="planes3d">slice planes in 3D</label></div>
+    </section>
+
+    <section>
+      <h2>Output</h2>
+      <canvas id="strip" width="300" height="40"></canvas>
+      <div id="swatches"></div>
+    </section>
+
+    <section id="selpanel">
+      <h2>Selection</h2>
+      <div class="row"><label class="f">hex</label><input type="text" id="hex" spellcheck="false" maxlength="7"></div>
+      <div class="row"><span id="selinfo" class="note"></span></div>
+      <div class="row"><button id="flip" style="flex:1">flip the excluded side</button></div>
+    </section>
+
+    <section>
+      <h2>Bounds</h2>
+      <div class="row"><label class="f">lightness</label>
+        <span class="dual" id="ldual"><span class="fill"></span>
+          <input type="range" id="lmin" min="0" max="100" step="1" value="0">
+          <input type="range" id="lmax" min="0" max="100" step="1" value="100"></span>
+        <span class="v" style="width:56px" id="lboundv">0–100</span></div>
+      <div class="row"><label class="f">chroma</label>
+        <span class="dual" id="cdual"><span class="fill"></span>
+          <input type="range" id="cmin" min="0" max="40" step="0.5" value="0">
+          <input type="range" id="cmax" min="0" max="40" step="0.5" value="40"></span>
+        <span class="v" style="width:56px" id="cboundv">0–40</span></div>
+    </section>
+
+    <section><h2>Metrics</h2><table id="metrics"></table>
+      <div class="row" style="margin-top:8px"><label class="f">rate</label>
+        <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span></div>
+      <div class="row"><label class="chk"><input type="checkbox" id="pinends">lock endpoints</label></div>
+      <div class="row"><button id="steptotal" style="flex:1">step all checked terms</button></div>
+    </section>
+    <section><h2>Export</h2><textarea id="export" readonly></textarea></section>
+  </aside>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "/node_modules/three/build/three.module.js",
+               "three/addons/": "/node_modules/three/examples/jsm/" } }
+</script>
+
+<script type="module">
+import * as T from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import {
+  fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh,
+  arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty,
+  minSeparation, obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS,
+  SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
+} from './color-space.ts';
+
+// We do every colour computation ourselves and hand three gamma-encoded sRGB
+// directly, so switch three's colour management off rather than have it convert
+// twice. Everything below is display-referred sRGB, start to finish.
+T.ColorManagement.enabled = false;
+
+const $ = (id) => document.getElementById(id);
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+
+const S = {
+  mode: 'continuous', tool: 'edit', cvd: 'none', sev: 1, n: 7, shell: 0.38, sliceOp: 0.8, rad: 12, rate: 0.3, pinEnds: false, bg: '#f0ead6', lock: false, planes3d: false,
+  slice: [55, 0, 0],                             // cut planes along L, a, b
+  pts: ['#22285e', '#3f8f8a', '#f0e05a'].map(fromHex),
+  obs: [],
+  planes: [],                                    // {n, d} in SPACE coords; n·c > d is excluded
+  lo: [0, 0], hi: [100, 40],                     // lightness and chroma bounds, in CHART units
+  sel: null,                                     // {kind:'pt'|'obs'|'plane', i}
+};
+let view = NORMAL;
+
+/**
+ * space coords ↔ world. Axis 0 is vertical, 1 is x, 2 is z, and the box is
+ * centred on the gamut's own middle. The scale is ONE number for all three
+ * axes: fitting each axis separately would fill the panels better and quietly
+ * lie about every distance in them. Isometric or nothing.
+ */
+let FRAME = null;
+const world = (c) => new T.Vector3((c[1] - FRAME.mid[1]) * FRAME.s, (c[0] - FRAME.mid[0]) * FRAME.s, (c[2] - FRAME.mid[2]) * FRAME.s);
+const unworld = (v) => [v.y / FRAME.s + FRAME.mid[0], v.x / FRAME.s + FRAME.mid[1], v.z / FRAME.s + FRAME.mid[2]];
+const wpt = (p) => world(toSpace(p));            // chart point → world
+const cpt = (v) => fromSpace(unworld(v));        // world → chart point
+
+const TAGS = [[0, 1, 2], [1, 2, 0], [2, 1, 0]];  // [cut axis, horizontal, vertical] per panel
+
+function reframe() {
+  const { lo, hi } = spaceExtent();
+  const mid = lo.map((v, i) => (v + hi[i]) / 2);
+  const half = lo.map((v, i) => Math.max(1e-6, (hi[i] - v) / 2));
+  FRAME = { lo, hi, mid, half, s: Math.min(50 / half[0], 36 / half[1], 36 / half[2]) };
+  const { s } = FRAME;
+  [{ w: half[1], h: half[2] }, { w: half[2], h: half[0] }, { w: half[1], h: half[0] }]
+    .forEach((c, k) => (QUADS[k].cam.userData.content = { w: c.w * s, h: c.h * s }));
+  const names = SPACES[params.space].axes;
+  TAGS.forEach(([cut, hz, vt], k) => {
+    QUADS[k].el.querySelector('.tag').textContent = `down ${names[cut]} · ${names[hz]}→ ${names[vt]}↑`;
+    const el = [$('sL'), $('sA'), $('sB')][k];
+    el.min = lo[cut]; el.max = hi[cut]; el.step = (hi[cut] - lo[cut]) / 500;
+  });
+}
+/** Inside the lightness and chroma bounds? Both are chart quantities. */
+const inBounds = (p) => {
+  const c = Math.hypot(p[1], p[2]);
+  return p[0] >= S.lo[0] && p[0] <= S.hi[0] && c >= S.lo[1] && c <= S.hi[1];
+};
+
+/** on-screen appearance: gamut-map, then push through the colour-vision view */
+const rgb = (p) => toSRGB(view(toGamut(p, 'srgb'))).map(clamp01);
+const paint = (p) => `rgb(${rgb(p).map((c) => Math.round(255 * c)).join(' ')})`;
+
+/**
+ * Starting points. The colormaps are nine evenly spaced samples of matplotlib's
+ * own 256-entry tables — enough control points for the spline to track the
+ * original closely, few enough to actually edit. A starting position, not a
+ * reproduction: the point is to have something real to pull on.
+ */
+const PER_SPAN = 24;                             // spline samples per control interval
+
+/**
+ * Where a new control point belongs. Appending is almost never what you meant:
+ * click near the ribbon and you want the curve to pass through there, which is
+ * an insertion between the two controls that already bracket that stretch;
+ * click out in open space and you are extending the ramp, which is an insertion
+ * at whichever END you clicked nearer. Blind append does the second badly and
+ * the first not at all — it drags the tail of the curve across the solid.
+ *
+ * `spline` emits PER_SPAN samples per interval, so the index of the nearest
+ * curve sample names the interval directly. No search over control points.
+ */
+function addPoint(p) {
+  const d3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  if (S.mode !== 'continuous' || S.pts.length < 2) return S.pts.push(p) - 1;
+
+  const c = curve();
+  let best = 0, near = Infinity;
+  c.forEach((q, i) => { const d = d3(p, q); if (d < near) { near = d; best = i; } });
+  if (near <= 10) {                              // chart units: about a comfortable ΔE
+    const at = Math.min(S.pts.length - 1, Math.floor(best / PER_SPAN) + 1);
+    S.pts.splice(at, 0, p);
+    return at;
+  }
+  if (d3(p, S.pts[0]) < d3(p, S.pts[S.pts.length - 1])) { S.pts.unshift(p); return 0; }
+  return S.pts.push(p) - 1;
+}
+
+const PRESETS = {
+  viridis:     { mode: 'continuous', hex: ['#440154', '#472d7b', '#3b528b', '#2c728e', '#21918c', '#27ad81', '#5cc863', '#aadc32', '#fde725'] },
+  magma:       { mode: 'continuous', hex: ['#000004', '#1d1147', '#51127c', '#832681', '#b73779', '#e55064', '#fb8761', '#fec287', '#fcfdbf'] },
+  inferno:     { mode: 'continuous', hex: ['#000004', '#210c4a', '#57106e', '#8a226a', '#bc3754', '#e35933', '#f98c0a', '#f9c932', '#fcffa4'] },
+  plasma:      { mode: 'continuous', hex: ['#0d0887', '#4c02a1', '#7e03a8', '#aa2395', '#cc4778', '#e56b5d', '#f89441', '#fdc328', '#f0f921'] },
+  cividis:     { mode: 'continuous', hex: ['#00224e', '#1a386f', '#434e6c', '#61656f', '#7d7c78', '#9a9376', '#bbad6d', '#ddc858', '#fee838'] },
+  turbo:       { mode: 'continuous', hex: ['#30123b', '#466be3', '#28bceb', '#32f298', '#a4fc3c', '#ecd13a', '#fb8122', '#d23105', '#7a0403'] },
+  'tab10':      { mode: 'discrete', hex: ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'] },
+  'okabe-ito':  { mode: 'discrete', hex: ['#000000', '#e69f00', '#56b4e9', '#009e73', '#f0e442', '#0072b2', '#d55e00', '#cc79a7'] },
+  'set2':       { mode: 'discrete', hex: ['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3', '#a6d854', '#ffd92f', '#e5c494', '#b3b3b3'] },
+};
+
+/** The metric of the space on screen, calibrated on the neutral axis. */
+const M = () => spaceMetric();
+
+// Interpolated in the space you are looking at, so a curve that reads straight
+// in the sRGB panel IS straight there. Control points still live in the chart.
+const curve = () => (S.pts.length >= 2 ? spline(S.pts.map((p) => toSpace(p)), PER_SPAN).map((c) => fromSpace(c)) : S.pts);
+const palette = () => (S.mode === 'discrete' || S.pts.length < 2 ? S.pts : resample(curve(), S.n, M()));
+
+// ─── renderer, scene, four cameras ───────────────────────────────────────────
+const canvas = $('gl'), main = canvas.parentElement;
+const renderer = new T.WebGLRenderer({ canvas, antialias: true });
+renderer.outputColorSpace = T.LinearSRGBColorSpace;   // pass our sRGB values straight through
+renderer.setScissorTest(true);
+const scene = new T.Scene();
+
+const cam3 = new T.PerspectiveCamera(42, 1, 1, 3000);
+cam3.position.set(96, 62, 118);
+const controls = new OrbitControls(cam3, canvas);
+controls.enableDamping = true;
+
+/** Ortho views. The camera placements are picked so the on-screen axes read the
+ *  way each panel's tag claims — the "down L" camera sits below the solid,
+ *  which is what puts +a right and +b up. */
+const ortho = (pos, up, halfW, halfH) => {
+  const c = new T.OrthographicCamera(-1, 1, 1, -1, 1, 3000);
+  c.position.set(...pos); c.up.set(...up); c.lookAt(0, 0, 0);
+  c.userData.content = { w: halfW, h: halfH };   // what has to stay on screen
+  return c;
+};
+// content extents here are placeholders; reframe() fits them to the space
+const camL = ortho([0, -900, 0], [0, 0, 1], 36, 36);
+const camA = ortho([-900, 0, 0], [0, 1, 0], 36, 50);
+const camB = ortho([0, 0, 900], [0, 1, 0], 36, 50);
+
+// Layer 1 holds the gamut shell: only the 3D view enables it, or each slice
+// panel would be looking at its own cross-section through a translucent solid.
+cam3.layers.enable(1);
+// Layer 3 carries the slice planes. Every ortho view wants them — its own plane
+// face-on, the other two edge-on as crosshairs — while 3D toggles them.
+for (const c of [camL, camA, camB]) c.layers.enable(3);
+const QUADS = [
+  { el: $('q1'), cam: camL, axis: 0 },
+  { el: $('q2'), cam: camA, axis: 1 },
+  { el: $('q3'), cam: camB, axis: 2 },
+  { el: $('q0'), cam: cam3 },
+];
+reframe();                       // FRAME must exist before anything calls world()
+S.slice = [...FRAME.mid];
+
+// ─── the sRGB solid, as its actual boundary ──────────────────────────────────
+// The gamut is the image of the RGB cube, so its boundary is the image of the
+// cube's six faces. Exact, and 6N² quads instead of a volume of samples.
+const SHELL_N = 20;
+const shellGeo = (() => {
+  const N = SHELL_N, idx = [], count = 6 * (N + 1) ** 2;
+  for (let f = 0; f < 6; f++) {
+    const base = f * (N + 1) ** 2;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const o = base + j * (N + 1) + i;
+      idx.push(o, o + 1, o + N + 1, o + 1, o + N + 2, o + N + 1);
+    }
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(count * 3), 3));
+  g.setAttribute('color', new T.Float32BufferAttribute(new Float32Array(count * 3), 3));
+  g.setIndex(idx);
+  return g;
+})();
+
+/** Positions depend on the active gamut, so this reruns when the gamut changes.
+ *  The 2.2 warp only spreads vertices evenly over the surface — same surface. */
+function buildShell() {
+  const N = SHELL_N, pos = shellGeo.attributes.position;
+  let k = 0;
+  for (const [u, v, w, f] of CUBE_FACES)
+    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+      const c = []; c[u] = (i / N) ** 2.2; c[v] = (j / N) ** 2.2; c[w] = f;
+      const p = wpt(fromLinear(c));
+      pos.setXYZ(k++, p.x, p.y, p.z);
+    }
+  pos.needsUpdate = true;
+  shellGeo.computeBoundingSphere();
+}
+// BackSide, not DoubleSide: drawing only the far faces gives one clean layer of
+// translucency instead of six stacked ones, and leaves the interior readable.
+const shell = new T.Mesh(shellGeo, new T.MeshBasicMaterial({
+  vertexColors: true, transparent: true, opacity: S.shell, side: T.BackSide, depthWrite: false }));
+shell.renderOrder = 2;
+shell.layers.set(1);
+scene.add(shell);
+
+function paintShell() {
+  const pos = shellGeo.attributes.position, col = shellGeo.attributes.color, v = new T.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    const p = cpt(v.fromBufferAttribute(pos, i)), c = rgb(p), k = inBounds(p) ? 1 : 0.28;
+    col.setXYZ(i, c[0] * k, c[1] * k, c[2] * k);
+  }
+  col.needsUpdate = true;
+}
+
+// ─── slice planes: one canvas per axis, used as that plane's texture ─────────
+// Pixel (i,j) ↦ uv and uv ↦ chart point, so the corner coordinates below fully
+// determine what each panel shows. No separate 2D orientation logic.
+const SLICE_N = 320;
+const axLerp = (k, t) => FRAME.lo[k] + (FRAME.hi[k] - FRAME.lo[k]) * t;
+const AXES = [
+  { // constant axis 0: u→axis 1, v→axis 2
+    corners: (t) => [[t, FRAME.lo[1], FRAME.lo[2]], [t, FRAME.hi[1], FRAME.lo[2]], [t, FRAME.hi[1], FRAME.hi[2]], [t, FRAME.lo[1], FRAME.hi[2]]],
+    at: (t, u, v) => [t, axLerp(1, u), axLerp(2, v)],
+    normal: () => new T.Vector3(0, 1, 0),
+  },
+  { // constant axis 1: u→axis 2, v→axis 0
+    corners: (t) => [[FRAME.lo[0], t, FRAME.lo[2]], [FRAME.lo[0], t, FRAME.hi[2]], [FRAME.hi[0], t, FRAME.hi[2]], [FRAME.hi[0], t, FRAME.lo[2]]],
+    at: (t, u, v) => [axLerp(0, v), t, axLerp(2, u)],
+    normal: () => new T.Vector3(1, 0, 0),
+  },
+  { // constant axis 2: u→axis 1, v→axis 0
+    corners: (t) => [[FRAME.lo[0], FRAME.lo[1], t], [FRAME.lo[0], FRAME.hi[1], t], [FRAME.hi[0], FRAME.hi[1], t], [FRAME.hi[0], FRAME.lo[1], t]],
+    at: (t, u, v) => [axLerp(0, v), axLerp(1, u), t],
+    normal: () => new T.Vector3(0, 0, 1),
+  },
+];
+
+const slices = AXES.map((ax, k) => {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = SLICE_N;
+  const geo = new T.BufferGeometry();
+  geo.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(12), 3));
+  geo.setAttribute('uv', new T.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+  geo.setIndex([0, 1, 2, 0, 2, 3]);
+  const tex = new T.CanvasTexture(cv);
+  // alphaTest discards the out-of-gamut texels outright; depthWrite keeps the
+  // planes sorting against each other and against the tube. Opacity is then
+  // free to be a dial without the overpainting it caused when depth was off.
+  // alphaTest compares texel alpha TIMES material opacity, and in-gamut texels
+  // are alpha 1. A fixed 0.5 threshold therefore discarded the entire plane once
+  // opacity dropped below 0.5 — half the slider did nothing. Track the opacity.
+  const mesh = new T.Mesh(geo, new T.MeshBasicMaterial({
+    map: tex, alphaTest: S.sliceOp / 2, transparent: true, opacity: S.sliceOp, depthWrite: true, side: T.DoubleSide }));
+  // the outline shares the plane's position attribute, so it tracks for free
+  const edge = new T.LineLoop(new T.BufferGeometry().setAttribute('position', geo.attributes.position),
+    new T.LineBasicMaterial({ color: 0x33333a }));
+  edge.renderOrder = 1;
+  mesh.layers.set(3); edge.layers.set(3);
+  scene.add(mesh, edge);
+  return { ax, k, cv, ctx: cv.getContext('2d'), tex, geo, mesh, edge, key: null };
+});
+
+function paintSlice(s) {
+  const t = S.slice[s.k];
+  const p = s.geo.attributes.position;
+  s.ax.corners(t).forEach((c, i) => p.setXYZ(i, ...world(c).toArray()));
+  p.needsUpdate = true;
+  s.geo.computeBoundingSphere();
+
+  const key = `${t}|${S.cvd}|${S.sev}|${params.gamut}|${params.space}|${S.lo}|${S.hi}`;
+  if (key === s.key) return;
+  s.key = key;
+  const N = SLICE_N, img = s.ctx.createImageData(N, N), d = img.data;
+  for (let j = 0; j < N; j++) {
+    const v = 1 - (j + 0.5) / N;
+    for (let i = 0; i < N; i++) {
+      const q = fromSpace(s.ax.at(t, (i + 0.5) / N, v)), o = 4 * (j * N + i);
+      if (!inGamut(q)) continue;                 // reachability is the ACTIVE gamut's question
+      const c = toSRGB(view(q));                 // the screen is sRGB regardless
+      // Out-of-bounds colours are dimmed rather than drawn as isosurfaces: the
+      // bound is a condition on the colour, so shading the colours that fail it
+      // is both exact in every space and free inside a loop already running.
+      const k = inBounds(q) ? 255 : 72;
+      d[o] = k * clamp01(c[0]); d[o + 1] = k * clamp01(c[1]); d[o + 2] = k * clamp01(c[2]); d[o + 3] = 255;
+    }
+  }
+  s.ctx.putImageData(img, 0, 0);
+  s.tex.needsUpdate = true;
+}
+
+// ─── trajectory, control points, obstacle spheres ────────────────────────────
+// transparent + depthTest off puts these in the pass that runs AFTER the slice
+// planes and exempts them from its depth, so the trajectory reads over the cut
+// rather than being blended into it. renderOrder does the rest of the stacking.
+const overlay = (extra) => new T.MeshBasicMaterial({ transparent: true, depthTest: false, ...extra });
+const tube = new T.Mesh(new T.BufferGeometry(), overlay({ vertexColors: true }));
+// a slightly fatter black tube, back faces only: what shows past the coloured
+// one is exactly an outline, and it costs no shader work
+const tubeEdge = new T.Mesh(new T.BufferGeometry(), overlay({ color: 0x000000, side: T.BackSide }));
+tubeEdge.renderOrder = 6; tube.renderOrder = 7;
+scene.add(tube, tubeEdge);
+
+function buildTube() {
+  tube.geometry.dispose(); tubeEdge.geometry.dispose();
+  const c = curve();
+  tube.visible = tubeEdge.visible = S.mode === 'continuous' && c.length >= 2;
+  if (!tube.visible) { tube.geometry = tubeEdge.geometry = new T.BufferGeometry(); return; }
+  const seg = Math.min(400, c.length * 2), radial = 8;
+  const path = new T.CatmullRomCurve3(c.map(wpt));
+  const g = new T.TubeGeometry(path, seg, 1.3, radial, false);
+  tubeEdge.geometry = new T.TubeGeometry(path, seg, 1.75, radial, false);
+  // TubeGeometry emits (seg+1) rings of (radial+1) vertices in order, so the
+  // ring index recovers the curve parameter, and with it the colour.
+  const col = new Float32Array(g.attributes.position.count * 3);
+  for (let i = 0; i < g.attributes.position.count; i++) {
+    const ring = Math.floor(i / (radial + 1));
+    col.set(rgb(c[Math.min(c.length - 1, Math.round((ring / seg) * (c.length - 1)))]), i * 3);
+  }
+  g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+  tube.geometry = g;
+}
+
+const ptGroup = new T.Group(), obsGroup = new T.Group(), planeGroup = new T.Group();
+scene.add(ptGroup, obsGroup, planeGroup);
+const DOT = new T.SphereGeometry(2.6, 20, 14), RING = new T.SphereGeometry(3.4, 20, 14);
+
+function buildPoints() {
+  ptGroup.clear();
+  S.pts.forEach((p, i) => {
+    const sel = S.sel?.kind === 'pt' && S.sel.i === i;
+    // a handle sitting exactly on its own cut plane would otherwise be half
+    // buried in it, and a handle you cannot see is one you cannot grab
+    const ring = new T.Mesh(RING, overlay({ color: sel ? 0xffffff : 0x0d0d10, side: T.BackSide }));
+    const dot = new T.Mesh(DOT, overlay({}));
+    dot.material.color.setRGB(...rgb(p));
+    ring.renderOrder = 8; dot.renderOrder = 9;
+    ring.add(dot);
+    ring.position.copy(wpt(p));
+    ring.userData = { kind: 'pt', i };
+    ptGroup.add(ring);
+  });
+}
+
+function buildObstacles() {
+  obsGroup.clear();
+  S.obs.forEach((o, i) => {
+    const sel = S.sel?.kind === 'obs' && S.sel.i === i;
+    // r is stored in PERCEIVED units, so the ball's geometric radius is f⁻¹(r)
+    // ponytail: drawn as a sphere in every space. Only true in Oklab — in a
+    // warped chart the keep-out set is that ball pushed through the map.
+    const g = new T.SphereGeometry(unperceive(o.r) * FRAME.s, 28, 18);
+    const m = new T.Mesh(g, new T.MeshBasicMaterial({
+      color: 0xff5b5b, transparent: true, opacity: sel ? 0.26 : 0.13, depthWrite: false }));
+    m.add(new T.Mesh(g, new T.MeshBasicMaterial({
+      color: sel ? 0xffffff : 0xff5b5b, wireframe: true, transparent: true, opacity: 0.3 })));
+    m.position.copy(wpt(o.c));
+    m.userData = { kind: 'obs', i };
+    obsGroup.add(m);
+  });
+}
+
+/**
+ * A halfplane is stored as an axis, a value and a side — so it draws as a quad
+ * spanning the other two axes, and gets a handle at its centre. That handle is
+ * an ordinary pickable object, which means dragging it (slides the cut),
+ * right-clicking it (deletes) and selecting it all come from machinery that
+ * already exists rather than a second interaction path.
+ */
+// world(c) is a permutation times ONE uniform scale, so a direction in space
+// coordinates maps to a world direction by the same permutation and normalises
+// out. That is what lets the gizmo basis be built in world space and read back.
+const wdir = (n) => new T.Vector3(n[1], n[0], n[2]).normalize();
+const sdir = (v) => [v.y, v.x, v.z];
+/** the point of the plane nearest the middle of the box */
+const planeCentre = (pl) => FRAME.mid.map((m, j) => m + (pl.d - dot3(pl.n, FRAME.mid)) * pl.n[j]);
+
+const PLANE_R = 26, HANDLE_R = 15;
+
+function buildPlanes() {
+  planeGroup.clear();
+  S.planes.forEach((pl, i) => {
+    const sel = S.sel?.kind === 'plane' && S.sel.i === i;
+    const W = world(planeCentre(pl)), n = wdir(pl.n);
+    const u = new T.Vector3(0, 1, 0).cross(n);
+    if (u.lengthSq() < 1e-6) u.set(1, 0, 0);
+    u.normalize();
+    const v = new T.Vector3().crossVectors(n, u);
+    // The halfplane is infinite; the quad is a fixed-size gizmo so that seeing
+    // one face-on does not flood a whole panel red. A handle, not a claim.
+    const quad = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) =>
+      W.clone().addScaledVector(u, a * PLANE_R).addScaledVector(v, b * PLANE_R));
+    const geo = new T.BufferGeometry().setFromPoints(quad);
+    geo.setIndex([0, 1, 2, 0, 2, 3]);
+    planeGroup.add(new T.Mesh(geo, new T.MeshBasicMaterial({
+      color: 0xff5b5b, transparent: true, opacity: sel ? 0.22 : 0.1, side: T.DoubleSide, depthWrite: false })));
+    planeGroup.add(new T.LineLoop(
+      new T.BufferGeometry().setAttribute('position', geo.attributes.position),
+      new T.LineBasicMaterial({ color: 0xff5b5b, transparent: true, opacity: sel ? 1 : 0.6 })));
+
+    const tip = W.clone().addScaledVector(n, HANDLE_R);          // points into the excluded half
+    planeGroup.add(new T.Line(new T.BufferGeometry().setFromPoints([W, tip]),
+      new T.LineBasicMaterial({ color: 0xff5b5b })));
+
+    const centre = new T.Mesh(DOT, overlay({ color: sel ? 0xffffff : 0xff5b5b }));
+    centre.position.copy(W);
+    centre.renderOrder = 8;
+    centre.userData = { kind: 'plane', i };
+    const rot = new T.Mesh(DOT, overlay({ color: sel ? 0xffd76a : 0xc94f4f }));
+    rot.scale.setScalar(0.75);
+    rot.position.copy(tip);
+    rot.renderOrder = 8;
+    rot.userData = { kind: 'planerot', i };
+    planeGroup.add(centre, rot);
+  });
+}
+
+// ─── layout and render loop ──────────────────────────────────────────────────
+function layout() {
+  const w = Math.max(1, main.clientWidth), h = Math.max(1, main.clientHeight);
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+  renderer.setSize(w, h, false);
+  const hw = Math.floor(w / 2), hh = Math.floor(h / 2);
+  QUADS.forEach((q, i) => {
+    q.rect = { x: (i % 2) * hw, y: i > 1 ? hh : 0, w: i % 2 ? w - hw : hw, h: i > 1 ? h - hh : hh };
+    Object.assign(q.el.style, { left: q.rect.x + 'px', top: q.rect.y + 'px', width: q.rect.w + 'px', height: q.rect.h + 'px' });
+    const aspect = q.rect.w / q.rect.h;
+    if (q.cam.isPerspectiveCamera) { q.cam.aspect = aspect; }
+    else {
+      // grow the frustum to whichever dimension the content needs, so the view
+      // fills the quad at any aspect instead of staying square and spilling out
+      const { w: cw, h: ch } = q.cam.userData.content;
+      const H = Math.max(ch, cw / aspect) * 1.08;
+      q.cam.top = H; q.cam.bottom = -H; q.cam.right = H * aspect; q.cam.left = -H * aspect;
+    }
+    q.cam.updateProjectionMatrix();
+  });
+}
+
+function frame() {
+  controls.update();
+  const h = canvas.clientHeight;
+  for (const q of QUADS) {
+    const { x, y, w: qw, h: qh } = q.rect;
+    renderer.setViewport(x, h - y - qh, qw, qh);      // WebGL counts y from the bottom
+    renderer.setScissor(x, h - y - qh, qw, qh);
+    renderer.clear();
+    renderer.render(scene, q.cam);
+  }
+  requestAnimationFrame(frame);
+}
+
+// ─── sidebar ─────────────────────────────────────────────────────────────────
+const strip = $('strip'), sctx = strip.getContext('2d');
+
+function sidebar() {
+  const pal = palette(), W = strip.width, H = strip.height;
+  sctx.clearRect(0, 0, W, H);
+  if (S.mode === 'continuous' && S.pts.length >= 2) {
+    // uniform in ARC LENGTH — the additive quantity. See color-space.ts.
+    resample(curve(), W, M()).forEach((p, i) => { sctx.fillStyle = paint(p); sctx.fillRect(i, 0, 1, H); });
+  } else {
+    pal.forEach((p, i) => { sctx.fillStyle = paint(p); sctx.fillRect((i * W) / pal.length, 0, W / pal.length + 1, H); });
+  }
+
+  $('swatches').innerHTML = pal.map((p, i) =>
+    `<div class="sw" data-i="${i}" data-sel="${S.mode === 'discrete' && S.sel?.kind === 'pt' && S.sel.i === i}"
+      data-bad="${!inGamut(p)}" style="background:${paint(p)}" title="${toHex(p)}"></div>`).join('');
+
+  const rows = [];
+  if (pal.length >= 2) {
+    const worst = minSeparation(pal, M(), criteria());
+    rows.push([`min Δ · ${observer()}`, minSeparation(pal, M(), [primary()]).toFixed(1)],
+      ['min Δ · worst case', worst.toFixed(1), worst < 8]);
+  }
+  if (S.mode === 'continuous' && S.pts.length >= 2) {
+    const c = curve(), bad = c.filter((p) => !inGamut(p)).length;
+    rows.push(['perceived end-to-end', perceive(arcLength(c, M())).toFixed(1)],
+      ['out of gamut', `${bad} / ${c.length}`, bad > 0]);
+  }
+  if (S.obs.length) {
+    const probe = S.mode === 'continuous' && S.pts.length >= 2 ? curve() : pal;
+    const hit = probe.reduce((a, p) => a + obstaclePenalty(p, S.obs, M(), primary()), 0);
+    rows.push(['obstacle cost', hit.toFixed(0), hit > 0]);
+  }
+  const cx = ctxOf(S.pts);
+  for (const o of OBJ) {
+    if (o.mode && o.mode !== S.mode) continue;
+    const v = o.f(cx);
+    rows.push([typeof o.label === 'function' ? o.label() : o.label,
+      v < 10 ? v.toFixed(2) : v.toFixed(0), !!o.bad && v > 0, o.key]);
+  }
+  $('metrics').innerHTML = rows.map(([k, v, warn, obj]) =>
+    `<tr><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}</td>` +
+    `<td class="${warn ? 'warn' : ''}">${v}</td>` +
+    (obj ? `<td class="btns"><button data-obj="${obj}" data-dir="1" title="descend">−</button>`
+         + `<button data-obj="${obj}" data-dir="-1" title="ascend">+</button></td>`
+         : '<td class="btns"></td>') + '</tr>').join('');
+
+  const s = S.sel;
+  $('selpanel').style.display = s ? '' : 'none';
+  const target = s?.kind === 'pt' ? S.pts[s.i] : s?.kind === 'obs' ? S.obs[s.i]?.c : null;
+  // leave the field alone while it has focus, or it fights whoever is typing
+  if (target && document.activeElement !== $('hex')) $('hex').value = toHex(target);
+  $('hex').closest('.row').style.display = target ? '' : 'none';
+  $('flip').closest('.row').style.display = s?.kind === 'plane' || s?.kind === 'planerot' ? '' : 'none';
+  if (s?.kind === 'pt' && S.pts[s.i]) {
+    const [L, C, h] = toLCh(S.pts[s.i]);
+    $('selinfo').innerHTML = `point ${s.i} · <code>${toHex(S.pts[s.i])}</code> · L ${L.toFixed(1)} C ${C.toFixed(1)} h ${((h + 360) % 360).toFixed(0)}°`;
+  } else if ((s?.kind === 'plane' || s?.kind === 'planerot') && S.planes[s.i]) {
+    const pl = S.planes[s.i], ax = SPACES[params.space].axes;
+    const terms = pl.n.map((c, j) => (Math.abs(c) < 0.01 ? '' : `${c > 0 ? '+' : '−'}${Math.abs(c).toFixed(2)}·${ax[j]}`))
+      .filter(Boolean).join(' ').replace(/^\+/, '');
+    $('selinfo').innerHTML = `plane ${s.i} · keep <code>${terms} ≤ ${pl.d.toFixed(1)}</code>`;
+  } else if (s?.kind === 'obs' && S.obs[s.i]) {
+    const o = S.obs[s.i];
+    $('selinfo').innerHTML = `sphere ${s.i} · <code>${toHex(o.c)}</code> · r ${o.r.toFixed(1)} perceived, ${unperceive(o.r).toFixed(1)} in chart units`;
+  }
+  $('toolnote').textContent = { edit: 'double-click a slice panel to add · drag in any panel to move · right-click to delete',
+    obstacle: 'double-click a slice panel to place · the slider resizes the selected sphere',
+    plane: 'double-click a slice panel to cut · drag the centre to slide, the tip to rotate' }[S.tool];
+  $('n').disabled = S.mode !== 'continuous';
+  $('n').closest('.row').style.opacity = S.mode === 'continuous' ? 1 : 0.35;
+
+  drawMini();
+  $('export').value = JSON.stringify(
+    { mode: S.mode, hex: pal.map(toHex), controls: S.pts, obstacles: S.obs }, null, 1);
+}
+
+// ─── objectives and gradient stepping ────────────────────────────────────────
+// The decision variables are always the control points. In continuous mode the
+// objective is a functional of the CURVE they generate, so the gradient flows
+// back through the spline for free — no separate "trajectory" path is needed.
+
+const curveOf = (pts) => (pts.length >= 2 ? spline(pts.map((p) => toSpace(p)), PER_SPAN).map((c) => fromSpace(c)) : pts);
+
+/**
+ * Everything a term needs, built once per candidate point set. The spline is by
+ * far the most expensive part of an objective evaluation and every term used to
+ * rebuild it independently — which cost little with one term and a great deal
+ * once a combined step evaluates nine of them at each of 6n perturbations.
+ */
+function ctxOf(pts) {
+  const curve = curveOf(pts);
+  const continuous = S.mode === 'continuous' && pts.length >= 2;
+  return { pts, curve, pal: continuous ? resample(curve, S.n, M()) : pts, probe: continuous ? curve : pts };
+}
+/** perceived chord — the cheap version of `delta` for use inside a gradient */
+const pd = (a, b, g) => perceive(segLength(a, b, g));
+
+/**
+ * The observers the discrimination terms answer to. Choosing a deficiency in
+ * the Vision panel narrows them to that observer at that severity; choosing
+ * none means all three, so the default stays the conservative reading rather
+ * than quietly optimising for normal vision alone.
+ *
+ * Only the terms about telling two colours APART take a view. Arc length,
+ * bounds, monotonicity, gamut and planes are about where a colour sits, not how
+ * well it is distinguished, and stay in the chart where they were defined.
+ */
+const primary = () => (S.cvd === 'none' ? NORMAL : view);
+const criteria = () => (S.cvd === 'none' ? ALL_VIEWS : [NORMAL, view]);
+const observer = () => (S.cvd === 'none' ? 'normal' : `${S.cvd} ${S.sev.toFixed(1)}`);
+
+/**
+ * Repulsion, not min-separation: a min over pairs is not differentiable, and a
+ * gradient can only ever see the single closest pair. Summed inverse distance
+ * feels every pair at once, and because it is measured with the PERCEIVED
+ * distance, diminishing returns do the right thing on their own — far pairs
+ * saturate and contribute almost nothing, so the step spends itself separating
+ * the colours that are actually confusable.
+ */
+function repulsion(P, views) {
+  const g = M();
+  let e = 0;
+  for (const v of views)
+    for (let i = 0; i < P.length; i++)
+      for (let j = i + 1; j < P.length; j++) e += 1 / Math.max(0.5, pd(v(P[i]), v(P[j]), g));
+  return e;                                        // the floor keeps coincident colours finite
+}
+
+const hinge = (v) => (v > 0 ? v : 0);
+
+/**
+ * Halfplanes are placed in the ACTIVE SPACE's coordinates — an axis-aligned cut
+ * in CIELAB is a different constraint from the same cut in sRGB, which is free
+ * generality from the space selector. The bounds below are the opposite choice:
+ * they are read off the CHART, because "lightness" and "chroma" should mean the
+ * perceptual ones no matter which coordinates you happen to be looking at.
+ */
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const planePenalty = (p) => {
+  if (!S.planes.length) return 0;
+  const c = toSpace(p);
+  return S.planes.reduce((a, pl) => a + hinge(dot3(pl.n, c) - pl.d) ** 2, 0);
+};
+
+const OBJ = [
+  { key: 'rep', label: () => `repulsion · ${observer()}`, f: (x) => repulsion(x.pal, [primary()]) },
+  { key: 'repcvd', label: () => `repulsion · ${S.cvd === 'none' ? 'all observers' : 'normal + ' + S.cvd}`,
+    f: (x) => repulsion(x.pal, criteria()) },
+  { key: 'arc', label: 'arc length', mode: 'continuous', f: (x) => arcLength(x.curve, M()) },
+  { key: 'obs', label: 'obstacle cost', bad: true, f: (x) => x.probe.reduce((a, p) => a + obstaclePenalty(p, S.obs, M(), primary()), 0) },
+  { key: 'gam', label: 'gamut penalty', bad: true, f: (x) => x.probe.reduce((a, p) => a + gamutPenalty(p), 0) },
+  { key: 'lb', label: 'lightness bounds', bad: true,
+    f: (x) => x.probe.reduce((a, p) => a + hinge(S.lo[0] - p[0]) ** 2 + hinge(p[0] - S.hi[0]) ** 2, 0) },
+  { key: 'cb', label: 'chroma bounds', bad: true,
+    f: (x) => x.probe.reduce((a, p) => {
+      const c = Math.hypot(p[1], p[2]);
+      return a + hinge(S.lo[1] - c) ** 2 + hinge(c - S.hi[1]) ** 2;
+    }, 0) },
+  // The defining property of a sequential colormap. Direction is taken from the
+  // endpoints rather than configured, so a light-to-dark ramp is not punished
+  // for being a light-to-dark ramp.
+  { key: 'mono', label: 'lightness monotone', mode: 'continuous', bad: true,
+    f: (x) => {
+      const c = x.curve;
+      if (c.length < 2) return 0;
+      const dir = Math.sign(c[c.length - 1][0] - c[0][0]) || 1;
+      let e = 0;
+      for (let i = 1; i < c.length; i++) e += hinge(-dir * (c[i][0] - c[i - 1][0])) ** 2;
+      return e;
+    } },
+  { key: 'pl', label: 'plane cost', bad: true, f: (x) => x.probe.reduce((a, p) => a + planePenalty(p), 0) },
+  /**
+   * Perceptual uniformity: equal perceived steps between consecutive swatches.
+   * Measured with the CHART metric, deliberately, not the active space's — the
+   * question is whether the ramp is perceptually even, not whether it is even
+   * in whatever coordinates you happen to be viewing. So this reads non-zero
+   * exactly when resampling in a non-perceptual space has bunched the steps,
+   * and when curvature makes chords shorter than the arcs they subtend.
+   */
+  { key: 'unif', label: 'perceptual uniformity', bad: true,
+    f: (x) => {
+      const P = x.pal, v = primary();
+      if (P.length < 3) return 0;
+      const d = [];
+      for (let i = 1; i < P.length; i++) d.push(pd(v(P[i - 1]), v(P[i]), EUCLIDEAN));
+      const m = d.reduce((a, b) => a + b, 0) / d.length;
+      return d.reduce((a, b) => a + (b - m) ** 2, 0) / d.length;
+    } },
+];
+
+/** Terms included in the combined step. Constraints on, shaping opt-in. */
+S.on = Object.fromEntries(OBJ.map((o) => [o.key, o.key !== 'rep' && o.key !== 'arc']));
+
+const STEP_MAX = 4;        // chart units moved by the largest component at rate 1
+
+/**
+ * Central differences over the 3n control coordinates, for several terms at
+ * once. Each perturbation builds ONE context and every term reads it, so a
+ * combined step costs barely more than a single-term one.
+ *
+ * Each term's gradient is normalised to unit max before the terms are summed.
+ * That is a deliberate choice and not the gradient of Σf: these objectives span
+ * four orders of magnitude, so an honest sum is simply the plane-cost gradient
+ * with rounding noise attached. Normalising first gives every enabled term an
+ * equal say in the direction, which is what "step all of them at once" has to
+ * mean to be useful. Relative weights would be the next knob, not a fix.
+ *
+ * A pinned endpoint is a variable removed from the problem, not a move undone
+ * afterwards: its gradient is never formed, so it cannot skew the normalisation
+ * that sets the step size for everything else.
+ */
+function gradientOf(terms) {
+  const base = S.pts.map((p) => [...p]);
+  const h = 0.25;
+  const pinned = (i) => S.pinEnds && base.length > 1 && (i === 0 || i === base.length - 1);
+  const per = terms.map(() => base.map(() => [0, 0, 0]));
+  for (let i = 0; i < base.length; i++) {
+    if (pinned(i)) continue;
+    for (let k = 0; k < 3; k++) {
+      const lo = base.map((q) => [...q]), hi = base.map((q) => [...q]);
+      lo[i][k] -= h; hi[i][k] += h;
+      const [cl, ch] = [ctxOf(lo), ctxOf(hi)];
+      terms.forEach((t, m) => { per[m][i][k] = (t.f(ch) - t.f(cl)) / (2 * h); });
+    }
+  }
+  const total = base.map(() => [0, 0, 0]);
+  for (const g of per) {
+    const mx = Math.max(...g.flat().map(Math.abs));
+    if (!Number.isFinite(mx) || mx === 0) continue;          // flat term: no opinion
+    g.forEach((row, i) => row.forEach((v, k) => { total[i][k] += v / mx; }));
+  }
+  return { base, total };
+}
+
+/** dir +1 descends, -1 ascends. */
+function stepBy(terms, dir) {
+  if (!terms.length || !S.pts.length) return;
+  const { base, total } = gradientOf(terms);
+  const mx = Math.max(...total.flat().map(Math.abs));
+  if (!Number.isFinite(mx) || mx === 0) return;              // nothing to do
+  const scale = (dir * S.rate * STEP_MAX) / mx;
+  S.pts = base.map((p, i) => p.map((v, k) => v - scale * total[i][k]));
+  if (S.lock && S.pts[S.sel?.i]) setSlices(S.pts[S.sel.i]);
+  sync();
+}
+
+const stepAlong = (obj, dir) => stepBy([obj], dir);
+const activeTerms = () => OBJ.filter((o) => S.on[o.key] && (!o.mode || o.mode === S.mode));
+
+// ─── minimap: the standard RGB colour triangle ───────────────────────────────
+// Linear r:g:b normalised to sum 1, plotted barycentrically. Lightness divides
+// out, so this shows chromaticity alone — the one thing the three Oklab panels,
+// which are all lightness and opponent axes, do not make obvious at a glance.
+const mini = $('mini'), mctx = mini.getContext('2d');
+const MW = mini.width, MH = mini.height, MP = 13;
+const TRI = [[MW / 2, MP], [MP, MH - MP], [MW - MP, MH - MP]];   // R, G, B corners
+let miniKey = null, miniBg = null;
+
+function bary(lin) {
+  const c = lin.map((v) => Math.max(0, v));
+  const t = c[0] + c[1] + c[2];
+  const [u, v, w] = t < 1e-9 ? [1 / 3, 1 / 3, 1 / 3] : c.map((x) => x / t);  // black has no chromaticity
+  return [u * TRI[0][0] + v * TRI[1][0] + w * TRI[2][0], u * TRI[0][1] + v * TRI[1][1] + w * TRI[2][1]];
+}
+
+const [MA, MB, MC] = TRI;
+const MDEN = (MB[1] - MC[1]) * (MA[0] - MC[0]) + (MC[0] - MB[0]) * (MA[1] - MC[1]);
+
+/** pixel → linear r:g:b ratio, or null outside the triangle */
+function unbary(x, y) {
+  const u = ((MB[1] - MC[1]) * (x - MC[0]) + (MC[0] - MB[0]) * (y - MC[1])) / MDEN;
+  const v = ((MC[1] - MA[1]) * (x - MC[0]) + (MA[0] - MC[0]) * (y - MC[1])) / MDEN;
+  const w = 1 - u - v;
+  return u < 0 || v < 0 || w < 0 ? null : [u, v, w];
+}
+
+/**
+ * The colour with this chromaticity at this lightness. Oklab's L is a cube root
+ * of a linear map, so scaling linear RGB by s scales L by s^(1/3) exactly —
+ * the scale that hits a target L is a closed form, not a search.
+ */
+function atLightness(uvw, L) {
+  const s = (L / fromLinear(uvw)[0]) ** 3;
+  return fromLinear(uvw.map((c) => c * s));
+}
+
+function miniField() {
+  const key = `${S.cvd}|${S.sev}|${params.gamut}`;
+  if (key === miniKey) return miniBg;
+  miniKey = key;
+  const img = mctx.createImageData(MW, MH), d = img.data;
+  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+    const uvw = unbary(x, y);
+    if (!uvw) continue;                                       // outside stays transparent
+    const m = Math.max(...uvw);                               // scale onto the gamut surface
+    const c = toSRGB(view(fromLinear(uvw.map((v) => v / m))));
+    const o = 4 * (y * MW + x);
+    d[o] = 255 * clamp01(c[0]); d[o + 1] = 255 * clamp01(c[1]); d[o + 2] = 255 * clamp01(c[2]); d[o + 3] = 255;
+  }
+  return (miniBg = img);
+}
+
+const miniPos = (p) => bary(toLinear(toGamut(p)));
+
+function drawMini() {
+  mctx.putImageData(miniField(), 0, 0);
+  mctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--hud').trim() || '#3a3a42';
+  mctx.lineWidth = 1; mctx.lineJoin = 'round';
+  mctx.beginPath();
+  TRI.forEach(([x, y], i) => (i ? mctx.lineTo(x, y) : mctx.moveTo(x, y)));
+  mctx.closePath(); mctx.stroke();
+
+  // the whole path is the highlight; only the controls get a grabbable dot
+  if (S.mode === 'continuous' && S.pts.length >= 2) {
+    const c = curve(), xy = c.map(miniPos);
+    mctx.lineCap = mctx.lineJoin = 'round';
+    mctx.beginPath();
+    xy.forEach(([x, y], i) => (i ? mctx.lineTo(x, y) : mctx.moveTo(x, y)));
+    mctx.strokeStyle = '#000'; mctx.lineWidth = 4.5; mctx.stroke();
+    for (let i = 1; i < xy.length; i++) {
+      mctx.beginPath(); mctx.moveTo(...xy[i - 1]); mctx.lineTo(...xy[i]);
+      mctx.strokeStyle = paint(c[i]); mctx.lineWidth = 2.6; mctx.stroke();
+    }
+  }
+  S.pts.forEach((p, i) => {
+    const [x, y] = miniPos(p), sel = S.sel?.kind === 'pt' && S.sel.i === i;
+    mctx.beginPath(); mctx.arc(x, y, sel ? 5 : 4, 0, 7);
+    mctx.fillStyle = paint(p); mctx.fill();
+    mctx.strokeStyle = sel ? '#fff' : '#000'; mctx.lineWidth = sel ? 2 : 1.2; mctx.stroke();
+  });
+}
+
+// ── minimap dragging: chromaticity moves, lightness stays put ───────────────
+let miniDrag = null;
+const miniAt = (e) => {
+  const r = mini.getBoundingClientRect();
+  return [((e.clientX - r.left) * MW) / r.width, ((e.clientY - r.top) * MH) / r.height];
+};
+
+mini.addEventListener('pointerdown', (e) => {
+  const [x, y] = miniAt(e);
+  const i = S.pts.findIndex((p) => { const [px, py] = miniPos(p); return Math.hypot(px - x, py - y) < 9; });
+  if (i < 0) return;
+  miniDrag = i;
+  mini.setPointerCapture(e.pointerId);
+  select({ kind: 'pt', i });
+  sync();
+});
+
+mini.addEventListener('pointermove', (e) => {
+  if (miniDrag === null) return;
+  const uvw = unbary(...miniAt(e));
+  if (!uvw) return;                                   // dragged outside the triangle: ignore
+  const p = atLightness(uvw, S.pts[miniDrag][0]);
+  S.pts[miniDrag] = p;
+  if (S.lock) setSlices(p);
+  sync();
+});
+
+mini.addEventListener('pointerup', () => { miniDrag = null; });
+
+/** The backdrop drives the HUD and outline colours too — a light surround with
+ *  light labels on it is unreadable. Contrast is decided by the backdrop's own
+ *  lightness in the chart, which is the one perceptual number we already have. */
+function applyBg() {
+  renderer.setClearColor(new T.Color(S.bg), 1);
+  const light = fromHex(S.bg)[0] > 55;
+  document.documentElement.style.setProperty('--hud', light ? '#3a3a42' : '#c6c6d0');
+  slices.forEach((s) => s.edge.material.color.set(light ? 0x3a3a42 : 0xc6c6d0));
+  drawMini();
+}
+
+/** Slices track the node you touched, so every panel is cut through it. */
+function setSlices(p) {
+  const c = toSpace(p);
+  S.slice = c.map((v, k) => Math.min(FRAME.hi[k], Math.max(FRAME.lo[k], v)));
+  ['sL', 'sA', 'sB'].forEach((id, k) => ($(id).value = S.slice[k]));
+  [$('vL'), $('vA'), $('vB')].forEach((el, k) => (el.textContent = S.slice[k].toFixed(0)));
+}
+
+function select(sel) {
+  S.sel = sel;
+  const p = sel?.kind === 'pt' ? S.pts[sel.i] : sel?.kind === 'obs' ? S.obs[sel.i]?.c : null;
+  if (p && S.lock) setSlices(p);
+}
+
+/**
+ * The feasibility constraint, applied where state becomes geometry. Every path
+ * that writes a node — drag, hex field, minimap, preset load, gradient step,
+ * gamut switch — already routes through sync(), so projecting here makes an
+ * out-of-gamut node impossible rather than merely unlikely.
+ *
+ * toGamut bisects chroma at fixed lightness, so this is NOT the Euclidean
+ * nearest feasible point; it is the nearest one of the same hue and lightness,
+ * which is the projection worth having for colour. Paired with the gradient
+ * buttons it makes those steps ordinary projected gradient descent.
+ *
+ * Note this constrains the NODES. A spline through feasible nodes can still
+ * bulge outside — the gamut solid is not convex — which is why the gamut
+ * penalty term still has work to do on the curve samples.
+ */
+const constrain = () => { S.pts = S.pts.map((p) => toGamut(p)); };
+
+/** Rebuild whatever the change touched. Small enough to be blunt about it. */
+function sync({ colors = false } = {}) {
+  constrain();
+  if (colors) { paintShell(); slices.forEach((s) => (s.key = null)); miniKey = null; }
+  slices.forEach(paintSlice);
+  buildTube(); buildPoints(); buildObstacles(); buildPlanes();
+  sidebar();
+}
+
+// ─── picking: one path for all four panels ───────────────────────────────────
+const ray = new T.Raycaster();
+const ndc = new T.Vector2();
+const plane = new T.Plane();
+let drag = null;
+
+const quadAt = (x, y) => QUADS.find((q) => x >= q.rect.x && x < q.rect.x + q.rect.w && y >= q.rect.y && y < q.rect.y + q.rect.h);
+
+function castFrom(e) {
+  scene.updateMatrixWorld();   // three does not do this for us, and a mesh built
+  const r = canvas.getBoundingClientRect();   // since the last frame would raycast at the origin
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  const q = quadAt(x, y);
+  if (!q) return null;
+  ndc.set(((x - q.rect.x) / q.rect.w) * 2 - 1, -(((y - q.rect.y) / q.rect.h) * 2 - 1));
+  ray.setFromCamera(ndc, q.cam);
+  return q;
+}
+
+/** Where a click in a slice panel lands: on that panel's own cut plane. */
+function pointOn(q) {
+  const ax = AXES[q.axis];
+  plane.setFromNormalAndCoplanarPoint(ax.normal(), world(ax.corners(S.slice[q.axis])[0]));
+  const hit = ray.ray.intersectPlane(plane, new T.Vector3());
+  return hit && cpt(hit);
+}
+
+const hitTest = () => ray.intersectObjects([...ptGroup.children, ...obsGroup.children, ...planeGroup.children], false)
+  .find((h) => h.object.userData.kind);
+
+canvas.addEventListener('pointerdown', (e) => {
+  const q = castFrom(e);
+  if (!q) return;
+  controls.enabled = q.axis === undefined;      // a drag in a slice panel must not orbit 3D
+  const grabbed = hitTest();
+
+  if (grabbed) {
+    select({ ...grabbed.object.userData });
+    // Drag on the plane through the object facing the camera. In an ortho panel
+    // that normal IS an axis, so the out-of-plane coordinate is left alone —
+    // one implementation covers 3D free dragging and slice-constrained dragging.
+    plane.setFromNormalAndCoplanarPoint(q.cam.getWorldDirection(new T.Vector3()), grabbed.object.position.clone());
+    drag = { ...S.sel };
+    controls.enabled = false;
+    canvas.setPointerCapture(e.pointerId);
+  } else return;                                // empty space: orbit, or nothing. Adding is dblclick.
+  sync();
+});
+
+canvas.addEventListener('dblclick', (e) => {
+  const q = castFrom(e);
+  if (!q || q.axis === undefined || hitTest()) return;   // only into empty space in a slice panel
+  const p = pointOn(q);
+  if (!p) return;
+  if (S.tool === 'obstacle') { S.obs.push({ c: p, r: S.rad }); select({ kind: 'obs', i: S.obs.length - 1 }); }
+  else if (S.tool === 'plane') {
+    const n = [0, 0, 0]; n[q.axis] = 1;                         // starts axis-aligned; rotate the tip
+    S.planes.push({ n, d: S.slice[q.axis] });                   // excludes n·c > d; flip in the panel
+    select({ kind: 'plane', i: S.planes.length - 1 });
+  } else select({ kind: 'pt', i: addPoint(p) });
+  sync();
+});
+
+canvas.addEventListener('contextmenu', (e) => {
+  if (!castFrom(e)) return;
+  const hit = hitTest();
+  if (!hit) return;
+  e.preventDefault();
+  const { kind, i } = hit.object.userData;
+  ({ pt: S.pts, obs: S.obs, plane: S.planes, planerot: S.planes })[kind].splice(i, 1);
+  S.sel = null;
+  sync();
+});
+
+// wheel over a slice panel scrolls that cut plane; over 3D it stays OrbitControls'
+canvas.addEventListener('wheel', (e) => {
+  const r = canvas.getBoundingClientRect();
+  const q = quadAt(e.clientX - r.left, e.clientY - r.top);
+  if (!q || q.axis === undefined) return;
+  e.preventDefault();
+  setSlice(q.axis, S.slice[q.axis] - Math.sign(e.deltaY) * wheelStep(q.axis));
+}, { passive: false });
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!drag) {
+    const r = canvas.getBoundingClientRect();
+    const q = quadAt(e.clientX - r.left, e.clientY - r.top);
+    controls.enabled = !!q && q.axis === undefined;   // orbit and wheel-zoom belong to 3D only
+    return;
+  }
+  if (!castFrom(e)) return;
+  const hit = ray.ray.intersectPlane(plane, new T.Vector3());
+  if (!hit) return;
+  const p = cpt(hit);
+  if (drag.kind === 'plane') S.planes[drag.i].d = dot3(S.planes[drag.i].n, toSpace(p));   // slide along the normal
+  else if (drag.kind === 'planerot') {
+    const pl = S.planes[drag.i], c = planeCentre(pl);
+    const dir = sdir(hit.clone().sub(world(c)));                // aim the normal at the handle
+    const len = Math.hypot(...dir);
+    if (len > 1e-6) { pl.n = dir.map((x) => x / len); pl.d = dot3(pl.n, c); }   // pivot about the centre
+  } else if (drag.kind === 'pt') S.pts[drag.i] = p;
+  else S.obs[drag.i].c = p;
+  if (S.lock && drag.kind === 'pt') setSlices(p);
+  sync();
+});
+
+canvas.addEventListener('pointerup', () => { drag = null; });
+
+addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'TEXTAREA' || !S.sel) return;
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    ({ pt: S.pts, obs: S.obs, plane: S.planes, planerot: S.planes })[S.sel.kind].splice(S.sel.i, 1);
+    S.sel = null; sync();
+  }
+  if (e.key === 'Escape') { S.sel = null; sync(); }
+});
+
+// ─── controls ────────────────────────────────────────────────────────────────
+const setSlice = (k, v) => { S.slice[k] = +v; [$('vL'), $('vA'), $('vB')][k].textContent = (+v).toFixed(0); sync(); };
+const wheelStep = (k) => (FRAME.hi[k] - FRAME.lo[k]) / 66;
+$('sL').oninput = (e) => setSlice(0, e.target.value);
+$('sA').oninput = (e) => setSlice(1, e.target.value);
+$('sB').oninput = (e) => setSlice(2, e.target.value);
+
+$('n').oninput = (e) => { S.n = +e.target.value; $('nv').textContent = S.n; sidebar(); };
+$('shell').oninput = (e) => {
+  S.shell = +e.target.value; $('shellv').textContent = S.shell.toFixed(2).slice(1);
+  shell.material.opacity = S.shell; shell.visible = S.shell > 0;
+};
+$('rad').oninput = (e) => {
+  S.rad = +e.target.value; $('radv').textContent = S.rad;
+  if (S.sel?.kind === 'obs') { S.obs[S.sel.i].r = S.rad; sync(); }
+};
+$('bg').oninput = (e) => { S.bg = e.target.value; applyBg(); };
+$('sliceop').oninput = (e) => {
+  S.sliceOp = +e.target.value; $('sliceopv').textContent = S.sliceOp.toFixed(2).slice(1);
+  slices.forEach((s) => Object.assign(s.mesh.material, { opacity: S.sliceOp, alphaTest: S.sliceOp / 2 }));
+};
+$('gamutsel').onchange = (e) => {
+  params.gamut = e.target.value;      // changes what is REACHABLE; the screen stays sRGB
+  reframe(); layout(); buildShell();  // the box the gamut occupies moved
+  sync({ colors: true });
+};
+$('spacesel').onchange = (e) => {
+  params.space = e.target.value;      // a change of chart: no distance moves
+  reframe(); layout(); buildShell();
+  S.slice = [...FRAME.mid];
+  ['sL', 'sA', 'sB'].forEach((id, k) => ($(id).value = S.slice[k]));
+  [$('vL'), $('vA'), $('vB')].forEach((el, k) => (el.textContent = S.slice[k].toFixed(0)));
+  slices.forEach((sl) => (sl.key = null));
+  sync();
+};
+$('preset').onchange = (e) => {
+  const preset = PRESETS[e.target.value];
+  if (!preset) return;
+  S.mode = preset.mode;
+  S.pts = preset.hex.map(fromHex);
+  S.sel = null;
+  for (const b of $('mode').children) b.ariaPressed = b.dataset.v === S.mode;
+  e.target.selectedIndex = 0;
+  sync();
+};
+$('hex').oninput = (e) => {
+  const v = e.target.value.trim().replace(/^#/, '');
+  if (!/^[0-9a-f]{6}$/i.test(v) || !S.sel) return;
+  const p = fromHex(v);
+  if (S.sel.kind === 'pt') S.pts[S.sel.i] = p; else S.obs[S.sel.i].c = p;
+  if (S.lock) setSlices(p);
+  sync();
+};
+$('metrics').onclick = (e) => {
+  const { obj, on } = e.target.dataset ?? {};
+  if (obj) stepAlong(OBJ.find((o) => o.key === obj), +e.target.dataset.dir);
+  if (on) { S.on[on] = e.target.checked; sidebar(); }
+};
+$('steptotal').onclick = () => stepBy(activeTerms(), 1);
+$('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1); };
+$('pinends').onchange = (e) => { S.pinEnds = e.target.checked; };
+$('flip').onclick = () => {
+  const pl = S.planes[S.sel?.i];
+  if (!pl || !S.sel.kind.startsWith('plane')) return;
+  pl.n = pl.n.map((c) => -c); pl.d = -pl.d;         // same plane, other side excluded
+  sync();
+};
+const BOUND_MAX = [100, 40];
+function paintBounds() {
+  [['ldual', 'lmin', 'lmax', 'lboundv', 0], ['cdual', 'cmin', 'cmax', 'cboundv', 1]]
+    .forEach(([wrap, lo, hi, out, k]) => {
+      $(lo).value = S.lo[k]; $(hi).value = S.hi[k];
+      $(out).textContent = `${S.lo[k]}–${S.hi[k]}`;
+      const f = $(wrap).querySelector('.fill');
+      f.style.left = `${(100 * S.lo[k]) / BOUND_MAX[k]}%`;
+      f.style.right = `${100 - (100 * S.hi[k]) / BOUND_MAX[k]}%`;
+    });
+}
+[['lmin', 'lo', 0], ['lmax', 'hi', 0], ['cmin', 'lo', 1], ['cmax', 'hi', 1]].forEach(([id, side, k]) => {
+  $(id).oninput = (e) => {
+    S[side][k] = +e.target.value;
+    if (S.lo[k] > S.hi[k]) S[side === 'lo' ? 'hi' : 'lo'][k] = S[side][k];   // thumbs never cross
+    paintBounds();
+    slices.forEach((sl) => (sl.key = null));      // the shading is baked into the textures
+    sync({ colors: true });
+  };
+});
+$('lock').onchange = (e) => { S.lock = e.target.checked; };
+$('planes3d').onchange = (e) => { S.planes3d = e.target.checked; setPlanes3d(); };
+const setPlanes3d = () => (S.planes3d ? cam3.layers.enable(3) : cam3.layers.disable(3));
+$('sev').oninput = (e) => { S.sev = +e.target.value; $('sevv').textContent = S.sev.toFixed(1); setView(); };
+$('cvd').onchange = (e) => { S.cvd = e.target.value; setView(); };
+$('swatches').onclick = (e) => {
+  const i = e.target.dataset?.i;
+  if (i != null && S.mode === 'discrete') { select({ kind: 'pt', i: +i }); sync(); }
+};
+
+function setView() {
+  view = S.cvd === 'none' ? NORMAL : simulate(S.cvd, S.sev);
+  sync({ colors: true });
+}
+
+for (const id of ['mode', 'tool']) {
+  $(id).onclick = (e) => {
+    if (!e.target.dataset.v) return;
+    S[id] = e.target.dataset.v;
+    for (const b of $(id).children) b.ariaPressed = b.dataset.v === S[id];
+    sync();
+  };
+  for (const b of $(id).children) b.ariaPressed = b.dataset.v === S[id];
+}
+
+// controls mirror S, so a state that did not come from the DOM cannot desync
+$('cvd').value = S.cvd; $('sev').value = S.sev; $('n').value = S.n;
+$('shell').value = S.shell; $('rad').value = S.rad; $('bg').value = S.bg;
+$('lock').checked = S.lock; $('planes3d').checked = S.planes3d; setPlanes3d();
+$('sliceop').value = S.sliceOp; $('sliceopv').textContent = S.sliceOp.toFixed(2).slice(1);
+$('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
+$('pinends').checked = S.pinEnds;
+paintBounds();
+$('spacesel').innerHTML = Object.entries(SPACES)
+  .map(([k, sp]) => `<option value="${k}"${k === params.space ? ' selected' : ''}>${sp.name}</option>`).join('');
+$('gamutsel').innerHTML = Object.entries(GAMUTS)
+  .map(([k, g]) => `<option value="${k}"${k === params.gamut ? ' selected' : ''}>${g.name}</option>`).join('');
+$('preset').innerHTML = '<option value="">load…</option>'
+  + `<optgroup label="continuous">${Object.entries(PRESETS).filter(([, p]) => p.mode === 'continuous')
+      .map(([k]) => `<option value="${k}">${k}</option>`).join('')}</optgroup>`
+  + `<optgroup label="discrete">${Object.entries(PRESETS).filter(([, p]) => p.mode === 'discrete')
+      .map(([k]) => `<option value="${k}">${k}</option>`).join('')}</optgroup>`;
+buildShell();
+$('sevv').textContent = S.sev.toFixed(1); $('nv').textContent = S.n;
+$('shellv').textContent = S.shell.toFixed(2).slice(1); $('radv').textContent = S.rad;
+shell.material.opacity = S.shell; shell.visible = S.shell > 0;
+select(S.sel);
+
+new ResizeObserver(layout).observe(main);   // catches sidebar and devtools resizes too
+layout();
+applyBg();
+setView();
+frame();
+</script>
+</html>
