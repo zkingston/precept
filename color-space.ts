@@ -47,8 +47,8 @@ export type Mat3 = [Vec3, Vec3, Vec3];
 export const params = {
   /**
    * Diminishing-returns knee, in chart units (~1 JND).
-   * Paper Eq. 18 with Δψ normalised to [0,1] over ψ ∈ [0,100] and the fit
-   * a = 5.34, b = 2.34, renormalised below so f'(0) = 1.
+   * Paper Eq. 18 with Δψ normalized to [0,1] over ψ ∈ [0,100] and the fit
+   * a = 5.34, b = 2.34, renormalized below so f'(0) = 1.
    */
   s0: 100 / 5.34,
 
@@ -116,8 +116,8 @@ export const toXYZ = (p: Vec3): Vec3 =>
 /**
  * An RGB gamut is a parallelepiped in XYZ: the image of the unit cube under the
  * matrix its primaries and white point define. Note what is NOT here — transfer
- * functions. A gamma curve is a monotone per-channel reparametrisation of that
- * same cube, so it moves no boundary and changes no answer to "is this colour
+ * functions. A gamma curve is a monotone per-channel reparametrization of that
+ * same cube, so it moves no boundary and changes no answer to "is this color
  * reachable". Primaries and white point are the whole story.
  *
  * Classical: NTSC 1953 (never actually built, phosphors could not reach it),
@@ -125,7 +125,7 @@ export const toXYZ = (p: Vec3): Vec3 =>
  * Modern: Display P3 (the DCI cinema primaries on a D65 white — what recent
  * phones and laptops ship), Rec.2020 (UHD, primaries on the spectral locus),
  * ProPhoto and ACEScg AP1, both of which use *imaginary* primaries outside the
- * locus so the encodable set can contain every real colour.
+ * locus so the encodable set can contain every real color.
  */
 export type Gamut = { name: string; p: [number, number][]; w: [number, number] };
 
@@ -145,7 +145,7 @@ const BRADFORD: M3 = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0
 // Adapt to the white the CHART itself considers neutral, recovered by asking it,
 // rather than to a hand-typed D65. Oklab was fit to a particular D65 and a
 // rounded (0.3127, 0.3290) is not quite that one — close enough to look right
-// and not close enough to leave grey achromatic. This way every gamut's white
+// and not close enough to leave gray achromatic. This way every gamut's white
 // lands on [100, 0, 0] exactly, by construction.
 const CHART_WHITE = toXYZ([100, 0, 0]);
 
@@ -207,7 +207,7 @@ export const fromLCh = ([L, C, h]: Vec3): Vec3 => [L, C * Math.cos((h * Math.PI)
  * larger than it needs to be — and it has to stay small, because the test is
  * absolute while the channels are not. Near black every channel is ~1e-5, so a
  * loose tolerance stops being a rounding allowance and starts reporting plainly
- * negative colours as reachable: at L=2 an eps of 1e-4 claimed chroma 12 was in
+ * negative colors as reachable: at L=2 an eps of 1e-4 claimed chroma 12 was in
  * gamut, on channels of (-9.7e-5, 7.4e-5, -5.5e-5). The slices drew it, the
  * solid could not enclose it, and the two disagreed at the bottom.
  */
@@ -294,9 +294,9 @@ const IPT_LMS: M3 = [[0.40021437220265654, 0.7075074077935767, -0.08070603224074
                      [0, 0, 0.9182249511582473]];
 const IPT_OPP: M3 = [[0.4, 0.4, 0.2], [4.455, -4.851, 0.396], [0.8056, 0.3572, -1.1628]];
 const IPT_LMS_I = inv3(IPT_LMS), IPT_OPP_I = inv3(IPT_OPP);
-// Normalise cone response to the chart's white, exactly as the gamuts are
+// Normalize cone response to the chart's white, exactly as the gamuts are
 // adapted. Published IPT is keyed to a D65 a hair off Oklab's, and left alone
-// that put grey 0.04 off the neutral axis — small, and wrong in the one place
+// that put gray 0.04 off the neutral axis — small, and wrong in the one place
 // this tool cannot afford to be: the axis every lightness question hangs on.
 const IPT_W = apply(IPT_LMS, CHART_WHITE);
 
@@ -677,7 +677,7 @@ function demo() {
   for (const k of Object.keys(GAMUTS)) {
     const w = fromLinear([1, 1, 1], k);
     ok(close(w[0], 100, 1e-9) && Math.hypot(w[1], w[2]) < 1e-9, `${k} white is [100,0,0]`);
-    ok(inGamut(fromHex('#7f3f9f'), k), `sRGB colours are inside ${k}`);
+    ok(inGamut(fromHex('#7f3f9f'), k), `sRGB colors are inside ${k}`);
   }
   for (const k of ['display-p3', 'a98-rgb', 'rec2020', 'prophoto-rgb', 'acescg'])
     ok([[1, 0, 0], [0, 1, 0], [0, 0, 1]].every((c) => inGamut(fromLinear(c as Vec3, 'srgb'), k)), `sRGB fits in ${k}`);
@@ -698,7 +698,7 @@ function demo() {
     ok(e.lo.every(Number.isFinite) && e.hi.every((v, i) => v > e.lo[i]), `${k} has a finite extent`);
     if (['oklab', 'cielab', 'cieluv', 'ipt'].includes(k)) {
       const g2 = toSpace(fromHex('#7f7f7f'), k);
-      ok(Math.hypot(g2[1], g2[2]) < 1e-6, `grey is achromatic in ${k}`);
+      ok(Math.hypot(g2[1], g2[2]) < 1e-6, `gray is achromatic in ${k}`);
       ok(close(toSpace(fromHex('#ffffff'), k)[0], 100, 1e-6), `white is 100 in ${k}`);
     }
   }

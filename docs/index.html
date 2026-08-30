@@ -152,7 +152,7 @@
   #aboutclose:hover { color:var(--fg); }
   /* ── narrow ────────────────────────────────────────────────────────────────
      One column: canvas above, controls below. 48vh of canvas cannot also carry
-     a 278px preview, a colour bar and two plots on top of four viewports, so
+     a 278px preview, a color bar and two plots on top of four viewports, so
      the preview and the plots move into the panel — see reflow(). They are the
      two overlays that are readouts and editors rather than camera furniture,
      and the plots want the full width anyway, since you drag their knots.
@@ -353,35 +353,35 @@
 <dialog id="aboutdlg">
   <button id="aboutclose" title="close">&times;</button>
   <h3>Precept</h3>
-  <p class="lede">Palette design as trajectory optimisation.</p>
-  <p>A colour is a point in a colour space — a set of parameters like red, green and blue, or hue,
-     saturation and lightness, or chroma, lightness and hue. The <em>gamut</em> is the set of colours
+  <p class="lede">Palette design as trajectory optimization.</p>
+  <p>A color is a point in a color space — a set of parameters like red, green and blue, or hue,
+     saturation and lightness, or chroma, lightness and hue. The <em>gamut</em> is the set of colors
      that space can actually represent; your monitor's is probably sRGB. Many people also have a
-     colour vision deficiency, which changes how distinct those colours are from one another.</p>
+     color vision deficiency, which changes how distinct those colors are from one another.</p>
   <p>A colormap is either a continuous path through that space, or a set of points for categorical
      data, subject to constraints you would like to hold — uniform perception, maximal distinctness,
-     and so on. This tool solves that palette generation problem with optimisation, and provides a
+     and so on. This tool solves that palette generation problem with optimization, and provides a
      number of metrics to help design pleasing and scientifically validated palettes.</p>
 
   <h4>Getting around</h4>
   <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view it
-     takes the colour you clicked on. Drag to move, right-click — or press and hold on a touchscreen
+     takes the color you clicked on. Drag to move, right-click — or press and hold on a touchscreen
      — to delete. The tools switch between nodes, keep-out spheres and halfplanes. Run Adam to
-     optimise against the enabled terms, and export as matplotlib, CSS, CSV, ParaView or JSON.
+     optimize against the enabled terms, and export as matplotlib, CSS, CSV, ParaView or JSON.
      Hover any <span class="q">?</span> for what a control or a term means.</p>
 
   <h4>Motivation (personal)</h4>
-  <p>Colour palettes have been on my mind for a long time, as someone who makes plots, charts and
-     data visualisations for work — usually a figure in some paper. Early on I remember a mentor (I
-     believe it was Mark Moll) pointing out that I should be concerned about red–green colour
+  <p>Color palettes have been on my mind for a long time, as someone who makes plots, charts and
+     data visualizations for work — usually a figure in some paper. Early on I remember a mentor (I
+     believe it was Mark Moll) pointing out that I should be concerned about red–green color
      blindness — protanopia and deuteranopia, more precisely — after seeing a plot of mine that used
      bright red and green in a categorical palette.</p>
-  <p>At that point I was fairly unaware of the concerns of graphic design. Some reading on colour
+  <p>At that point I was fairly unaware of the concerns of graphic design. Some reading on color
      palettes, including the excellent
      <a href="https://www.youtube.com/watch?v=xAoljeRJ3lU" target="_blank" rel="noopener">talk on
-     viridis for matplotlib</a>, sent me down a rabbit hole into colour perception and how to design
+     viridis for matplotlib</a>, sent me down a rabbit hole into color perception and how to design
      palettes scientifically. I was always a little frustrated by the lack of flexibility and
-     visualisation in tools like
+     visualization in tools like
      <a href="https://people.phy.cam.ac.uk/dag9/CUBEHELIX/" target="_blank" rel="noopener">cubehelix</a>
      and <a href="https://seaborn.pydata.org/tutorial/color_palettes.html" target="_blank" rel="noopener">Seaborn's
      palettes</a>. That led to a custom viridis-like palette I used in
@@ -390,9 +390,9 @@
      you are looking at now.</p>
 
   <h4>Motivation (professional)</h4>
-  <p>Perceptual colour space is not Riemannian: a large colour difference is perceived as
+  <p>Perceptual color space is not Riemannian: a large color difference is perceived as
      <em>less</em> than the sum of the small steps that make it up. This tool was an exercise in
-     trajectory optimisation in a non-Riemannian space, and hopefully produces better palettes than
+     trajectory optimization in a non-Riemannian space, and hopefully produces better palettes than
      most colormap generators do.</p>
   <ul>
     <li>Bujack, Teti, Miller, Caffrey &amp; Turton. <em>The non-Riemannian nature of perceptual
@@ -424,8 +424,8 @@ import {
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
 } from './color-space.js';
 
-// We do every colour computation ourselves and hand three gamma-encoded sRGB
-// directly, so switch three's colour management off rather than have it convert
+// We do every color computation ourselves and hand three gamma-encoded sRGB
+// directly, so switch three's color management off rather than have it convert
 // twice. Everything below is display-referred sRGB, start to finish.
 T.ColorManagement.enabled = false;
 
@@ -437,7 +437,7 @@ const S = {
   mode: 'continuous', tool: 'edit', cvd: 'none', sev: 1, gray: false,
   shell: 0.8, sliceOp: 0.8, rad: 12, rate: 0.3, pinEnds: true,
   bg: '#f0ead6', lock: true, planes3d: false,
-  fmt: 'matplotlib', cfmt: 'hex',                // export format, selection colour format
+  fmt: 'matplotlib', cfmt: 'hex',                // export format, selection color format
   restart: false,                                // kick the solver out of stalls
   cbg: '#ffffff', cmin: 3,                       // contrast: against what, and how much
   tipKind: 'sineramp',                           // which test image is showing
@@ -455,7 +455,7 @@ let view = NORMAL;
 
 /**
  * space coords ↔ world. Axis 0 is vertical, 1 is x, 2 is z, and the box is
- * centred on the gamut's own middle. The scale is ONE number for all three
+ * centerd on the gamut's own middle. The scale is ONE number for all three
  * axes: fitting each axis separately would fill the panels better and quietly
  * lie about every distance in them. Isometric or nothing.
  */
@@ -505,11 +505,11 @@ const hueGap = (p) => {
   return inHueArc(h) ? 0 : Math.min(angGap(h, S.hue[0]), angGap(h, S.hue[1]));
 };
 
-/** on-screen appearance: gamut-map, then push through the colour-vision view */
+/** on-screen appearance: gamut-map, then push through the color-vision view */
 const rgb = (p) => toSRGB(view(toGamut(p, 'srgb'))).map(clamp01);
 const paint = (p) => `rgb(${rgb(p).map((c) => Math.round(255 * c)).join(' ')})`;
 /**
- * What the output bar shows. Grayscale here is the neutral colour at the SAME
+ * What the output bar shows. Grayscale here is the neutral color at the SAME
  * chart lightness, not a luma-weighted average of the channels — the question
  * it answers is "does this ramp still read once hue and chroma are gone", and
  * only the perceptual lightness axis answers that.
@@ -621,12 +621,12 @@ const QUADS = [
 reframe();                       // FRAME must exist before anything calls world()
 S.slice = [...FRAME.mid];
 
-// ─── the colour pipeline, shared by every shader below ─────────────────────
+// ─── the color pipeline, shared by every shader below ─────────────────────
 const SPACE_ID = { oklab: 0, cielab: 1, cieluv: 2, ipt: 3, xyz: 4, srgb: 5 };
 const CVD_ID = { none: 0, protan: 1, deutan: 2, tritan: 3 };
 const m3 = (rows) => new T.Matrix3().set(...rows.flat());   // .set takes row-major
 
-// Everything from "a point in the working space" to "a colour on screen",
+// Everything from "a point in the working space" to "a color on screen",
 // shared verbatim by the slice planes and the gamut solid. The two differ only
 // in how they arrive at that point: one interpolates uv across a cut plane, the
 // other reads it off the surface it is drawing.
@@ -721,7 +721,7 @@ void main() {
 
 // The solid is the gamut boundary, so there is nothing to test — every fragment
 // is reachable by construction. Per fragment rather than per vertex also means
-// the colour stops being an interpolation across triangles that are large where
+// the color stops being an interpolation across triangles that are large where
 // the surface curves most.
 const SHELL_FRAG = COLOR_GLSL + `
 varying vec3 vPos;
@@ -737,7 +737,7 @@ void main() {
  * solid: the boundary of the feasible set is the in-bounds part of the gamut
  * shell PLUS the parts of the bound surfaces lying inside the gamut. Those are
  * the two lightness planes, the two chroma cylinders and the two hue
- * half-planes, each carrying the same colour pipeline.
+ * half-planes, each carrying the same color pipeline.
  *
  * A cap satisfies its own bound by construction, to within its tessellation,
  * so testing it again would make the surface flicker along its own edge. Each
@@ -867,7 +867,7 @@ shell.renderOrder = 2;
 shell.layers.set(1);
 scene.add(shell);
 
-/** the solid's colour is now a fragment shader; this only refreshes uniforms */
+/** the solid's color is now a fragment shader; this only refreshes uniforms */
 function paintShell() {
   setColorUniforms(shell.material.uniforms);
   shell.material.uniforms.uOpacity.value = S.shell;
@@ -884,7 +884,7 @@ const CAP_N = 36;
 const capR = () => BOUND_MAX[1] * 1.35;
 let capKey = null;
 
-/** a point on cap `kind` at value v, parameterised over the unit square */
+/** a point on cap `kind` at value v, parameterized over the unit square */
 const capChart = (kind, v, u, w) => {
   if (kind === 0) return [v, (2 * u - 1) * capR(), (2 * w - 1) * capR()];        // L = v
   if (kind === 1) { const h = u * 2 * Math.PI;                                  // chroma = v
@@ -1016,7 +1016,7 @@ function paintSlice(s) {
 // rather than being blended into it. renderOrder does the rest of the stacking.
 const overlay = (extra) => new T.MeshBasicMaterial({ transparent: true, depthTest: false, ...extra });
 const tube = new T.Mesh(new T.BufferGeometry(), overlay({ vertexColors: true }));
-// a slightly fatter black tube, back faces only: what shows past the coloured
+// a slightly fatter black tube, back faces only: what shows past the colored
 // one is exactly an outline, and it costs no shader work
 const tubeEdge = new T.Mesh(new T.BufferGeometry(), overlay({ color: 0x000000, side: T.BackSide }));
 tubeEdge.renderOrder = 6; tube.renderOrder = 7;
@@ -1032,7 +1032,7 @@ function buildTube() {
   const g = new T.TubeGeometry(path, seg, 1.3, radial, false);
   tubeEdge.geometry = new T.TubeGeometry(path, seg, 1.75, radial, false);
   // TubeGeometry emits (seg+1) rings of (radial+1) vertices in order, so the
-  // ring index recovers the curve parameter, and with it the colour.
+  // ring index recovers the curve parameter, and with it the color.
   const col = new Float32Array(g.attributes.position.count * 3);
   for (let i = 0; i < g.attributes.position.count; i++) {
     const ring = Math.floor(i / (radial + 1));
@@ -1079,8 +1079,8 @@ function buildObstacles() {
     m.position.copy(wpt(o.c));
     m.userData = { kind: 'obs', i };
     // Handle on the surface, in a deliberately oblique direction: along an axis
-    // it would project onto the centre in whichever panel looks down that axis,
-    // and a handle you cannot separate from the centre is one you cannot grab.
+    // it would project onto the center in whichever panel looks down that axis,
+    // and a handle you cannot separate from the center is one you cannot grab.
     const h = new T.Mesh(DOT, overlay({ color: sel ? 0xffd76a : 0xc94f4f }));
     h.scale.setScalar(0.7);
     h.position.copy(m.position).addScaledVector(OBS_DIR, unperceive(o.r) * FRAME.s);
@@ -1092,18 +1092,18 @@ function buildObstacles() {
 
 /**
  * A halfplane is stored as an axis, a value and a side — so it draws as a quad
- * spanning the other two axes, and gets a handle at its centre. That handle is
+ * spanning the other two axes, and gets a handle at its center. That handle is
  * an ordinary pickable object, which means dragging it (slides the cut),
  * right-clicking it (deletes) and selecting it all come from machinery that
  * already exists rather than a second interaction path.
  */
 // world(c) is a permutation times ONE uniform scale, so a direction in space
-// coordinates maps to a world direction by the same permutation and normalises
+// coordinates maps to a world direction by the same permutation and normalizes
 // out. That is what lets the gizmo basis be built in world space and read back.
 const wdir = (n) => new T.Vector3(n[1], n[0], n[2]).normalize();
 const sdir = (v) => [v.y, v.x, v.z];
 /** the point of the plane nearest the middle of the box */
-const planeCentre = (pl) => FRAME.mid.map((m, j) => m + (pl.d - dot3(pl.n, FRAME.mid)) * pl.n[j]);
+const planeCenter = (pl) => FRAME.mid.map((m, j) => m + (pl.d - dot3(pl.n, FRAME.mid)) * pl.n[j]);
 
 const PLANE_R = 26, HANDLE_R = 15;
 
@@ -1111,7 +1111,7 @@ function buildPlanes() {
   planeGroup.clear();
   S.planes.forEach((pl, i) => {
     const sel = S.sel?.kind === 'plane' && S.sel.i === i;
-    const W = world(planeCentre(pl)), n = wdir(pl.n);
+    const W = world(planeCenter(pl)), n = wdir(pl.n);
     const u = new T.Vector3(0, 1, 0).cross(n);
     if (u.lengthSq() < 1e-6) u.set(1, 0, 0);
     u.normalize();
@@ -1132,16 +1132,16 @@ function buildPlanes() {
     planeGroup.add(new T.Line(new T.BufferGeometry().setFromPoints([W, tip]),
       new T.LineBasicMaterial({ color: 0xff5b5b })));
 
-    const centre = new T.Mesh(DOT, overlay({ color: sel ? 0xffffff : 0xff5b5b }));
-    centre.position.copy(W);
-    centre.renderOrder = 8;
-    centre.userData = { kind: 'plane', i };
+    const center = new T.Mesh(DOT, overlay({ color: sel ? 0xffffff : 0xff5b5b }));
+    center.position.copy(W);
+    center.renderOrder = 8;
+    center.userData = { kind: 'plane', i };
     const rot = new T.Mesh(DOT, overlay({ color: sel ? 0xffd76a : 0xc94f4f }));
     rot.scale.setScalar(0.75);
     rot.position.copy(tip);
     rot.renderOrder = 8;
     rot.userData = { kind: 'planerot', i };
-    planeGroup.add(centre, rot);
+    planeGroup.add(center, rot);
   });
 }
 
@@ -1243,7 +1243,7 @@ function sidebar() {
 
   // worst swatch against the contrast ground, live next to the two knobs that
   // set it. Shown in both modes: a ramp has a lightest end, and how readable
-  // that end is against the page is worth knowing even when nothing optimises it.
+  // that end is against the page is worth knowing even when nothing optimizes it.
   {
     const bg = fromHex(S.cbg);
     const set = S.mode === 'continuous' && S.pts.length >= 2 ? curve() : pal;
@@ -1271,10 +1271,10 @@ function sidebar() {
       'Curve samples outside the feasible set — bounds, spheres and planes as well as the gamut. '
       + 'Projection makes the NODES feasible; the spline between them is what this watches.']);
     /**
-     * Neighbour differences summed, over the true end-to-end one. This is a
+     * Neighbor differences summed, over the true end-to-end one. This is a
      * reading about the SPACE, not about the palette: it tracks arc length and
      * swatch count, so a flawless colormap does not score 1 and a palette
-     * spanning nothing scores exactly 1. Nothing optimises it, and nothing
+     * spanning nothing scores exactly 1. Nothing optimizes it, and nothing
      * should — the way to make differences add up is to have no range.
      *
      * Dividing by what an even split of the same total would give does NOT
@@ -1285,8 +1285,8 @@ function sidebar() {
     if (pal.length >= 3) {
       const steps = pal.reduce((a, p, i) => (i ? a + pd(pal[i - 1], p, EUCLIDEAN) : 0), 0);
       rows.push(['additivity gap', `${(steps / perceive(arcLength(c, EUCLIDEAN))).toFixed(2)}×`, false, null,
-        'Neighbour differences summed, over the true end-to-end difference. An additive space gives 1.00; '
-        + 'this one does not, which is why pairwise uniformity is not the neighbour kind.']);
+        'Neighbor differences summed, over the true end-to-end difference. An additive space gives 1.00; '
+        + 'this one does not, which is why pairwise uniformity is not the neighbor kind.']);
     }
   }
   if (S.obs.length) {
@@ -1336,7 +1336,7 @@ function sidebar() {
   }
   $('toolnote').textContent = { edit: 'double-click to add · drag to move · right-click to delete',
     obstacle: 'double-click a slice to place · drag the handle to resize',
-    plane: 'double-click a slice to cut · drag the centre or the tip' }[S.tool];
+    plane: 'double-click a slice to cut · drag the center or the tip' }[S.tool];
 
   paintPlotButtons(); drawPlots(); drawWheel();
   drawTest();
@@ -1350,7 +1350,7 @@ function sidebar() {
 // panel and still put a ridge where the data is flat, or lose a feature where
 // its contrast dips — both of which are obvious the moment you map something
 // through it. Everything here goes through the same view as the rest of the
-// page, so the colour-vision and grayscale settings apply to the test too.
+// page, so the color-vision and grayscale settings apply to the test too.
 const tipc = $('tipcanvas'), tctx = tipc.getContext('2d');
 const rnd = (seed) => () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 
@@ -1368,7 +1368,7 @@ const TESTS = {
   lines: { mode: 'discrete', label: 'lines',
     note: 'One series per class, crossing and overlapping, over a light and a dark ground. Line work is thin, so a pair that reads as distinct in a swatch row can still merge here.' },
   scatter: { mode: 'discrete', label: 'scatter',
-    note: 'Every class on a light and a dark ground. A swatch that vanishes against either, or that you cannot tell from its neighbour, fails here and not in the metrics.' },
+    note: 'Every class on a light and a dark ground. A swatch that vanishes against either, or that you cannot tell from its neighbor, fails here and not in the metrics.' },
 };
 
 /** the palette as bytes, through the active view — CVD and grayscale included */
@@ -1390,7 +1390,7 @@ function drawTest() {
   if (kind === 'scatter') return drawScatter(W, H, lut);
   if (kind === 'lines') return drawLines(W, H, lut);
 
-  // normalise whatever the field returns, so a test only has to be smooth
+  // normalize whatever the field returns, so a test only has to be smooth
   const f = TESTS[kind].f, v = new Float64Array(W * H);
   let mn = Infinity, mx = -Infinity;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -1408,7 +1408,7 @@ function drawTest() {
 
 /**
  * Smooth crossing series rather than a random walk: noise would make them hard
- * to follow for reasons that are nothing to do with the colours. Each class
+ * to follow for reasons that are nothing to do with the colors. Each class
  * gets its own phase, frequency and tilt, so they overlap the way real series
  * do — which is where thin strokes of two similar hues stop being two.
  */
@@ -1441,7 +1441,7 @@ function drawLines(W, H, lut) {
   });
 }
 
-/** split ground, because a categorical colour has to survive both */
+/** split ground, because a categorical color has to survive both */
 function drawScatter(W, H, lut) {
   tctx.fillStyle = '#f2f2f2'; tctx.fillRect(0, 0, W / 2, H);
   tctx.fillStyle = '#101014'; tctx.fillRect(W / 2, 0, W / 2, H);
@@ -1487,7 +1487,7 @@ function headText(cols) {
   return [
     `${stem()} — generated by precept`,
     `${SPACES[params.space].name} · ${GAMUTS[params.gamut].name} gamut`
-      + `${S.cvd === 'none' ? '' : ` · optimised under ${S.cvd} at severity ${S.sev}`}`,
+      + `${S.cvd === 'none' ? '' : ` · optimized under ${S.cvd} at severity ${S.sev}`}`,
     `${S.pts.length} control point(s)${expCont() ? ', resampled to 256 by arc length' : ''}`,
     ...(params.gamut === 'srgb' ? [] : ['NOTE: clipped to sRGB on the way out.']),
     ...(outside ? [`NOTE: ${outside}/${cols.length} sample(s) fell outside the `
@@ -1582,7 +1582,7 @@ const deepFinite = (v) => Array.isArray(v) ? v.every(deepFinite)
 const menu = (id) => [...$(id).children].map((b) => b.dataset.v);
 
 /**
- * A scene file is untrusted input. A NaN or an unrecognised enum reaching the
+ * A scene file is untrusted input. A NaN or an unrecognized enum reaching the
  * renderer is fatal with no way back short of a reload — an unknown CVD name
  * indexes BRETTEL to undefined and the next destructure throws inside the
  * frame loop. So check before assigning, not after.
@@ -1684,10 +1684,10 @@ const pd = (a, b, g) => perceive(segLength(a, b, g));
  * The observers the discrimination terms answer to. Choosing a deficiency in
  * the Vision panel narrows them to that observer at that severity; choosing
  * none means all three, so the default stays the conservative reading rather
- * than quietly optimising for normal vision alone.
+ * than quietly optimizing for normal vision alone.
  *
- * Only the terms about telling two colours APART take a view. Arc length,
- * bounds, monotonicity, gamut and planes are about where a colour sits, not how
+ * Only the terms about telling two colors APART take a view. Arc length,
+ * bounds, monotonicity, gamut and planes are about where a color sits, not how
  * well it is distinguished, and stay in the chart where they were defined.
  */
 const primary = () => (S.cvd === 'none' ? NORMAL : view);
@@ -1700,7 +1700,7 @@ const observer = () => (S.cvd === 'none' ? 'normal' : `${S.cvd} ${S.sev.toFixed(
  * feels every pair at once, and because it is measured with the PERCEIVED
  * distance, diminishing returns do the right thing on their own — far pairs
  * saturate and contribute almost nothing, so the step spends itself separating
- * the colours that are actually confusable.
+ * the colors that are actually confusable.
  */
 function repulsion(P, views) {
   const g = M();
@@ -1708,7 +1708,7 @@ function repulsion(P, views) {
   for (const v of views)
     for (let i = 0; i < P.length; i++)
       for (let j = i + 1; j < P.length; j++) e += 1 / Math.max(0.5, pd(v(P[i]), v(P[j]), g));
-  return e;                                        // the floor keeps coincident colours finite
+  return e;                                        // the floor keeps coincident colors finite
 }
 
 const WARN_EPS = 0.005;    // below this a `bad` term reads 0.00, so do not flag it
@@ -1721,7 +1721,7 @@ const LK = 9;                                    // knots in the editable profil
  * Storing unwrapped angles was the wrong call: an unwrapped run has an
  * arbitrary multiple of 360 in it that nothing pins down, so re-deriving it
  * each frame let it flip between turns as the palette moved, and the axis
- * flip-flopped with it. Normalised knots have exactly one representation.
+ * flip-flopped with it. Normalized knots have exactly one representation.
  *
  * The wrap then lives in three rules. Between adjacent knots, interpolate the
  * SHORT way. Compare by shortest signed difference, so 359° and 1° are two
@@ -1768,7 +1768,7 @@ const lprofLine = () => {
 };
 /**
  * target ← a tent: both ends at the darker endpoint, the middle at the lighter.
- * This is the shape a DIVERGING map wants — two hues meeting at a light centre,
+ * This is the shape a DIVERGING map wants — two hues meeting at a light center,
  * so lightness has to rise and fall rather than climb. A straight line cannot
  * express it, and neither could the old monotonicity term, which is the other
  * reason that one had to become a drawn profile.
@@ -1793,7 +1793,7 @@ const hprofFit = () => {
  * A steady turn. The direction has to come from the whole measured run, not
  * from its two ends: magma's ends are 264° and 109°, whose short way is −155°,
  * while the ramp actually turns +205° through zero. Summing the small steps
- * recovers the true turn, and only then is it spread evenly and normalised.
+ * recovers the true turn, and only then is it spread evenly and normalized.
  */
 const hprofSweep = () => {
   hprofFit();
@@ -1882,8 +1882,8 @@ const OBJ = [
     } },
   /**
    * Chroma aims at the middle of the band rather than climbing as high as the
-   * gamut allows. Maximising was measurably the wrong prior: viridis's chroma
-   * DIPS through the middle of the ramp (14→8→19) while a maximiser pushes it
+   * gamut allows. Maximizing was measurably the wrong prior: viridis's chroma
+   * DIPS through the middle of the ramp (14→8→19) while a maximizer pushes it
    * up (14→22→19). A target plus the gamut penalty reproduces a dip or an arc
    * on its own, because the reachable chroma varies with lightness and hue —
    * the profile falls out of the constraint rather than being asked for.
@@ -1914,8 +1914,8 @@ const OBJ = [
   /**
    * Keeps consecutive control points evenly spaced, and repels them apart when
    * they bunch. Σ(d̄/dᵢ) − n, not the variance of the segment lengths: variance
-   * is minimised by every segment being equal AND ZERO, so it would happily
-   * collapse the whole trajectory onto a point. The ratio form is minimised at
+   * is minimized by every segment being equal AND ZERO, so it would happily
+   * collapse the whole trajectory onto a point. The ratio form is minimized at
    * even spacing by AM–HM, blows up as any single segment closes, and is scale
    * invariant — so it fights bunching without also fighting `arc length` over
    * how long the ramp should be. Zero exactly when the waypoints are even.
@@ -1948,7 +1948,7 @@ const OBJ = [
    * at a given weight, so the curve can be driven feasible at a FINITE weight
    * instead of needing one large enough to flatten every other term with it.
    * AL.rho is the penalty parameter and is applied in gradientOf, because the
-   * per-term gradient normalisation there would otherwise divide it straight
+   * per-term gradient normalization there would otherwise divide it straight
    * back out.
    */
   { key: 'feas', label: 'curve feasibility', mode: 'continuous', bad: true,
@@ -1956,7 +1956,7 @@ const OBJ = [
   /**
    * Uniformity over every PAIR, corrected for diminishing returns.
    *
-   * The neighbour form below assumes the space is additive: equal steps compose
+   * The neighbor form below assumes the space is additive: equal steps compose
    * into a difference proportional to how far apart two swatches are. Bujack et
    * al. (PNAS 2022) is the result that it does not — perceived difference grows
    * sublinearly, so what a uniform ramp should deliver between samples i and j
@@ -1979,7 +1979,7 @@ const OBJ = [
     } },
   /**
    * Contrast against a chosen ground, as a hinge rather than something to
-   * maximise. Maximising it would drive every swatch to one lightness — the
+   * maximize. Maximizing it would drive every swatch to one lightness — the
    * ratio is a function of luminance alone — which is the opposite of what a
    * categorical palette needs. A floor asks only that nothing is unreadable and
    * leaves the rest of the palette alone once it is met.
@@ -2004,16 +2004,16 @@ const STEP_MAX = 4;        // chart units moved by the largest component at rate
  * once. Each perturbation builds ONE context and every term reads it, so a
  * combined step costs barely more than a single-term one.
  *
- * Each term's gradient is normalised to unit max and then scaled by its weight
- * before the terms are summed. The normalisation is deliberate and this is not
+ * Each term's gradient is normalized to unit max and then scaled by its weight
+ * before the terms are summed. The normalization is deliberate and this is not
  * the gradient of Σ wᵢfᵢ: these objectives span four orders of magnitude, so an
  * honest sum is simply the plane-cost gradient with rounding noise attached.
- * Normalising first puts every term on the same footing; the weight then says
+ * Normalizing first puts every term on the same footing; the weight then says
  * how hard each one pulls, in units anyone can reason about — weight 2 against
  * weight 1 is twice the pull, whatever the term happens to measure in.
  *
  * A pinned endpoint is a variable removed from the problem, not a move undone
- * afterwards: its gradient is never formed, so it cannot skew the normalisation
+ * afterwards: its gradient is never formed, so it cannot skew the normalization
  * that sets the step size for everything else.
  */
 function gradientOf(terms) {
@@ -2057,7 +2057,7 @@ const stepAlong = (obj, dir) => stepBy([obj], dir);
 
 /**
  * Adam over the control points. `gradientOf` already returns the weighted sum
- * of unit-normalised term gradients, so what Adam adds on top is per-coordinate
+ * of unit-normalized term gradients, so what Adam adds on top is per-coordinate
  * step sizing — which is precisely what the fixed-rate stepper lacked: a heavily
  * weighted term used to bulldoze the others, because every coordinate moved by
  * the same amount regardless of how confident the gradient was there.
@@ -2075,7 +2075,7 @@ const adamReset = () => {
 
 /**
  * The augmented Lagrangian's OUTER iteration, run every AL_EVERY inner steps —
- * multipliers are meant to update after an approximate minimisation, not after
+ * multipliers are meant to update after an approximate minimization, not after
  * every gradient step, or they chase the iterate instead of the constraint.
  *
  * rho only escalates when the multipliers alone are not closing the violation,
@@ -2125,8 +2125,8 @@ function adamStep() {
  * seen rather than the last one.
  *
  * "Best" needs a scalar and there is no obvious one: gradientOf descends a sum
- * of UNIT-normalised term gradients, and the normaliser moves with x, so no
- * fixed function is being minimised. The comparator here is each term over the
+ * of UNIT-normalized term gradients, and the normalizer moves with x, so no
+ * fixed function is being minimized. The comparator here is each term over the
  * largest value that term has taken this run, weighted — bounded, comparable
  * across terms spanning four orders of magnitude, and zero for a term that has
  * never been anything but zero.
@@ -2385,7 +2385,7 @@ $('lplot').onclick = (e) => {
  *
  * How to invert depends on the shape, and reversing is not always it: a tent
  * reversed is the same tent. So a symmetric profile is mirrored in lightness
- * instead, turning a light-centred diverging ramp into a dark-centred one,
+ * instead, turning a light-centerd diverging ramp into a dark-centerd one,
  * while an asymmetric one is reversed, turning dark-to-light into light-to-dark.
  */
 $('lplot').ondblclick = (e) => {
@@ -2402,7 +2402,7 @@ $('lplot').ondblclick = (e) => {
   sidebar();
 };
 
-/** The backdrop drives the HUD and outline colours too — a light surround with
+/** The backdrop drives the HUD and outline colors too — a light surround with
  *  light labels on it is unreadable. Contrast is decided by the backdrop's own
  *  lightness in the chart, which is the one perceptual number we already have. */
 function applyBg() {
@@ -2435,7 +2435,7 @@ function select(sel) {
  *
  * toGamut bisects chroma at fixed lightness, so this is NOT the Euclidean
  * nearest feasible point; it is the nearest one of the same hue and lightness,
- * which is the projection worth having for colour. Paired with the gradient
+ * which is the projection worth having for color. Paired with the gradient
  * buttons it makes those steps ordinary projected gradient descent.
  *
  * Note this constrains the NODES. A spline through feasible nodes can still
@@ -2511,8 +2511,8 @@ const clampPlanes = (q) => {
 };
 
 /**
- * Out of every keep-out ball, along the ray from its centre. The ball is round
- * in PERCEIVED distance under the active metric and colour-vision view, which
+ * Out of every keep-out ball, along the ray from its center. The ball is round
+ * in PERCEIVED distance under the active metric and color-vision view, which
  * is not a sphere in the chart, so the exit point is found by bisection rather
  * than by adding a radius. obstaclePenalty is (r - d)² when inside and 0 when
  * out, which is all the test this needs.
@@ -2524,7 +2524,7 @@ function clampObs(q) {
     if (!inside(q)) continue;
     let u = [0, 1, 2].map((k) => q[k] - o.c[k]);
     let n = Math.hypot(...u);
-    if (n < 1e-9) { u = [0, 1, 0]; n = 1; }          // dead centre: any direction will do
+    if (n < 1e-9) { u = [0, 1, 0]; n = 1; }          // dead center: any direction will do
     u = u.map((x) => x / n);
     const at = (t) => o.c.map((cc, k) => cc + t * u[k]);
     let hi = Math.max(1e-3, unperceive(o.r));
@@ -2640,9 +2640,9 @@ function pointOn(q) {
 /**
  * Where a double-click in the 3D view lands.
  *
- * The solid is drawn BackSide, so the colour you see at a pixel is its FAR
- * wall — and a raycast honours material.side, so the default hit against it is
- * that same far wall. Clicking therefore adds the colour you clicked on, not
+ * The solid is drawn BackSide, so the color you see at a pixel is its FAR
+ * wall — and a raycast honors material.side, so the default hit against it is
+ * that same far wall. Clicking therefore adds the color you clicked on, not
  * the one hidden behind it.
  *
  * Off the solid, fall back to the camera-facing plane through the current cut:
@@ -2790,10 +2790,10 @@ canvas.addEventListener('pointermove', (e) => {
     S.obs[drag.i].r = Math.min(60, Math.max(1, perceive(hit.distanceTo(wpt(o.c)) / FRAME.s)));
   } else if (drag.kind === 'plane') S.planes[drag.i].d = dot3(S.planes[drag.i].n, toSpace(p));   // slide along the normal
   else if (drag.kind === 'planerot') {
-    const pl = S.planes[drag.i], c = planeCentre(pl);
+    const pl = S.planes[drag.i], c = planeCenter(pl);
     const dir = sdir(hit.clone().sub(world(c)));                // aim the normal at the handle
     const len = Math.hypot(...dir);
-    if (len > 1e-6) { pl.n = dir.map((x) => x / len); pl.d = dot3(pl.n, c); }   // pivot about the centre
+    if (len > 1e-6) { pl.n = dir.map((x) => x / len); pl.d = dot3(pl.n, c); }   // pivot about the center
   } else if (drag.kind === 'pt') S.pts[drag.i] = p;
   else S.obs[drag.i].c = p;
   if (S.lock && drag.kind === 'pt') setSlices(p);
@@ -2888,10 +2888,10 @@ $('preset').onchange = (e) => {
 $('hex').oninput = (e) => {
   if (!S.sel) return;
   const p = COLORFMT[S.cfmt].from(e.target.value);
-  if (!p || !p.every(Number.isFinite)) return;     // still mid-typing, or not a colour
+  if (!p || !p.every(Number.isFinite)) return;     // still mid-typing, or not a color
   if (S.sel.kind === 'pt') S.pts[S.sel.i] = p;
   else if (S.sel.kind.startsWith('obs')) S.obs[S.sel.i].c = p;
-  else return;                                     // a plane has no colour to set
+  else return;                                     // a plane has no color to set
   if (S.lock) setSlices(p);
   sync();
 };
@@ -2953,7 +2953,7 @@ const onRing = (h, r) => [WMID + r * Math.cos((h * Math.PI) / 180), WMID - r * M
 
 const WLUT = new Float32Array(720 * 3);
 let wlutKey = null;
-/** The ring's colour is a function of ANGLE alone — one variable, not two — so
+/** The ring's color is a function of ANGLE alone — one variable, not two — so
  *  it wants a lookup table, not a shader. Resolving it once per half-degree
  *  turns 12.5k gamut-mapping bisections into 720, which beats moving the same
  *  redundant work to the GPU. Half a degree is well under a pixel at this radius. */
@@ -2969,7 +2969,7 @@ function wheelLut() {
 }
 
 /**
- * The ring is a picture of the gamut through the active colour-vision view, so
+ * The ring is a picture of the gamut through the active color-vision view, so
  * it goes stale on a vision change and on a gamut change — neither of which
  * goes anywhere near paintBounds, which used to be its only caller. Keying it
  * on everything it reads and calling it from sidebar() means no path can miss
@@ -3150,12 +3150,12 @@ const HINTS = {
   mode: 'A ramp read as a scale, or a set of swatches read as categories.',
   preset: 'Load a published palette. Replaces the control points and refits both profiles.',
   spacesel: 'The space the panels are drawn in and distances are measured with.',
-  gamutsel: 'The primaries and white point that bound the reachable colours.',
-  cvd: 'Simulate a colour-vision deficiency. Panels, test images and objective terms all follow it.',
+  gamutsel: 'The primaries and white point that bound the reachable colors.',
+  cvd: 'Simulate a color-vision deficiency. Panels, test images and objective terms all follow it.',
   sev: 'How complete the deficiency is. 1.0 is full dichromacy.',
   shell: 'Opacity of the gamut solid and the caps that close it.',
   sliceop: 'Opacity of the three cut planes.',
-  bg: 'Backdrop colour. Also sets whether labels and outlines are drawn light or dark.',
+  bg: 'Backdrop color. Also sets whether labels and outlines are drawn light or dark.',
   planes3d: 'Draw the cut planes in the 3D view as well as in their own panels.',
   lock: 'Move all three cuts to the node you last touched.',
   colorfmt: 'Notation for the selected node. LCh and oklch are not gamut-mapped, so they round-trip exactly.',

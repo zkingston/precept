@@ -1,7 +1,7 @@
 # precept
 
-A palette design tool built on the finding that perceptual colour space is **not
-Riemannian** — large colour differences are perceived as less than the sum of
+A palette design tool built on the finding that perceptual color space is **not
+Riemannian** — large color differences are perceived as less than the sum of
 the small steps that make them up.
 
 - Bujack, Teti, Miller, Caffrey & Turton, *The non-Riemannian nature of
@@ -51,7 +51,7 @@ Rebuild before pushing, then point Pages at `/docs` on `main`.
 | **f** | returns | **global** structure, concave, **not** additive — perceived difference |
 
 `f(s) = s₀·ln(1 + s/s₀)` with `s₀ = 100/a ≈ 18.7`, which is the paper's Eq. 18
-renormalised so `f'(0) = 1`. That collapses both fitted parameters into a single
+renormalized so `f'(0) = 1`. That collapses both fitted parameters into a single
 knee: below it differences add, above it they saturate.
 
 Two properties make the split workable, and the 2025 paper argues for exactly
@@ -75,7 +75,7 @@ path across all of them.
 - **Palettes** — continuous trajectories (centripetal Catmull–Rom through
   control points) or discrete sets. matplotlib colormaps and Tableau/Okabe–Ito/
   ColorBrewer sets load as editable control points.
-- **Colour vision** — Brettel 1997, all three dichromacies with severity,
+- **Color vision** — Brettel 1997, all three dichromacies with severity,
   applied to the swatches *and* the gamut solid.
 - **Gamuts** — sRGB, Display P3, Adobe RGB, Rec.2020, ProPhoto, ACEScg, NTSC
   1953. Derived from primaries and white point; the selector changes what is
@@ -85,15 +85,15 @@ path across all of them.
 - **Constraints** — keep-out spheres, rotatable halfplanes, lightness/chroma/hue
   bounds shaded into the views, and a hard gamut projection applied wherever
   state becomes geometry.
-- **Optimisation** — Adam over the control points, one step at a time or run
+- **Optimization** — Adam over the control points, one step at a time or run
   continuously, with per-term enable and weight, and pinnable endpoints.
 
 ## Status
 
 Adam runs over the control points, either stepped or continuous. Each term's
-gradient is normalised before weighting, so a weight is a relative pull rather
+gradient is normalized before weighting, so a weight is a relative pull rather
 than a number that has to fight the term's units — these objectives span four
-orders of magnitude, and an unnormalised sum is just the largest one.
+orders of magnitude, and an unnormalized sum is just the largest one.
 
 Gradients are numeric (central differences over 3n coordinates), which is the
 dominant cost and caps the solver at roughly ten iterations a second; analytic
