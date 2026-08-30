@@ -170,8 +170,12 @@
     #dock { display:flex; flex-direction:column; gap:11px; }
     section { grid-column:auto; }
 
-    /* the preview is the fourth cell of the cut strip; layout() places it */
-    #tip { padding:2px; border-radius:4px; display:flex; flex-direction:column; gap:2px; }
+    /* the preview is the fourth cell of the cut strip; layout() places it.
+       position must come BACK: the compact tier above sets it static to dock,
+       and narrow is inside compact, so without this the inline left/top that
+       layout() writes are ignored and it lays out in flow over the 3D view. */
+    #tip { position:absolute; padding:2px; border-radius:4px; display:flex; flex-direction:column; gap:2px;
+           background:#1c1c20ee; border:1px solid var(--line); }
     #tipcanvas { width:100%; height:auto; flex:1; min-height:0; }
     #tipbtns { margin-top:0; gap:2px; }
     #tipbtns button { font-size:9px; padding:1px 0; }
