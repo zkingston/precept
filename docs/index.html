@@ -1109,7 +1109,7 @@ function sidebar() {
     obstacle: 'double-click a slice to place · drag the handle to resize',
     plane: 'double-click a slice to cut · drag the centre or the tip' }[S.tool];
 
-  paintPlotButtons(); drawPlots();
+  paintPlotButtons(); drawPlots(); drawWheel();
   drawTest();
 }
 
@@ -2417,7 +2417,18 @@ function wheelLut() {
   }
 }
 
+/**
+ * The ring is a picture of the gamut through the active colour-vision view, so
+ * it goes stale on a vision change and on a gamut change — neither of which
+ * goes anywhere near paintBounds, which used to be its only caller. Keying it
+ * on everything it reads and calling it from sidebar() means no path can miss
+ * it: an added dependency shows up in the key, not in a bug report.
+ */
+let wheelKey = null;
 function drawWheel() {
+  const key = `${S.cvd}|${S.sev}|${params.gamut}|${S.hue}`;
+  if (key === wheelKey) return;
+  wheelKey = key;
   wheelLut();
   const img = wctx.createImageData(WN, WN), d = img.data;
   for (let y = 0; y < WN; y++) for (let x = 0; x < WN; x++) {
