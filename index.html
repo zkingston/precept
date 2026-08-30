@@ -233,6 +233,11 @@
       <div id="termhelp" class="note"></div>
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
         <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span></div>
+      <div class="row"><label class="f">contrast</label>
+        <input type="color" id="cbg" value="#ffffff" title="the ground swatches are judged against">
+        <input type="number" id="cmin" min="1" max="21" step="0.5" value="3"
+               style="width:52px" title="minimum contrast ratio the palette should reach">
+        <span class="note">:1 floor</span></div>
       <div class="row"><label class="chk"><input type="checkbox" id="pinends">lock endpoints</label></div>
       <div class="row"><button id="steptotal" style="flex:1">step once</button>
         <button id="run" style="flex:1">run Adam</button></div>
@@ -258,8 +263,8 @@
 import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
-  fromHex, toHex, toSRGB, fromSRGB, fromLinear, toGamut, inGamut, toLCh, fromLCh,
-  arcLength, segLength, perceive, unperceive, resample, spline,
+  fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
+  arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty,
   minSeparation, obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, internals,
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
 } from './color-space.ts';
@@ -277,8 +282,12 @@ const S = {
   shell: 0.8, sliceOp: 0.8, rad: 12, rate: 0.3, pinEnds: true,
   bg: '#f0ead6', lock: true, planes3d: false,
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection colour format
+  cbg: '#ffffff', cmin: 3,                       // contrast: against what, and how much
   tipKind: 'sineramp',                           // which test image is showing
   lprof: [],                                     // target lightness profile, evenly spaced along t
+  feas:     "How far the CURVE leaves the feasible set, between the nodes.",
+  pair:     "Even perceived spacing over every pair, corrected for diminishing returns.",
+  contr:    "Swatches below the contrast floor against the chosen ground.",
   hprof: [],                                     // target hue profile, UNWRAPPED degrees
   slice: [55, 0, 0],                             // cut planes along L, a, b
   pts: [],                                       // filled from PRESETS below
@@ -1062,6 +1071,22 @@ function sidebar() {
       'Arc length after diminishing returns. Always the smaller number.'],
       ['out of gamut', `${bad}/${c.length}`, bad > 0, null,
       'Curve samples outside the gamut. Nodes are always inside.']);
+    const off = violations(c).filter((x) => x > 1e-4).length;
+    rows.push(['curve off-set', `${off}/${c.length}`, off > 0, null,
+      'Curve samples outside the feasible set — bounds, spheres and planes as well as the gamut. '
+      + 'Projection makes the NODES feasible; the spline between them is what this watches.']);
+    if (pal.length >= 3) {
+      const steps = pal.reduce((a, p, i) => (i ? a + pd(pal[i - 1], p, EUCLIDEAN) : 0), 0);
+      const direct = perceive(arcLength(c, EUCLIDEAN));
+      rows.push(['additivity gap', `${(steps / direct).toFixed(2)}×`, false, null,
+        'Neighbour differences summed, over the true end-to-end difference. Additive spaces give 1.00; '
+        + 'this one does not, which is why pairwise uniformity is not the neighbour kind.']);
+    }
+  }
+  if (S.mode === 'discrete' && pal.length) {
+    const bg = fromHex(S.cbg), lo = Math.min(...pal.map((p) => contrastRatio(p, bg)));
+    rows.push(['min contrast', `${lo.toFixed(2)}:1`, lo < S.cmin, null,
+      'Worst swatch against the contrast ground. WCAG wants 3:1 for graphics, 4.5:1 for text.']);
   }
   if (S.obs.length) {
     const probe = S.mode === 'continuous' && S.pts.length >= 2 ? curve() : pal;
@@ -1589,6 +1614,15 @@ const HELP = {
 };
 
 const hinge = (v) => (v > 0 ? v : 0);
+/** WCAG 2 relative luminance and contrast ratio, on the sRGB the viewer gets */
+const wcagY = (p) => {
+  const [r, g, b] = toLinear(toGamut(p, 'srgb'), 'srgb').map(clamp01);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrastRatio = (a, b) => {
+  const [hi, lo] = [wcagY(a), wcagY(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
 
 /**
  * Halfplanes are placed in the ACTIVE SPACE's coordinates — an axis-aligned cut
@@ -1690,6 +1724,58 @@ const OBJ = [
       const mean = d.reduce((a2, b) => a2 + b, 0) / n;
       return d.reduce((a2, b) => a2 + mean / b, 0) - n;
     } },
+  /**
+   * The curve, not the nodes. Projection makes a NODE feasible exactly, but the
+   * spline between two feasible nodes can still bulge out of the gamut, cut a
+   * keep-out ball or cross a halfplane — the feasible set is not convex, so
+   * feasible endpoints guarantee nothing in between. This is waypoint checking
+   * versus checking along the path, and the answer is the same one motion
+   * planning reaches for: an augmented Lagrangian.
+   *
+   * λ·c + ½|c|², with a multiplier per curve sample. The multipliers are what
+   * separate this from a plain penalty: they absorb the violation that persists
+   * at a given weight, so the curve can be driven feasible at a FINITE weight
+   * instead of needing one large enough to flatten every other term with it.
+   * AL.rho is the penalty parameter and is applied in gradientOf, because the
+   * per-term gradient normalisation there would otherwise divide it straight
+   * back out.
+   */
+  { key: 'feas', label: 'curve feasibility', mode: 'continuous', bad: true,
+    f: (x) => violations(x.probe).reduce((a, c, i) => a + (AL.lam[i] ?? 0) * c + 0.5 * c * c, 0) },
+  /**
+   * Uniformity over every PAIR, corrected for diminishing returns.
+   *
+   * The neighbour form below assumes the space is additive: equal steps compose
+   * into a difference proportional to how far apart two swatches are. Bujack et
+   * al. (PNAS 2022) is the result that it does not — perceived difference grows
+   * sublinearly, so what a uniform ramp should deliver between samples i and j
+   * is perceive(arc · |i−j|/(n−1)), not something proportional to |i−j|. This
+   * measures the residual from that, which is what "perceptually uniform" means
+   * once additivity is off the table. Chart metric, because perceive() is
+   * calibrated there.
+   */
+  { key: 'pair', label: 'pairwise uniformity', mode: 'continuous', bad: true,
+    f: (x) => {
+      const P = x.pal, n = P.length, v = primary();
+      if (n < 3) return 0;
+      const total = arcLength(x.curve, EUCLIDEAN);
+      let e = 0, k = 0;
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+        e += (pd(v(P[i]), v(P[j]), EUCLIDEAN) - perceive((total * (j - i)) / (n - 1))) ** 2;
+        k++;
+      }
+      return e / k;
+    } },
+  /**
+   * Contrast against a chosen ground, as a hinge rather than something to
+   * maximise. Maximising it would drive every swatch to one lightness — the
+   * ratio is a function of luminance alone — which is the opposite of what a
+   * categorical palette needs. A floor asks only that nothing is unreadable and
+   * leaves the rest of the palette alone once it is met.
+   */
+  { key: 'contr', label: 'contrast floor', mode: 'discrete', bad: true,
+    f: (x) => { const bg = fromHex(S.cbg);
+      return x.pal.reduce((a, p) => a + hinge(S.cmin - contrastRatio(p, bg)) ** 2, 0); } },
   { key: 'unif', label: 'uniformity', bad: true,
     f: (x) => {
       const P = x.pal, v = primary();
@@ -1702,7 +1788,7 @@ const OBJ = [
 ];
 
 /** Terms included in the combined step. Constraints on, shaping opt-in. */
-S.on = Object.fromEntries(OBJ.map((o) => [o.key, o.key !== 'rep']));
+S.on = Object.fromEntries(OBJ.map((o) => [o.key, o.key !== 'rep' && o.key !== 'unif']));
 /** Relative pull of each term in the combined step. */
 S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
 
@@ -1744,7 +1830,7 @@ function gradientOf(terms) {
   per.forEach((g, m) => {
     const mx = Math.max(...g.flat().map(Math.abs));
     if (!Number.isFinite(mx) || mx === 0) return;            // flat term: no opinion
-    const w = S.w[terms[m].key] / mx;
+    const w = (S.w[terms[m].key] * (terms[m].key === 'feas' ? AL.rho : 1)) / mx;
     g.forEach((row, i) => row.forEach((v, k) => { total[i][k] += v * w; }));
   });
   return { base, total };
@@ -1777,7 +1863,33 @@ const stepAlong = (obj, dir) => stepBy([obj], dir);
  */
 const ADAM = { b1: 0.9, b2: 0.999, eps: 1e-8, lr: 1.2 };
 let adam = null;
-const adamReset = () => { adam = { m: S.pts.map(() => [0, 0, 0]), v: S.pts.map(() => [0, 0, 0]), t: 0 }; };
+const adamReset = () => {
+  adam = { m: S.pts.map(() => [0, 0, 0]), v: S.pts.map(() => [0, 0, 0]), t: 0 };
+  AL.lam = []; AL.rho = 1; AL.prev = Infinity;
+};
+
+/**
+ * The augmented Lagrangian's OUTER iteration, run every AL_EVERY inner steps —
+ * multipliers are meant to update after an approximate minimisation, not after
+ * every gradient step, or they chase the iterate instead of the constraint.
+ *
+ * rho only escalates when the multipliers alone are not closing the violation,
+ * which is the whole point of carrying them: a plain penalty has nothing to
+ * escalate BUT rho, and rho large enough to enforce a constraint is also large
+ * enough to drown out everything the palette is otherwise trying to be.
+ */
+const AL = { lam: [], rho: 1, prev: Infinity };
+const AL_EVERY = 25, AL_RHO_MAX = 4096, AL_LAM_MAX = 1e4;
+
+function alStep() {
+  const c = violations(ctxOf(S.pts).probe);
+  if (AL.lam.length !== c.length) AL.lam = c.map(() => 0);
+  const worst = c.length ? Math.max(...c) : 0;
+  AL.lam = AL.lam.map((l, i) => Math.min(AL_LAM_MAX, l + AL.rho * c[i]));
+  if (worst > 1e-6 && worst > 0.75 * AL.prev) AL.rho = Math.min(AL_RHO_MAX, AL.rho * 2);
+  AL.prev = worst;
+  return worst;
+}
 
 function adamStep() {
   const terms = activeTerms();
@@ -1804,6 +1916,7 @@ let running = false, tick = 0;
 function solve() {
   if (!running) return;
   const moved = adamStep();
+  if (tick % AL_EVERY === AL_EVERY - 1) alStep();
   // the sidebar rebuilds its whole table and re-evaluates every term, which is
   // far too much to do at solver rate; the views stay live, the numbers lag
   sync({ light: ++tick % 8 !== 0 });
@@ -2056,6 +2169,25 @@ function infeasibility(q) {
     Math.sqrt(obstaclePenalty(q, S.obs, M(), primary())),
     Math.sqrt(planePenalty(q)));
 }
+
+/**
+ * The same set, measured smoothly. infeasibility() is for deciding whether a
+ * NODE is done being projected, so a binary gamut test is fine there. A curve
+ * sample is not projected — it is a function of the nodes — so its violation
+ * has to be differentiable, which means the distance outside the gamut rather
+ * than the fact of being outside, and a sum rather than a max.
+ */
+const violation = (p, g = M(), v = primary()) => {
+  const c = Math.hypot(p[1], p[2]);
+  return Math.sqrt(gamutPenalty(p))
+    + hinge(S.lo[0] - p[0]) + hinge(p[0] - S.hi[0])
+    + hinge(S.lo[1] - c) + hinge(c - S.hi[1])
+    + (c * hueGap(p) * Math.PI) / 180
+    + (S.obs.length ? Math.sqrt(obstaclePenalty(p, S.obs, g, v)) : 0)
+    + (S.planes.length ? Math.sqrt(planePenalty(p)) : 0);
+};
+/** the metric and the observer are the same for every sample, so derive once */
+const violations = (pts) => { const g = M(), v = primary(); return pts.map((p) => violation(p, g, v)); };
 
 const clampL = ([L, a, b]) => [Math.min(S.hi[0], Math.max(S.lo[0], L)), a, b];
 
@@ -2412,14 +2544,23 @@ $('metrics').onclick = (e) => {
     // The two repulsions overlap rather than complement: 'all' already includes
     // the observer 'normal' measures, so running both only weights that one
     // observer twice against the others. At most one — neither is fine too.
-    if (e.target.checked && REPULSIONS.includes(on))
-      for (const other of REPULSIONS) if (other !== on) S.on[other] = false;
+    if (e.target.checked)
+      for (const grp of EXCLUSIVE) if (grp.includes(on))
+        for (const other of grp) if (other !== on) S.on[other] = false;
     sidebar();
   }
 };
 // no re-render on input: the table is rebuilt from S.w anyway, and rebuilding
 // under the cursor would take the field's focus away mid-number
 const REPULSIONS = ['rep', 'repcvd'];
+/**
+ * Groups where running two members at once is incoherent rather than merely
+ * redundant. The two uniformities are the second such pair: `uniformity` asks
+ * for equal neighbour steps, which is only the right question if differences
+ * compose additively, and `pairwise uniformity` exists because they do not.
+ * Weighting both means optimising for and against the same assumption.
+ */
+const EXCLUSIVE = [REPULSIONS, ['unif', 'pair']];
 const HELP_IDLE = 'hover a ? for what the term measures';
 $('termhelp').textContent = HELP_IDLE;
 $('metrics').onmouseover = (e) => {
@@ -2436,6 +2577,8 @@ $('run').onclick = () => (running ? stopSolver() : startSolver());
 $('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; sidebar(); };
 $('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1); };
 $('pinends').onchange = (e) => { S.pinEnds = e.target.checked; };
+$('cbg').oninput = (e) => { S.cbg = e.target.value; sidebar(); };
+$('cmin').oninput = (e) => { S.cmin = Math.max(1, +e.target.value || 1); sidebar(); };
 $('flip').onclick = () => {
   const pl = S.planes[S.sel?.i];
   if (!pl || !S.sel.kind.startsWith('plane')) return;
@@ -2607,6 +2750,7 @@ function mirror() {
   $('sliceop').value = S.sliceOp; $('sliceopv').textContent = S.sliceOp.toFixed(2).slice(1);
   $('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
   $('pinends').checked = S.pinEnds;
+  $('cbg').value = S.cbg; $('cmin').value = S.cmin;
   $('exportfmt').value = S.fmt; $('colorfmt').value = S.cfmt;
   $('hex').placeholder = COLORFMT[S.cfmt].hint;
   $('sevv').textContent = S.sev.toFixed(1);
