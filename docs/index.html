@@ -47,11 +47,22 @@
   #huewheel { cursor:crosshair; touch-action:none; }
   /* tools live over the viewport, where the things they make are */
   #tool { position:absolute; top:12px; right:12px; display:flex; gap:4px; }
-  #tool button, #graybtn { width:34px; height:34px; padding:0; display:grid; place-items:center;
+  #tip { position:absolute; top:12px; left:12px; display:flex; align-items:flex-start; gap:6px; }
+  #tipcard { background:#1c1c20ee; border:1px solid var(--line); border-radius:6px; padding:7px; }
+  #tip[data-open=false] #tipcard { display:none; }
+  #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
+  #tipbtns { display:flex; gap:4px; margin-top:6px; }
+  #tipbtns button { flex:1; font-size:10px; padding:2px 0; }
+  #tipbtns button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
+  #tipnote { color:var(--dim); font-size:10px; margin-top:5px; line-height:1.35; max-width:264px; }
+  #hist { position:absolute; top:12px; right:130px; display:flex; gap:4px; }
+  #hist button:disabled { opacity:.3; cursor:default; }
+  #tool button, #graybtn, #hist button, #tiptoggle { width:34px; height:34px; padding:0; display:grid; place-items:center;
     background:#26262bd9; border:1px solid var(--line); border-radius:5px; cursor:pointer;
     color:var(--fg); font-size:15px; line-height:1; }
-  #tool button:hover, #graybtn:hover { background:#32323ae6; }
-  #tool button[aria-pressed=true], #graybtn[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
+  #tool button:hover, #graybtn:hover, #hist button:not(:disabled):hover, #tiptoggle:hover { background:#32323ae6; }
+  #tool button[aria-pressed=true], #graybtn[aria-pressed=true], #tiptoggle[aria-pressed=true] {
+    background:#3d5a6c; border-color:#5f8ba6; }
   #tool svg { width:19px; height:19px; fill:none; stroke:var(--fg); stroke-width:1.5;
     stroke-linecap:round; stroke-linejoin:round; }
   #lplot { position:absolute; bottom:14px; right:274px; height:106px; }
@@ -120,6 +131,18 @@
 <div id="app">
   <main>
     <canvas id="gl"></canvas>
+    <div id="tip" data-open="true">
+      <button id="tiptoggle" aria-pressed="true" title="test image preview">▦</button>
+      <div id="tipcard">
+        <canvas id="tipcanvas" width="264" height="128"></canvas>
+        <div id="tipbtns"></div>
+        <div id="tipnote"></div>
+      </div>
+    </div>
+    <div id="hist">
+      <button id="undo" title="undo · ctrl+Z">↶</button>
+      <button id="redo" title="redo · ctrl+shift+Z">↷</button>
+    </div>
     <div class="quad" id="q1">
       <div class="sl"><i id="nL">L</i><input type="range" id="sL" min="0" max="100" step="0.5" value="55"><b id="vL">55</b></div></div>
     <div class="quad" id="q2">
@@ -184,7 +207,8 @@
 
     <section id="selpanel">
       <h2>Selection</h2>
-      <div class="row"><label class="f">hex</label><input type="text" id="hex" spellcheck="false" maxlength="7"></div>
+      <div class="row"><select id="colorfmt" style="width:88px"></select>
+        <input type="text" id="hex" spellcheck="false" style="flex:1;min-width:0"></div>
       <div class="row"><span id="selinfo" class="note"></span></div>
       <div class="row"><button id="flip" style="flex:1">flip the excluded side</button></div>
     </section>
@@ -211,6 +235,7 @@
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
         <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span></div>
       <div class="row"><label class="chk"><input type="checkbox" id="pinends">lock endpoints</label></div>
+      <div class="row"><label class="chk"><input type="checkbox" id="hard">hard constraints</label></div>
       <div class="row"><button id="steptotal" style="flex:1">step once</button>
         <button id="run" style="flex:1">run Adam</button></div>
     </section>
@@ -220,8 +245,9 @@
       <div class="row"><button id="savescene" style="flex:1">save scene</button>
         <button id="loadscene" style="flex:1">load scene</button>
         <input type="file" id="scenefile" accept=".json,application/json" hidden></div>
+      <div class="row"><label class="f">format</label><select id="exportfmt" style="flex:1"></select></div>
       <div class="row"><button id="copypy" style="flex:1">copy</button>
-        <button id="savepy" style="flex:1">save .py</button></div>
+        <button id="savepy" style="flex:1">save</button></div>
       <textarea id="export" readonly></textarea></section>
   </aside>
 </div>
@@ -235,7 +261,7 @@
 import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
-  fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh,
+  fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty,
   minSeparation, obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, internals,
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
@@ -252,7 +278,9 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const S = {
   mode: 'continuous', tool: 'edit', cvd: 'none', sev: 1, gray: false,
   shell: 0.8, sliceOp: 0.8, rad: 12, rate: 0.3, pinEnds: true,
-  bg: '#f0ead6', lock: true, planes3d: false,
+  bg: '#f0ead6', lock: true, planes3d: false, hard: false,
+  fmt: 'matplotlib', cfmt: 'hex',                // export format, selection colour format
+  tip: true, tipKind: 'sineramp',                // test-image preview
   lprof: [],                                     // target lightness profile, evenly spaced along t
   hprof: [],                                     // target hue profile, UNWRAPPED degrees
   plot: 'L',                                     // which of the two the plot is showing
@@ -1053,12 +1081,16 @@ function sidebar() {
     // whether hovering does anything, and the sidebar scrolls, which would clip
     // a positioned one. A line under the table is instant and never clipped.
     const q = help ? `<span class="q" data-help="${esc(help)}">?</span>` : '';
-    return `<tr><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}${q}</td>` +
+    // a constrained term is not weighted and not steppable — it is satisfied
+    const hard = obj && constrained(obj), off = hard ? ' disabled' : S.on[obj] ? '' : ' disabled';
+    return `<tr${hard ? ' title="enforced by projection, not weighted"' : ''}><td>`
+    + `${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}${hard ? ' disabled' : ''}>${k}</label>` : k}${q}</td>` +
     `<td class="${warn ? 'warn' : ''}">${v}</td>` +
-    (obj ? `<td class="w"><input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
-         + ` value="${S.w[obj]}"${S.on[obj] ? '' : ' disabled'} title="relative pull in the combined step"></td>`
-         + `<td class="btns"><button data-obj="${obj}" data-dir="1" title="descend">−</button>`
-         + `<button data-obj="${obj}" data-dir="-1" title="ascend">+</button></td>`
+    (obj ? `<td class="w">${hard ? '<span class="note">≤</span>'
+             : `<input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
+               + ` value="${S.w[obj]}"${off} title="relative pull in the combined step">`}</td>`
+         + `<td class="btns">${hard ? '' : `<button data-obj="${obj}" data-dir="1" title="descend">−</button>`
+         + `<button data-obj="${obj}" data-dir="-1" title="ascend">+</button>`}</td>`
          : '<td class="w"></td><td class="btns"></td>') + '</tr>';
   }).join('');
 
@@ -1066,7 +1098,7 @@ function sidebar() {
   $('selpanel').style.display = s ? '' : 'none';
   const target = s?.kind === 'pt' ? S.pts[s.i] : s?.kind?.startsWith('obs') ? S.obs[s.i]?.c : null;
   // leave the field alone while it has focus, or it fights whoever is typing
-  if (target && document.activeElement !== $('hex')) $('hex').value = toHex(target);
+  if (target && document.activeElement !== $('hex')) $('hex').value = COLORFMT[S.cfmt].to(target);
   $('hex').closest('.row').style.display = target ? '' : 'none';
   $('flip').closest('.row').style.display = s?.kind === 'plane' || s?.kind === 'planerot' ? '' : 'none';
   if (s?.kind === 'pt' && S.pts[s.i]) {
@@ -1087,8 +1119,91 @@ function sidebar() {
 
   drawMini();
   drawPlot();
-  $('export').value = mplCode();
+  $('export').value = FORMATS[S.fmt].gen();
+  drawTest();
 }
+
+// ─── test image preview ──────────────────────────────────────────────────────
+// Metrics do not see banding. A colormap can score well on every term in the
+// panel and still put a ridge where the data is flat, or lose a feature where
+// its contrast dips — both of which are obvious the moment you map something
+// through it. Everything here goes through the same view as the rest of the
+// page, so the colour-vision and grayscale settings apply to the test too.
+const tipc = $('tipcanvas'), tctx = tipc.getContext('2d');
+const rnd = (seed) => () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+
+const TESTS = {
+  sineramp: { mode: 'continuous', label: 'sineramp',
+    note: 'Kovesi\u2019s test: a constant-amplitude sine riding a linear ramp, fading out downward. '
+        + 'Where the map loses contrast the wave disappears early; where it has a false edge the flat ramp shows a band.',
+    f: (x, y) => x + 0.05 * Math.sin(x * 32 * Math.PI) * (1 - y) },
+  field: { mode: 'continuous', label: 'field',
+    note: 'A smooth scalar field. Any ring, ridge or bright seam you can see is the colormap talking, not the data.',
+    f: (x, y) => {
+      const g = (cx, cy, s) => Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * s * s));
+      return 0.95 * g(0.26, 0.62, 0.20) + 0.75 * g(0.68, 0.36, 0.26) + 0.45 * g(0.46, 0.84, 0.14);
+    } },
+  scatter: { mode: 'discrete', label: 'scatter',
+    note: 'Every class on a light and a dark ground. A swatch that vanishes against either, or that you cannot tell from its neighbour, fails here and not in the metrics.' },
+};
+
+/** the palette as bytes, through the active view — CVD and grayscale included */
+const lutOf = (n) => (S.mode === 'continuous' && S.pts.length >= 2 ? resample(curve(), n, M()) : palette())
+  .map((p) => rgb(S.gray ? [p[0], 0, 0] : p).map((c) => Math.round(255 * c)));
+
+function drawTest() {
+  if (!S.tip) return;
+  const W = tipc.width, H = tipc.height;
+  const kind = TESTS[S.tipKind]?.mode === S.mode ? S.tipKind
+             : Object.keys(TESTS).find((k) => TESTS[k].mode === S.mode);
+  $('tipbtns').innerHTML = Object.entries(TESTS).filter(([, t]) => t.mode === S.mode)
+    .map(([k, t]) => `<button data-tip="${k}" aria-pressed="${k === kind}">${t.label}</button>`).join('');
+  $('tipnote').textContent = TESTS[kind]?.note ?? '';
+  const lut = lutOf(256);
+  tctx.clearRect(0, 0, W, H);
+  if (!lut.length) return;
+  if (kind === 'scatter') return drawScatter(W, H, lut);
+
+  // normalise whatever the field returns, so a test only has to be smooth
+  const f = TESTS[kind].f, v = new Float64Array(W * H);
+  let mn = Infinity, mx = -Infinity;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = f(x / (W - 1), y / (H - 1));
+    v[y * W + x] = t; if (t < mn) mn = t; if (t > mx) mx = t;
+  }
+  const span = mx - mn || 1, img = tctx.createImageData(W, H);
+  for (let i = 0; i < W * H; i++) {
+    const c = lut[Math.round(((v[i] - mn) / span) * (lut.length - 1))];
+    img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1];
+    img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = 255;
+  }
+  tctx.putImageData(img, 0, 0);
+}
+
+/** split ground, because a categorical colour has to survive both */
+function drawScatter(W, H, lut) {
+  tctx.fillStyle = '#f2f2f2'; tctx.fillRect(0, 0, W / 2, H);
+  tctx.fillStyle = '#101014'; tctx.fillRect(W / 2, 0, W / 2, H);
+  lut.forEach((c, i) => {
+    const r = rnd(i * 7919 + 13);
+    tctx.fillStyle = `rgb(${c.join(' ')})`;
+    const cx = ((i + 0.5) / lut.length) * W, cy = H * (0.3 + 0.4 * r());
+    for (let k = 0; k < 26; k++) {
+      const x = cx + (r() - 0.5) * (W / lut.length) * 1.5, y = cy + (r() - 0.5) * H * 0.5;
+      tctx.beginPath(); tctx.arc(x, y, 2.6, 0, 7); tctx.fill();
+    }
+  });
+}
+
+$('tipbtns').onclick = (e) => {
+  const k = e.target.dataset.tip;
+  if (k) { S.tipKind = k; drawTest(); }
+};
+$('tiptoggle').onclick = () => {
+  S.tip = !S.tip;
+  $('tip').dataset.open = S.tip; $('tiptoggle').ariaPressed = S.tip;
+  drawTest();
+};
 
 // ─── export ──────────────────────────────────────────────────────────────────
 const download = (name, text, type) => {
@@ -1102,48 +1217,93 @@ const download = (name, text, type) => {
 const stem = () => ($('scenename').value.trim() || 'precept').replace(/[^\w-]+/g, '-');
 const ident = () => stem().replace(/\W/g, '_').replace(/^(?=\d)/, 'cmap_');
 
-/**
- * The colormap as matplotlib source.
- *
- * A continuous map is emitted as 256 samples spaced by ARC LENGTH, not by
- * control point — matplotlib interpolates its list evenly in t, so handing it
- * the control points directly would reintroduce exactly the non-uniformity the
- * resampling removes. At 256 the residual difference from the true curve is
- * below a quantisation step, so from_list's linear RGB blend is not a
- * approximation worth worrying about.
- *
- * toHex maps into sRGB whatever the working gamut is, because that is what
- * matplotlib will display; a wider working gamut is noted rather than silently
- * clipped.
- */
-function mplCode() {
-  const cont = S.mode === 'continuous' && S.pts.length >= 2;
-  const cols = cont ? resample(curve(), 256, M()) : palette();
-  if (!cols.length) return '# nothing to export — add some points';
+/** A continuous map is emitted as 256 samples spaced by ARC LENGTH, not as its
+ *  control points: every target below interpolates evenly in t, so handing over
+ *  the control points would reintroduce exactly the non-uniformity the
+ *  resampling exists to remove. toHex maps into sRGB whatever the working gamut
+ *  is, because that is what every one of these consumers will display. */
+const expCont = () => S.mode === 'continuous' && S.pts.length >= 2;
+const expCols = () => (expCont() ? resample(curve(), 256, M()) : palette());
+
+/** provenance, as plain lines; each format wraps them in its own comment syntax */
+function headText(cols) {
   const outside = cols.filter((p) => !inGamut(p)).length;
+  return [
+    `${stem()} — generated by precept`,
+    `${SPACES[params.space].name} · ${GAMUTS[params.gamut].name} gamut`
+      + `${S.cvd === 'none' ? '' : ` · optimised under ${S.cvd} at severity ${S.sev}`}`,
+    `${S.pts.length} control point(s)${expCont() ? ', resampled to 256 by arc length' : ''}`,
+    ...(params.gamut === 'srgb' ? [] : ['NOTE: clipped to sRGB on the way out.']),
+    ...(outside ? [`NOTE: ${outside}/${cols.length} sample(s) fell outside the `
+                   + `${GAMUTS[params.gamut].name} gamut and were mapped into it.`] : []),
+  ];
+}
+const rgb255 = (p) => toSRGB(toGamut(p, 'srgb')).map((c) => Math.round(255 * clamp01(c)));
+/** evenly spaced stops for the formats that interpolate rather than tabulate */
+const stops = (cols, n) => Array.from({ length: n }, (_, i) => cols[Math.round((i * (cols.length - 1)) / (n - 1))]);
+
+function mplCode(cols) {
   const lines = [];
   for (let i = 0; i < cols.length; i += 6)
     lines.push('    ' + cols.slice(i, i + 6).map((p) => `'${toHex(p)}'`).join(', ') + ',');
-  const head = [
-    `# ${stem()} — generated by precept`,
-    `# ${SPACES[params.space].name} · ${GAMUTS[params.gamut].name} gamut`
-      + `${S.cvd === 'none' ? '' : ` · optimised under ${S.cvd} at severity ${S.sev}`}`,
-    `# ${S.pts.length} control point(s)${cont ? ', resampled to 256 by arc length' : ''}`,
-    ...(params.gamut === 'srgb' ? [] : ['# NOTE: clipped to sRGB on the way out — matplotlib is sRGB.']),
-    ...(outside ? [`# NOTE: ${outside}/${cols.length} sample(s) were outside the ${GAMUTS[params.gamut].name}`
-                   + ' gamut and were mapped into it.'] : []),
-  ];
-  const ctor = cont ? 'LinearSegmentedColormap' : 'ListedColormap';
-  return [...head,
-    `from matplotlib import colormaps`,
-    `from matplotlib.colors import ${ctor}`,
-    '',
-    cont ? `${ident()} = LinearSegmentedColormap.from_list('${stem()}', [`
-         : `${ident()} = ListedColormap([`,
+  const cont = expCont();
+  return [...headText(cols).map((l) => `# ${l}`),
+    'from matplotlib import colormaps',
+    `from matplotlib.colors import ${cont ? 'LinearSegmentedColormap' : 'ListedColormap'}`, '',
+    cont ? `${ident()} = LinearSegmentedColormap.from_list('${stem()}', [` : `${ident()} = ListedColormap([`,
     ...lines,
     cont ? '])' : `], name='${stem()}')`,
-    `colormaps.register(${ident()})`,
-  ].join('\n');
+    `colormaps.register(${ident()})`].join('\n');
+}
+
+function cssCode(cols) {
+  const head = [`/* ${headText(cols).join('\n   ')} */`];
+  if (!expCont())
+    return [...head, ':root {', ...cols.map((p, i) => `  --${stem()}-${i}: ${toHex(p)};`), '}'].join('\n');
+  const n = 33, st = stops(cols, n);
+  return [...head, ':root {', `  --${stem()}: linear-gradient(to right,`,
+    ...st.map((p, i) => `    ${toHex(p)} ${((100 * i) / (n - 1)).toFixed(2)}%${i < n - 1 ? ',' : ''}`),
+    '  );', '}'].join('\n');
+}
+
+function csvCode(cols) {
+  return [...headText(cols).map((l) => `# ${l}`), 'i,t,hex,r,g,b,L,C,h',
+    ...cols.map((p, i) => {
+      const [r, g, b] = rgb255(p), [L, C, h] = toLCh(p);
+      const t = cols.length > 1 ? i / (cols.length - 1) : 0;
+      return [i, t.toFixed(6), toHex(p), r, g, b, L.toFixed(3), C.toFixed(3), norm360(h).toFixed(2)].join(',');
+    })].join('\n');
+}
+
+/** ParaView / VTK. Continuous maps get 33 control points and let ParaView
+ *  interpolate; a categorical set is indexedLookup, one entry per class. */
+function pvCode(cols) {
+  const cont = expCont(), pts = cont ? stops(cols, 33) : cols;
+  return ['<ColorMaps>', `  <!-- ${headText(cols).join(' | ')} -->`,
+    `  <ColorMap name="${stem()}" space="RGB"${cont ? '' : ' indexedLookup="true"'}>`,
+    ...pts.map((p, i) => {
+      const [r, g, b] = toSRGB(toGamut(p, 'srgb')).map((c) => clamp01(c).toFixed(6));
+      const x = cont ? (i / (pts.length - 1)).toFixed(6) : String(i);
+      return `    <Point x="${x}" o="1" r="${r}" g="${g}" b="${b}"/>`;
+    }),
+    '  </ColorMap>', '</ColorMaps>'].join('\n');
+}
+
+const jsonCode = (cols) => JSON.stringify({
+  name: stem(), mode: S.mode, space: params.space, gamut: params.gamut,
+  notes: headText(cols), colors: cols.map(toHex), control_points: S.pts,
+}, null, 1);
+
+const FORMATS = {
+  matplotlib: { ext: 'py', mime: 'text/x-python', gen: mplCode, empty: '# nothing to export — add some points' },
+  css: { ext: 'css', mime: 'text/css', gen: cssCode, empty: '/* nothing to export */' },
+  csv: { ext: 'csv', mime: 'text/csv', gen: csvCode, empty: '# nothing to export' },
+  paraview: { ext: 'xml', mime: 'application/xml', gen: pvCode, empty: '<!-- nothing to export -->' },
+  json: { ext: 'json', mime: 'application/json', gen: jsonCode, empty: '{}' },
+};
+for (const [k, f] of Object.entries(FORMATS)) {
+  const render = f.gen;
+  f.gen = () => { const cols = expCols(); return cols.length ? render(cols) : f.empty; };
 }
 
 /**
@@ -1207,13 +1367,43 @@ $('scenefile').onchange = async (e) => {
   try { loadScene(await f.text()); } catch (err) { alert(`could not load scene: ${err.message}`); }
   e.target.value = '';                               // so the same file reloads
 };
-$('savepy').onclick = () => download(`${ident()}.py`, mplCode() + '\n', 'text/x-python');
+$('savepy').onclick = () => {
+  const f = FORMATS[S.fmt];
+  download(`${f.ext === 'py' ? ident() : stem()}.${f.ext}`, f.gen() + '\n', f.mime);
+};
 $('copypy').onclick = async (e) => {
-  await navigator.clipboard.writeText(mplCode());
+  await navigator.clipboard.writeText(FORMATS[S.fmt].gen());
   e.target.textContent = 'copied';
   setTimeout(() => (e.target.textContent = 'copy'), 900);
 };
-$('scenename').oninput = () => ($('export').value = mplCode());
+const repaintExport = () => ($('export').value = FORMATS[S.fmt].gen());
+$('scenename').oninput = repaintExport;
+$('exportfmt').onchange = (e) => { S.fmt = e.target.value; repaintExport(); };
+
+// ─── the selection, in whichever notation you think in ───────────────────────
+// LCh and oklch() read the CHART directly and are not gamut-mapped, so they
+// round-trip exactly and will show you an out-of-gamut node as out of gamut.
+// hex and rgb necessarily map into sRGB first, because that is all they can say.
+const nums = (v, n) => { const m = v.match(/-?\d*\.?\d+/g); return m && m.length >= n ? m.map(Number) : null; };
+const COLORFMT = {
+  hex: { label: 'hex', hint: '#440154',
+    to: toHex,
+    from: (v) => (/^#?[0-9a-f]{6}$/i.test(v.trim()) ? fromHex(v.trim().replace(/^#/, '')) : null) },
+  rgb: { label: 'rgb 0–255', hint: '68, 1, 84',
+    to: (p) => rgb255(p).join(', '),
+    from: (v) => { const m = nums(v, 3); return m ? fromSRGB(m.slice(0, 3).map((x) => x / 255)) : null; } },
+  lch: { label: 'LCh chart', hint: '26.5 13.1 305',
+    to: (p) => { const [L, C, h] = toLCh(p); return `${L.toFixed(2)} ${C.toFixed(2)} ${norm360(h).toFixed(1)}`; },
+    from: (v) => { const m = nums(v, 3); return m ? fromLCh([m[0], m[1], m[2]]) : null; } },
+  oklch: { label: 'oklch()', hint: 'oklch(26.5% 0.131 305)',
+    to: (p) => { const [L, C, h] = toLCh(p); return `oklch(${L.toFixed(2)}% ${(C / 100).toFixed(4)} ${norm360(h).toFixed(1)})`; },
+    from: (v) => { const m = nums(v, 3); return m ? fromLCh([m[0], m[1] * 100, m[2]]) : null; } },
+};
+$('colorfmt').onchange = (e) => {
+  S.cfmt = e.target.value;
+  $('hex').placeholder = COLORFMT[S.cfmt].hint;
+  sync();
+};
 
 // ─── objectives and gradient stepping ────────────────────────────────────────
 // The decision variables are always the control points. In continuous mode the
@@ -1630,7 +1820,9 @@ function stopSolver() {
   $('run').textContent = 'run Adam'; $('run').style.background = '';
   sync();
 }
-const activeTerms = () => OBJ.filter((o) => S.on[o.key] && S.w[o.key] > 0 && (!o.mode || o.mode === S.mode));
+const constrained = (key) => S.hard && CONSTRAINTS.includes(key);
+const activeTerms = () => OBJ.filter((o) =>
+  S.on[o.key] && S.w[o.key] > 0 && (!o.mode || o.mode === S.mode) && !constrained(o.key));
 
 // ─── lightness plot: what the ramp does, and what you want it to do ─────────
 const lcanvas = $('lcanvas'), lctx = lcanvas.getContext('2d');
@@ -1937,7 +2129,99 @@ function select(sel) {
  * bulge outside — the gamut solid is not convex — which is why the gamut
  * penalty term still has work to do on the curve samples.
  */
-const constrain = () => { S.pts = S.pts.map((p) => toGamut(p)); };
+const constrain = () => { S.pts = S.pts.map(feasify); };
+
+// ─── hard constraints ────────────────────────────────────────────────────────
+// The six terms that describe a FEASIBLE SET rather than a preference. With
+// `hard` off they are penalties and the optimiser trades them against the rest;
+// with it on they are enforced by projection and drop out of the objective,
+// because a penalty pulling against an exact projection only wastes gradient.
+const CONSTRAINTS = ['gam', 'lb', 'cb', 'hb', 'obs', 'pl'];
+
+/** how far outside the feasible set, in chart units; 0 means feasible */
+function infeasibility(q) {
+  const c = Math.hypot(q[1], q[2]);
+  return Math.max(
+    inGamut(q) ? 0 : 1,
+    hinge(S.lo[0] - q[0]), hinge(q[0] - S.hi[0]),
+    hinge(S.lo[1] - c), hinge(c - S.hi[1]),
+    (c * hueGap(q) * Math.PI) / 180,
+    Math.sqrt(obstaclePenalty(q, S.obs, M(), primary())),
+    Math.sqrt(planePenalty(q)));
+}
+
+const clampL = ([L, a, b]) => [Math.min(S.hi[0], Math.max(S.lo[0], L)), a, b];
+
+const clampC = ([L, a, b]) => {
+  const c = Math.hypot(a, b), t = Math.min(S.hi[1], Math.max(S.lo[1], c));
+  if (t === c) return [L, a, b];
+  // at the neutral axis there is no hue to preserve, so leave along the middle
+  // of the allowed arc — the one direction that cannot then violate the hue arc
+  if (c < 1e-9) return fromLCh([L, t, S.hue[0] + norm360(S.hue[1] - S.hue[0]) / 2]);
+  return [L, (a * t) / c, (b * t) / c];
+};
+
+const clampH = (q) => {
+  const c = Math.hypot(q[1], q[2]);
+  if (c < 1 || hueGap(q) === 0) return q;            // hue is not a real quantity near the axis
+  const h = hueOf(q);
+  return fromLCh([q[0], c, angGap(h, S.hue[0]) <= angGap(h, S.hue[1]) ? S.hue[0] : S.hue[1]]);
+};
+
+/** planes live in SPACE coords and n is unit, so this is the exact projection */
+const clampPlanes = (q) => {
+  if (!S.planes.length) return q;
+  let c = toSpace(q);
+  for (const pl of S.planes) {
+    const v = dot3(pl.n, c) - pl.d;
+    if (v > 0) c = c.map((x, j) => x - v * pl.n[j]);
+  }
+  return fromSpace(c);
+};
+
+/**
+ * Out of every keep-out ball, along the ray from its centre. The ball is round
+ * in PERCEIVED distance under the active metric and colour-vision view, which
+ * is not a sphere in the chart, so the exit point is found by bisection rather
+ * than by adding a radius. obstaclePenalty is (r - d)² when inside and 0 when
+ * out, which is all the test this needs.
+ */
+function clampObs(q) {
+  const g = M(), v = primary();
+  for (const o of S.obs) {
+    const inside = (x) => obstaclePenalty(x, [o], g, v) > 0;
+    if (!inside(q)) continue;
+    let u = [0, 1, 2].map((k) => q[k] - o.c[k]);
+    let n = Math.hypot(...u);
+    if (n < 1e-9) { u = [0, 1, 0]; n = 1; }          // dead centre: any direction will do
+    u = u.map((x) => x / n);
+    const at = (t) => o.c.map((cc, k) => cc + t * u[k]);
+    let hi = Math.max(1e-3, unperceive(o.r));
+    for (let k = 0; k < 40 && inside(at(hi)); k++) hi *= 1.6;
+    let lo = 0;
+    for (let k = 0; k < 30; k++) { const t = (lo + hi) / 2; inside(at(t)) ? (lo = t) : (hi = t); }
+    q = at(hi);
+  }
+  return q;
+}
+
+/**
+ * Nearest feasible node. The sets are not all convex — the gamut has the
+ * blue-cyan concavity and a keep-out ball's complement never is — so this is
+ * alternating projection rather than anything with a convergence proof: it
+ * finds A feasible point near the input, which is what a projected gradient
+ * step needs, not the metrically nearest one.
+ *
+ * With `hard` off the gamut alone is projected, which is what this did before
+ * the other five existed, and the rest stay penalties.
+ */
+function feasify(p) {
+  let q = toGamut(p);
+  if (!S.hard) return q;
+  for (let it = 0; it < 12 && infeasibility(q) > 1e-4; it++)
+    q = toGamut(clampObs(clampPlanes(clampH(clampC(clampL(q))))));
+  return q;
+}
 /** hand edits make the accumulated moments meaningless */
 const disturb = () => { if (adam) adam = null; };
 
@@ -1949,7 +2233,46 @@ function sync({ colors = false, light = false } = {}) {
   paintShell();
   buildTube(); buildPoints(); buildObstacles(); buildPlanes();
   if (!light) sidebar();
+  noteEdit();
 }
+
+// ─── undo / redo ─────────────────────────────────────────────────────────────
+const HIST = { past: [], future: [], last: null, timer: 0, depth: 60 };
+
+/**
+ * Debounced off sync() rather than called at each edit site. A drag syncs on
+ * every pointermove and the solver syncs every frame, so committing per sync
+ * would bury one real edit under hundreds of intermediate ones. Waiting for the
+ * stream to stop instead collapses a drag into a single entry and a whole Adam
+ * run into a single entry, which is what you want to step back through — and no
+ * edit path has to remember to call anything.
+ */
+function commit() {
+  const now = sceneJSON();
+  if (now === HIST.last) return;
+  if (HIST.last !== null && HIST.past.push(HIST.last) > HIST.depth) HIST.past.shift();
+  HIST.last = now;
+  HIST.future.length = 0;
+  paintHist();
+}
+const noteEdit = () => { clearTimeout(HIST.timer); HIST.timer = setTimeout(commit, 400); };
+
+function travel(from, to) {
+  clearTimeout(HIST.timer);
+  if (!from.length) return;
+  to.push(HIST.last);
+  HIST.last = from.pop();               // set BEFORE applying: applyScene syncs,
+  applyScene(JSON.parse(HIST.last));    // and the debounced commit must see no change
+  paintHist();
+}
+const undo = () => travel(HIST.past, HIST.future);
+const redo = () => travel(HIST.future, HIST.past);
+const paintHist = () => {
+  $('undo').disabled = !HIST.past.length;
+  $('redo').disabled = !HIST.future.length;
+};
+$('undo').onclick = undo;
+$('redo').onclick = redo;
 
 // ─── picking: one path for all four panels ───────────────────────────────────
 const ray = new T.Raycaster();
@@ -2102,7 +2425,9 @@ canvas.addEventListener('pointermove', (e) => {
 canvas.addEventListener('pointerup', () => { drag = null; });
 
 addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'TEXTAREA') return;
+  if (/^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName)) return;   // the field's own undo wins
+  const z = (e.ctrlKey || e.metaKey) && e.key.toLowerCase();
+  if (z === 'z' || z === 'y') { e.preventDefault(); return z === 'y' || e.shiftKey ? redo() : undo(); }
   if (e.key === 'r' && hovered?.axis !== undefined) { resetView(hovered.cam); return; }
   if (!S.sel) return;
   if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -2155,9 +2480,9 @@ $('preset').onchange = (e) => {
   sync();
 };
 $('hex').oninput = (e) => {
-  const v = e.target.value.trim().replace(/^#/, '');
-  if (!/^[0-9a-f]{6}$/i.test(v) || !S.sel) return;
-  const p = fromHex(v);
+  if (!S.sel) return;
+  const p = COLORFMT[S.cfmt].from(e.target.value);
+  if (!p || !p.every(Number.isFinite)) return;     // still mid-typing, or not a colour
   if (S.sel.kind === 'pt') S.pts[S.sel.i] = p;
   else if (S.sel.kind.startsWith('obs')) S.obs[S.sel.i].c = p;
   else return;                                     // a plane has no colour to set
@@ -2196,6 +2521,7 @@ $('run').onclick = () => (running ? stopSolver() : startSolver());
 $('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; sidebar(); };
 $('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1); };
 $('pinends').onchange = (e) => { S.pinEnds = e.target.checked; };
+$('hard').onchange = (e) => { S.hard = e.target.checked; adamReset(); sync(); };
 $('flip').onclick = () => {
   const pl = S.planes[S.sel?.i];
   if (!pl || !S.sel.kind.startsWith('plane')) return;
@@ -2355,7 +2681,10 @@ function mirror() {
   $('lock').checked = S.lock; $('planes3d').checked = S.planes3d; setPlanes3d();
   $('sliceop').value = S.sliceOp; $('sliceopv').textContent = S.sliceOp.toFixed(2).slice(1);
   $('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
-  $('pinends').checked = S.pinEnds;
+  $('pinends').checked = S.pinEnds; $('hard').checked = S.hard;
+  $('exportfmt').value = S.fmt; $('colorfmt').value = S.cfmt;
+  $('hex').placeholder = COLORFMT[S.cfmt].hint;
+  $('tip').dataset.open = S.tip; $('tiptoggle').ariaPressed = S.tip;
   $('sevv').textContent = S.sev.toFixed(1);
   $('shellv').textContent = S.shell.toFixed(2).slice(1);
   $('spacesel').value = params.space; $('gamutsel').value = params.gamut;
@@ -2369,6 +2698,9 @@ $('spacesel').innerHTML = Object.entries(SPACES)
   .map(([k, sp]) => `<option value="${k}"${k === params.space ? ' selected' : ''}>${sp.name}</option>`).join('');
 $('gamutsel').innerHTML = Object.entries(GAMUTS)
   .map(([k, g]) => `<option value="${k}"${k === params.gamut ? ' selected' : ''}>${g.name}</option>`).join('');
+$('exportfmt').innerHTML = Object.keys(FORMATS).map((k) => `<option value="${k}">${k}</option>`).join('');
+$('colorfmt').innerHTML = Object.entries(COLORFMT)
+  .map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('');
 $('preset').innerHTML = '<option value="">load…</option>'
   + `<optgroup label="continuous">${Object.entries(PRESETS).filter(([, p]) => p.mode === 'continuous')
       .map(([k]) => `<option value="${k}">${k}</option>`).join('')}</optgroup>`
@@ -2378,7 +2710,7 @@ buildShell();
 shell.material.uniforms.uOpacity.value = S.shell; shell.visible = S.shell > 0;
 select(S.sel);
 
-lprofLine(); hprofFit(); mirror();
+lprofLine(); hprofFit(); mirror(); commit();
 new ResizeObserver(layout).observe(main);   // catches sidebar and devtools resizes too
 layout();
 applyBg();
