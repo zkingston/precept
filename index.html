@@ -199,6 +199,12 @@
     #toolnote { display:none; }
     #lplot { position:static; height:auto; flex-direction:column; gap:8px; }
     #bar { top:52px; right:10px; min-height:80px; }
+    /* a 125px cut panel cannot spare 30px for a slider, and there is no wheel
+       to scroll one with. The axis letter and its value stay as a label; the
+       cuts move by touching a node, which is what lock-to-node is for. */
+    .quad .sl { top:5px; bottom:auto; right:6px; flex-direction:row; gap:4px;
+                pointer-events:none; font-size:10px; }
+    .quad .sl input { display:none; }
     /* flex:none, or the desktop flex-basis:0 keeps overriding the height */
     .pplot { flex:none; height:76px; }
 
