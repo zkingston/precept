@@ -332,7 +332,9 @@
                style="width:52px" title="minimum contrast ratio the palette should reach">
         <span class="note" style="flex:1">:1 floor</span>
         <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
-      <div class="row"><label class="chk"><input type="checkbox" id="pinends">lock endpoints</label></div>
+      <div class="row"><label class="chk"><input type="checkbox" id="pinends">lock endpoints</label>
+        <label class="chk"><input type="checkbox" id="restart">random restarts</label></div>
+      <div class="note" id="restartinfo"></div>
       <div class="row"><label class="f">solve</label><button id="steptotal" style="flex:1">step once</button>
         <button id="run" style="flex:1">run Adam</button></div>
     </section>
@@ -419,6 +421,7 @@ const S = {
   shell: 0.8, sliceOp: 0.8, rad: 12, rate: 0.3, pinEnds: true,
   bg: '#f0ead6', lock: true, planes3d: false,
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection colour format
+  restart: false,                                // kick the solver out of stalls
   cbg: '#ffffff', cmin: 3,                       // contrast: against what, and how much
   tipKind: 'sineramp',                           // which test image is showing
   lprof: [],                                     // target lightness profile, evenly spaced along t
@@ -1320,6 +1323,9 @@ function sidebar() {
 
   paintPlotButtons(); drawPlots(); drawWheel();
   drawTest();
+  $('restartinfo').textContent = !S.restart ? ''
+    : RESTART.n ? `${RESTART.n} restart${RESTART.n > 1 ? 's' : ''} · best ${RESTART.bestScore.toFixed(3)}`
+    : 'jolts the free points when Adam stalls, and keeps the best attempt';
 }
 
 // ─── test image preview ──────────────────────────────────────────────────────
@@ -1800,6 +1806,8 @@ const HELP = {
 };
 
 const hinge = (v) => (v > 0 ? v : 0);
+/** gated on the mode too, so a hidden checkbox cannot quietly hold points still */
+const pinnedAt = (i, n) => S.pinEnds && S.mode === 'continuous' && n > 1 && (i === 0 || i === n - 1);
 /** WCAG 2 relative luminance and contrast ratio, on the sRGB the viewer gets */
 const wcagY = (p) => {
   const [r, g, b] = toLinear(toGamut(p, 'srgb'), 'srgb').map(clamp01);
@@ -1995,7 +2003,7 @@ function gradientOf(terms) {
   const base = S.pts.map((p) => [...p]);
   const h = 0.25;
   // gated on the mode too, so a hidden checkbox cannot quietly hold points still
-  const pinned = (i) => S.pinEnds && S.mode === 'continuous' && base.length > 1 && (i === 0 || i === base.length - 1);
+  const pinned = (i) => pinnedAt(i, base.length);
   const per = terms.map(() => base.map(() => [0, 0, 0]));
   for (let i = 0; i < base.length; i++) {
     if (pinned(i)) continue;
@@ -2092,11 +2100,95 @@ function adamStep() {
   return moved;
 }
 
+/**
+ * Random restarts. Adam is a local method and this problem is not convex — the
+ * gamut is concave in places, a keep-out ball's complement never is, and the
+ * hue arc wraps — so where it lands is decided by where it started. On a stall
+ * this jolts the free control points and runs again, keeping the best result
+ * seen rather than the last one.
+ *
+ * "Best" needs a scalar and there is no obvious one: gradientOf descends a sum
+ * of UNIT-normalised term gradients, and the normaliser moves with x, so no
+ * fixed function is being minimised. The comparator here is each term over the
+ * largest value that term has taken this run, weighted — bounded, comparable
+ * across terms spanning four orders of magnitude, and zero for a term that has
+ * never been anything but zero.
+ */
+const RESTART = { n: 0, best: null, bestScore: 0, scale: {}, sd: 5, flat: 0, prev: Infinity,
+                  // measured against an easy and a multi-modal instance: 4 restarts too
+                  // eagerly and gives up budget, 12 barely fires. 8 x AL_EVERY = 200
+                  // iterations of no improvement before it calls a run converged.
+                  patience: 8, gain: 5e-4 };
+
+/**
+ * Score point sets against each other on a shared running scale. Comparing on
+ * a scale that has grown since the incumbent was measured would let a worse
+ * result win, so every candidate in a comparison is measured together.
+ */
+function scores(sets) {
+  const terms = activeTerms().filter((o) => o.key !== 'feas');   // handled lexicographically
+  const vals = sets.map((p) => { const cx = ctxOf(p); return terms.map((o) => o.f(cx)); });
+  terms.forEach((o, i) => {
+    RESTART.scale[o.key] = Math.max(RESTART.scale[o.key] ?? 0, ...vals.map((v) => v[i]));
+  });
+  return vals.map((v) => terms.reduce((s, o, i) => {
+    const k = RESTART.scale[o.key];
+    return s + (k > 0 ? (S.w[o.key] * v[i]) / k : 0);
+  }, 0));
+}
+
+/** worst violation anywhere on the curve a set of points generates */
+const worstViol = (pts) => {
+  const cv = curveOf(pts);
+  return cv.length ? Math.max(0, ...violations(cv)) : 0;
+};
+
+/**
+ * Feasibility first, then the objective. Scoring the constraint as one more
+ * weighted term let a restart win by trading it away: the run that "improved"
+ * ended with the curve 0.07 outside the feasible set, which is not a better
+ * palette, it is not a palette. Only when two candidates are equally feasible
+ * does the rest of the objective decide.
+ */
+function better(a, b) {
+  const [va, vb] = [worstViol(a), worstViol(b)];
+  if (Math.abs(va - vb) > 1e-4) return va < vb;
+  const [sa, sb] = scores([a, b]);
+  return sa < sb;
+}
+
+/** chart units, so the jolt means the same thing whichever space is on screen */
+function jolt() {
+  const n = S.pts.length;
+  S.pts = S.pts.map((p, i) => (pinnedAt(i, n) ? p
+    : p.map((v) => v + RESTART.sd * (Math.random() * 2 - 1))));
+}
+
+/**
+ * Convergence is the score going flat, NOT the step going small: Adam holds a
+ * roughly constant step until the gradient actually vanishes, so a step-size
+ * stall test never fires here. Runs on the AL cadence, so `patience` rounds is
+ * patience x AL_EVERY iterations of no improvement.
+ */
+function restartTick() {
+  // The incumbent is recorded on EVERY check, not only when a restart fires.
+  // Sampling it at restarts alone means a better state passed through in
+  // between is never kept, and the run can end worse than plain Adam would.
+  const here = S.pts.map((p) => [...p]);
+  const [score] = scores([here]);
+  if (!RESTART.best || better(here, RESTART.best)) RESTART.best = here;
+  RESTART.bestScore = scores([RESTART.best])[0];
+  if (score < RESTART.prev - RESTART.gain) { RESTART.prev = score; RESTART.flat = 0; return; }
+  if (++RESTART.flat < RESTART.patience) return;
+  RESTART.flat = 0; RESTART.prev = Infinity; RESTART.n++;
+  jolt(); adamReset();
+}
+
 let running = false, tick = 0;
 function solve() {
   if (!running) return;
   const moved = adamStep();
-  if (tick % AL_EVERY === AL_EVERY - 1) alStep();
+  if (tick % AL_EVERY === AL_EVERY - 1) { alStep(); if (S.restart) restartTick(); }
   // the sidebar rebuilds its whole table and re-evaluates every term, which is
   // far too much to do at solver rate; the views stay live, the numbers lag
   sync({ light: ++tick % 8 !== 0 });
@@ -2106,11 +2198,14 @@ function solve() {
 function startSolver() {
   if (running) return;
   running = true; tick = 0; adamReset();
+  Object.assign(RESTART, { n: 0, best: null, bestScore: 0, scale: {}, flat: 0, prev: Infinity });
   $('run').textContent = 'stop'; $('run').style.background = '#6c3030';
   requestAnimationFrame(solve);
 }
 function stopSolver() {
   running = false;
+  // the last jolt is not the answer: keep whichever attempt scored best
+  if (S.restart && RESTART.best && better(RESTART.best, S.pts)) S.pts = RESTART.best.map((p) => [...p]);
   $('run').textContent = 'run Adam'; $('run').style.background = '';
   sync();
 }
@@ -2818,6 +2913,7 @@ $('run').onclick = () => (running ? stopSolver() : startSolver());
 $('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; sidebar(); };
 $('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1); };
 $('pinends').onchange = (e) => { S.pinEnds = e.target.checked; };
+$('restart').onchange = (e) => { S.restart = e.target.checked; sidebar(); };
 $('cbg').oninput = (e) => { S.cbg = e.target.value; sidebar(); };
 $('cfloor').oninput = (e) => { S.cmin = Math.max(1, +e.target.value || 1); sidebar(); };
 $('flip').onclick = () => {
@@ -2998,7 +3094,7 @@ function mirror() {
   $('lock').checked = S.lock; $('planes3d').checked = S.planes3d; setPlanes3d();
   $('sliceop').value = S.sliceOp; $('sliceopv').textContent = S.sliceOp.toFixed(2).slice(1);
   $('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
-  $('pinends').checked = S.pinEnds;
+  $('pinends').checked = S.pinEnds; $('restart').checked = S.restart;
   $('cbg').value = S.cbg; $('cfloor').value = S.cmin;
   $('exportfmt').value = S.fmt; $('colorfmt').value = S.cfmt;
   $('hex').placeholder = COLORFMT[S.cfmt].hint;
@@ -3051,6 +3147,7 @@ const HINTS = {
   huewheel: 'The hue arc the palette may use. Drag an edge; double-click for the full circle.',
   cbg: 'The ground swatches are judged against, and the ratio to reach. WCAG asks 3:1 for graphics, 4.5:1 for text.',
   rate: 'Step size, for the per-term buttons and for Adam.',
+  restart: 'On a stall, jolt the free control points and run again, keeping the best attempt. Adam is local and this problem is not convex, so where it lands depends on where it started.',
   pinends: 'Hold the first and last control points still.',
   steptotal: 'One combined step over every enabled term, or run Adam until you stop it.',
   scenename: 'Names the saved file and the identifier in the exported code.',
