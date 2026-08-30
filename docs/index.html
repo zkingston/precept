@@ -371,12 +371,7 @@
 
   <h4>Getting around</h4>
   <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view it
-     takes the color you clicked on.<br>
-     Drag to move, right-click (or press and hold on a touchscreen) to delete.<br>
-     The tools switch between nodes, keep-out spheres and halfplanes.<br>
-     Run Adam to optimize against the enabled terms.<br>
-     Export as matplotlib, CSS, CSV, ParaView or JSON.<br>
-     Hover any <span class="q">?</span> for what a control or a term means.</p>
+     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) to delete. The tools switch between nodes, keep-out spheres and halfplanes. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON. Hover any <span class="q">?</span> for what a control or a term means.</p>
 
   <h4>Motivation (personal)</h4>
   <p>Color palettes have been on my mind for quite some time as someone who creates plots, charts,
@@ -413,8 +408,7 @@
   </ul>
 
   <h4>Credit</h4>
-  <p>Built by Zachary Kingston.<br>
-     <a href="https://zkingston.com" target="_blank" rel="noopener">zkingston.com</a> /
+  <p>Built by Zachary Kingston. <a href="https://zkingston.com" target="_blank" rel="noopener">zkingston.com</a> /
      <a href="mailto:zkingston@purdue.edu">zkingston@purdue.edu</a></p>
 </dialog>
 
@@ -1809,12 +1803,20 @@ const hprofSweep = () => {
   const turn = totalTurn(S.hprof), a = S.hprof[0];
   S.hprof = Array.from({ length: LK }, (_, i) => norm360(a + (turn * i) / (LK - 1)));
 };
-/** two plateaus meeting in the middle — what a diverging map's hue actually does */
-const hprofSplit = () => {
+/**
+ * Two plateaus meeting in the middle, which is what a diverging map's hue
+ * actually does. `long` takes the other arc between them: the short turn less
+ * a full circle. Only the midpoint moves, but that is enough, because the
+ * polyline joins consecutive knots the short way round, so a midpoint on the
+ * far arc drags both halves of the crossing with it.
+ */
+const hprofSplit = (long = false) => {
   hprofFit();
   const a = S.hprof[0], b = S.hprof[LK - 1], mid = (LK - 1) / 2;
+  const turn = angDiff(b, a);
+  const d = turn - (long ? 360 * Math.sign(turn || 1) : 0);   // ends level: go all the way round
   S.hprof = Array.from({ length: LK }, (_, i) =>
-    norm360(i < mid ? a : i > mid ? b : a + angDiff(b, a) / 2));
+    norm360(i < mid ? a : i > mid ? b : a + d / 2));
 };
 
 /** one line per term, shown under the table while its ? is hovered */
@@ -2260,7 +2262,7 @@ const PLOTS = {
        clamp: norm360,                                       // hue does not, so it wraps
        fit: hprofFit, p1: hprofSweep, p2: hprofSplit, labels: ['sweep', 'split'],
        tips: ['a steady turn from the first hue to the last · double-click to turn the other way',
-              'two hue plateaus meeting in the middle, for a diverging ramp'] },
+              'two hue plateaus meeting in the middle, for a diverging ramp · double-click to meet the long way round'] },
 };
 for (const [id, p] of Object.entries(PLOTS)) {
   p.root = document.querySelector(`.pplot[data-plot=${id}]`);
@@ -2402,7 +2404,9 @@ $('lplot').ondblclick = (e) => {
   if (!p || (act !== 'p1' && act !== 'p2')) return;
   const prof = p.prof();
   if (p.hue) {
-    S.hprof = prof.slice().reverse();      // a hue sweep flips by running backwards
+    // a sweep flips by running backwards; a split flips by taking the other arc
+    if (act === 'p2') hprofSplit(true);
+    else S.hprof = prof.slice().reverse();
   } else {
     const [lo, hi] = [Math.min(...prof), Math.max(...prof)];
     const symmetric = prof.every((v, i) => Math.abs(v - prof[LK - 1 - i]) < 1e-9);
