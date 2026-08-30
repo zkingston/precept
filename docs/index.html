@@ -45,14 +45,14 @@
   label.chk { display:inline-flex; align-items:center; gap:7px; cursor:pointer; vertical-align:middle; }
   #huewheel { cursor:crosshair; touch-action:none; }
   /* tools live over the viewport, where the things they make are */
-  #tool { position:absolute; top:12px; right:12px; display:flex; gap:4px; }
-  #tip { position:absolute; right:14px; top:88px; padding:7px;
+  #tool { position:absolute; top:190px; right:12px; display:flex; gap:4px; }
+  #tip { position:absolute; right:14px; top:12px; padding:7px;
          background:#1c1c20ee; border:1px solid var(--line); border-radius:6px; }
   #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
   #tipbtns { display:flex; gap:4px; margin-top:6px; }
   #tipbtns button { flex:1; font-size:10px; padding:2px 0; }
   #tipbtns button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
-  #hist { position:absolute; top:12px; right:130px; display:flex; gap:4px; }
+  #hist { position:absolute; top:190px; right:130px; display:flex; gap:4px; }
   #hist button:disabled { opacity:.3; cursor:default; }
   #tool button, #graybtn, #hist button { width:34px; height:34px; padding:0; display:grid; place-items:center;
     background:#26262bd9; border:1px solid var(--line); border-radius:5px; cursor:pointer;
@@ -71,7 +71,7 @@
   .phead button { padding:1px 7px; font:10px ui-monospace,monospace; background:#26262bcc;
     color:var(--fg); border:1px solid var(--line); border-radius:3px; cursor:pointer; }
   .pcanvas { flex:1; min-height:0; width:100%; display:block; cursor:ns-resize; touch-action:none; }
-  #toolnote { position:absolute; top:52px; right:12px; max-width:340px; text-align:right;
+  #toolnote { position:absolute; top:230px; right:12px; max-width:340px; text-align:right;
     font:11px/1.4 ui-sans-serif,system-ui,sans-serif; color:var(--hud); pointer-events:none; }
   #hex { flex:1; min-width:0; font:12px ui-monospace,monospace; text-transform:lowercase; }
 
