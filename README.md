@@ -13,12 +13,32 @@ the small steps that make them up.
 
 ```
 npm install
-node serve.js      # http://localhost:8080
-node color-space.ts   # self-check
+npm run serve     # http://localhost:8080
+npm run check     # self-check
 ```
 
-No build step. The dev server strips TypeScript types on the way out, so the
-browser imports `color-space.ts` directly and edits are live.
+No build step for development. The dev server strips TypeScript types on the way
+out, so the browser imports `color-space.ts` directly and edits are live.
+
+## Deploy
+
+```
+npm run build     # writes docs/
+```
+
+GitHub Pages is a plain static host, which the dev setup is not: browsers cannot
+parse TypeScript, and the import map points at absolute `/node_modules` paths
+that would resolve to the *domain* root on a project site. `build.js` undoes
+both — types stripped once into `docs/color-space.js`, three and its addons
+vendored into `docs/vendor/`, and every specifier rewritten relative.
+
+It vendors by following imports rather than by naming files, because
+`three.module.js` is a shim that re-exports `three.core.js`. Naming the two
+files the page imports leaves a 404 that only appears once it is served
+statically.
+
+`docs/` is a build artifact but is committed, since Pages serves from the repo.
+Rebuild before pushing, then point Pages at `/docs` on `main`.
 
 ## The space
 

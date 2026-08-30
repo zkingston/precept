@@ -2,5 +2,10 @@
   "dependencies": {
     "three": "^0.185.1"
   },
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "serve": "node serve.js",
+    "check": "node color-space.ts"
+  }
 }

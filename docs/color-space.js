@@ -40,8 +40,8 @@
  * spread hue" is expressed), `arcLength` is the trajectory cost.
  */
 
-export type Vec3 = [number, number, number];
-export type Mat3 = [Vec3, Vec3, Vec3];
+                                            
+                                      
 
 /** Tunable knobs. Perception is not ideal on paper; expose the dials. */
 export const params = {
@@ -60,7 +60,7 @@ export const params = {
 };
 
 /** The six faces of the unit RGB cube, as (axis u, axis v, fixed axis, value). */
-export const CUBE_FACES: [number, number, number, number][] =
+export const CUBE_FACES                                     =
   [[0, 1, 2, 0], [0, 1, 2, 1], [1, 2, 0, 0], [1, 2, 0, 1], [2, 0, 1, 0], [2, 0, 1, 1]];
 
 // ─── f: diminishing returns ──────────────────────────────────────────────────
@@ -73,17 +73,17 @@ export const CUBE_FACES: [number, number, number, number][] =
  * perceived difference share one unit: below the knee differences add, above
  * it they saturate. b only set the paper's arbitrary response scale.
  */
-export const perceive = (s: number) => params.s0 * Math.log1p(s / params.s0);
+export const perceive = (s        ) => params.s0 * Math.log1p(s / params.s0);
 
 /** Inverse of `perceive`: perceived difference → arc length to travel. */
-export const unperceive = (d: number) => params.s0 * Math.expm1(d / params.s0);
+export const unperceive = (d        ) => params.s0 * Math.expm1(d / params.s0);
 
 // ─── linear algebra ──────────────────────────────────────────────────────────
 
-type M3 = number[][];
-const apply = (m: M3, v: Vec3): Vec3 => m.map((r) => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]) as Vec3;
-const mm = (a: M3, b: M3): M3 => a.map((r) => [0, 1, 2].map((j) => r[0] * b[0][j] + r[1] * b[1][j] + r[2] * b[2][j]));
-function inv3(m: M3): M3 {
+                     
+const apply = (m    , v      )       => m.map((r) => r[0] * v[0] + r[1] * v[1] + r[2] * v[2])        ;
+const mm = (a    , b    )     => a.map((r) => [0, 1, 2].map((j) => r[0] * b[0][j] + r[1] * b[1][j] + r[2] * b[2][j]));
+function inv3(m    )     {
   const [[a, b, c], [d, e, f], [g, h, i]] = m;
   const [A, B, C] = [e * i - f * h, f * g - d * i, d * h - e * g];
   const det = a * A + b * B + c * C;
@@ -95,21 +95,21 @@ function inv3(m: M3): M3 {
 
 // Ottosson's Oklab, kept as the two matrices it is actually made of rather than
 // the sRGB-collapsed form, so any set of primaries can feed it.
-const LMS_XYZ: M3 = [[0.8189330101, 0.3618667424, -0.1288597137],
+const LMS_XYZ     = [[0.8189330101, 0.3618667424, -0.1288597137],
                      [0.0329845436, 0.9293118715, 0.0361456387],
                      [0.0482003018, 0.2643662691, 0.633851707]];
-const LAB_LMS: M3 = [[0.2104542553, 0.793617785, -0.0040720468],
+const LAB_LMS     = [[0.2104542553, 0.793617785, -0.0040720468],
                      [1.9779984951, -2.428592205, 0.4505937099],
                      [0.0259040371, 0.7827717662, -0.808675766]];
 const XYZ_LMS = inv3(LMS_XYZ), LMS_LAB = inv3(LAB_LMS);
 
 /** XYZ (D65, Y=1 for white) → chart */
-export const fromXYZ = (xyz: Vec3): Vec3 =>
-  apply(LAB_LMS, apply(LMS_XYZ, xyz).map(Math.cbrt) as Vec3).map((v) => v * 100) as Vec3;
+export const fromXYZ = (xyz      )       =>
+  apply(LAB_LMS, apply(LMS_XYZ, xyz).map(Math.cbrt)        ).map((v) => v * 100)        ;
 
 /** chart → XYZ (D65) */
-export const toXYZ = (p: Vec3): Vec3 =>
-  apply(XYZ_LMS, apply(LMS_LAB, p.map((v) => v / 100) as Vec3).map((v) => v ** 3) as Vec3);
+export const toXYZ = (p      )       =>
+  apply(XYZ_LMS, apply(LMS_LAB, p.map((v) => v / 100)        ).map((v) => v ** 3)        );
 
 // ─── gamuts ──────────────────────────────────────────────────────────────────
 
@@ -127,9 +127,9 @@ export const toXYZ = (p: Vec3): Vec3 =>
  * ProPhoto and ACEScg AP1, both of which use *imaginary* primaries outside the
  * locus so the encodable set can contain every real colour.
  */
-export type Gamut = { name: string; p: [number, number][]; w: [number, number] };
+                                                                                 
 
-export const GAMUTS: Record<string, Gamut> = {
+export const GAMUTS                        = {
   srgb: { name: 'sRGB / Rec.709', p: [[0.64, 0.33], [0.3, 0.6], [0.15, 0.06]], w: [0.3127, 0.329] },
   'display-p3': { name: 'Display P3', p: [[0.68, 0.32], [0.265, 0.69], [0.15, 0.06]], w: [0.3127, 0.329] },
   'a98-rgb': { name: 'Adobe RGB 1998', p: [[0.64, 0.33], [0.21, 0.71], [0.15, 0.06]], w: [0.3127, 0.329] },
@@ -139,8 +139,8 @@ export const GAMUTS: Record<string, Gamut> = {
   ntsc1953: { name: 'NTSC 1953', p: [[0.67, 0.33], [0.21, 0.71], [0.14, 0.08]], w: [0.31, 0.316] },
 };
 
-const XYZ_OF = ([x, y]: [number, number]): Vec3 => [x / y, 1, (1 - x - y) / y];
-const BRADFORD: M3 = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]];
+const XYZ_OF = ([x, y]                  )       => [x / y, 1, (1 - x - y) / y];
+const BRADFORD     = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]];
 
 // Adapt to the white the CHART itself considers neutral, recovered by asking it,
 // rather than to a hand-typed D65. Oklab was fit to a particular D65 and a
@@ -150,54 +150,54 @@ const BRADFORD: M3 = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0
 const CHART_WHITE = toXYZ([100, 0, 0]);
 
 /** von Kries in Bradford cone space. ProPhoto is D50, ACEScg ~D60, NTSC is C. */
-function adapt(w: [number, number]): M3 {
+function adapt(w                  )     {
   const [s, d] = [apply(BRADFORD, XYZ_OF(w)), apply(BRADFORD, CHART_WHITE)];
   return mm(inv3(BRADFORD), mm([[d[0] / s[0], 0, 0], [0, d[1] / s[1], 0], [0, 0, d[2] / s[2]]], BRADFORD));
 }
 
 /** Derive linear-RGB → XYZ(D65) from primaries. Deriving beats transcribing nine
  *  digits per space, and it makes a wrong primary a visible error, not a subtle one. */
-function build(g: Gamut): M3 {
+function build(g       )     {
   const P = g.p.map(XYZ_OF);
-  const M: M3 = [0, 1, 2].map((i) => P.map((c) => c[i]));      // primaries as columns
+  const M     = [0, 1, 2].map((i) => P.map((c) => c[i]));      // primaries as columns
   const s = apply(inv3(M), XYZ_OF(g.w));                       // scale each so they sum to white
   return mm(adapt(g.w), M.map((r) => r.map((v, j) => v * s[j])));
 }
 
-const MATS: Record<string, { to: M3; from: M3 }> = {};
-const mats = (k: string) => (MATS[k] ??= { to: build(GAMUTS[k]), from: inv3(build(GAMUTS[k])) });
+const MATS                                       = {};
+const mats = (k        ) => (MATS[k] ??= { to: build(GAMUTS[k]), from: inv3(build(GAMUTS[k])) });
 
 /** linear RGB in `g` → chart */
-export const fromLinear = (rgb: Vec3, g = params.gamut): Vec3 => fromXYZ(apply(mats(g).to, rgb));
+export const fromLinear = (rgb      , g = params.gamut)       => fromXYZ(apply(mats(g).to, rgb));
 
 /** chart → linear RGB in `g` (may fall outside [0,1]: see `inGamut`) */
-export const toLinear = (p: Vec3, g = params.gamut): Vec3 => apply(mats(g).from, toXYZ(p));
+export const toLinear = (p      , g = params.gamut)       => apply(mats(g).from, toXYZ(p));
 
-const enc = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
-const dec = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const enc = (c        ) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+const dec = (c        ) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 
 /** gamma-encoded sRGB in [0,1] → chart. Inverse of `toSRGB`. Always sRGB: hex
  *  and CSS byte triples mean sRGB no matter which gamut you are designing for. */
-export const fromSRGB = (c: Vec3): Vec3 => fromLinear(c.map(dec) as Vec3, 'srgb');
+export const fromSRGB = (c      )       => fromLinear(c.map(dec)        , 'srgb');
 
-export const fromHex = (hex: string): Vec3 => {
+export const fromHex = (hex        )       => {
   const n = parseInt(hex.replace('#', ''), 16);
   return fromSRGB([((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]);
 };
 
 /** chart → gamma-encoded sRGB, per channel in [0,1] if and only if in gamut. */
-export const toSRGB = (p: Vec3): Vec3 => toLinear(p, 'srgb').map(enc) as Vec3;
+export const toSRGB = (p      )       => toLinear(p, 'srgb').map(enc)        ;
 
 /** Gamut-mapped hex, for anything that cannot take a CSS color function. */
-export const toHex = (p: Vec3): string =>
+export const toHex = (p      )         =>
   '#' + toSRGB(toGamut(p, 'srgb')).map((c) => Math.round(255 * Math.min(1, Math.max(0, c))).toString(16).padStart(2, '0')).join('');
 
 /** Native CSS. Lets the browser do the gamut mapping on wide-gamut displays. */
-export const css = ([L, a, b]: Vec3): string => `oklab(${L}% ${a / 100} ${b / 100})`;
+export const css = ([L, a, b]      )         => `oklab(${L}% ${a / 100} ${b / 100})`;
 
 /** Designers think in cylinders. h in degrees. */
-export const toLCh = ([L, a, b]: Vec3): Vec3 => [L, Math.hypot(a, b), (Math.atan2(b, a) * 180) / Math.PI];
-export const fromLCh = ([L, C, h]: Vec3): Vec3 => [L, C * Math.cos((h * Math.PI) / 180), C * Math.sin((h * Math.PI) / 180)];
+export const toLCh = ([L, a, b]      )       => [L, Math.hypot(a, b), (Math.atan2(b, a) * 180) / Math.PI];
+export const fromLCh = ([L, C, h]      )       => [L, C * Math.cos((h * Math.PI) / 180), C * Math.sin((h * Math.PI) / 180)];
 
 // ─── gamut: the obstacle field ───────────────────────────────────────────────
 
@@ -211,11 +211,11 @@ export const fromLCh = ([L, C, h]: Vec3): Vec3 => [L, C * Math.cos((h * Math.PI)
  * gamut, on channels of (-9.7e-5, 7.4e-5, -5.5e-5). The slices drew it, the
  * solid could not enclose it, and the two disagreed at the bottom.
  */
-export const inGamut = (p: Vec3, g = params.gamut, eps = 1e-9) =>
+export const inGamut = (p      , g = params.gamut, eps = 1e-9) =>
   toLinear(p, g).every((c) => c >= -eps && c <= 1 + eps);
 
 /** Smooth, ≥0, zero inside the gamut. Penalty term for a trajectory optimizer. */
-export const gamutPenalty = (p: Vec3): number =>
+export const gamutPenalty = (p      )         =>
   toLinear(p).reduce((acc, c) => acc + (c < 0 ? c * c : c > 1 ? (c - 1) ** 2 : 0), 0);
 
 /**
@@ -223,18 +223,18 @@ export const gamutPenalty = (p: Vec3): number =>
  * PERCEIVED units, so "stay 15 away from the background" means what it says,
  * and the ball is geometrically bigger than r once r passes the knee.
  */
-export type Ball = { c: Vec3; r: number };
+                                          
 
 /**
  * Same shape as `gamutPenalty` — obstacles are just more of the obstacle field.
  * The optional view measures the keep-out as a given observer would: a sphere
  * you clear for normal vision may still be sitting on top of you in protanopia.
  */
-export const obstaclePenalty = (p: Vec3, obs: Ball[], g: Metric = EUCLIDEAN, v: View = (q) => q): number =>
+export const obstaclePenalty = (p      , obs        , g         = EUCLIDEAN, v       = (q) => q)         =>
   obs.reduce((acc, o) => acc + Math.max(0, o.r - delta(v(p), v(o.c), g)) ** 2, 0);
 
 /** Nearest in-gamut point at fixed L and hue: bisect chroma (CSS Color 4 style). */
-export function toGamut(p: Vec3, g = params.gamut): Vec3 {
+export function toGamut(p      , g = params.gamut)       {
   if (inGamut(p, g)) return p;
   const L = Math.min(100, Math.max(0, p[0]));
   let lo = 0, hi = 1; // gray is always in gamut, so the bracket is valid
@@ -281,18 +281,18 @@ export const internals = {
  * not model, and ICtCp/Jzazbz, which are keyed to absolute luminance in nits.
  * Both would need a scene-referred story the rest of this file does not have.
  */
-export type Space = { name: string; axes: [string, string, string]; from: (xyz: Vec3) => Vec3; to: (c: Vec3) => Vec3 };
+                                                                                                                       
 
 const D = 6 / 29;
-const labf = (t: number) => (t > D ** 3 ? Math.cbrt(t) : t / (3 * D * D) + 4 / 29);
-const labfi = (t: number) => (t > D ? t ** 3 : 3 * D * D * (t - 4 / 29));
-const spow = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** e;
+const labf = (t        ) => (t > D ** 3 ? Math.cbrt(t) : t / (3 * D * D) + 4 / 29);
+const labfi = (t        ) => (t > D ? t ** 3 : 3 * D * D * (t - 4 / 29));
+const spow = (v        , e        ) => Math.sign(v) * Math.abs(v) ** e;
 
 // IPT, Ebner & Fairchild 1998. Matrices as published, D65-adapted (coloraide).
-const IPT_LMS: M3 = [[0.40021437220265654, 0.7075074077935767, -0.0807060322407405],
+const IPT_LMS     = [[0.40021437220265654, 0.7075074077935767, -0.0807060322407405],
                      [-0.22798649207313385, 1.1500016565804587, 0.061235922568512555],
                      [0, 0, 0.9182249511582473]];
-const IPT_OPP: M3 = [[0.4, 0.4, 0.2], [4.455, -4.851, 0.396], [0.8056, 0.3572, -1.1628]];
+const IPT_OPP     = [[0.4, 0.4, 0.2], [4.455, -4.851, 0.396], [0.8056, 0.3572, -1.1628]];
 const IPT_LMS_I = inv3(IPT_LMS), IPT_OPP_I = inv3(IPT_OPP);
 // Normalise cone response to the chart's white, exactly as the gamuts are
 // adapted. Published IPT is keyed to a D65 a hair off Oklab's, and left alone
@@ -300,10 +300,10 @@ const IPT_LMS_I = inv3(IPT_LMS), IPT_OPP_I = inv3(IPT_OPP);
 // this tool cannot afford to be: the axis every lightness question hangs on.
 const IPT_W = apply(IPT_LMS, CHART_WHITE);
 
-const rgb01 = (xyz: Vec3): Vec3 => apply(mats('srgb').from, xyz).map(enc) as Vec3;
-const unrgb01 = (c: Vec3): Vec3 => apply(mats('srgb').to, c.map(dec) as Vec3);
+const rgb01 = (xyz      )       => apply(mats('srgb').from, xyz).map(enc)        ;
+const unrgb01 = (c      )       => apply(mats('srgb').to, c.map(dec)        );
 
-export const SPACES: Record<string, Space> = {
+export const SPACES                        = {
   oklab: { name: 'Oklab (2020)', axes: ['L', 'a', 'b'], from: fromXYZ, to: toXYZ },
 
   cielab: {
@@ -314,7 +314,7 @@ export const SPACES: Record<string, Space> = {
     },
     to: ([L, a, b]) => {
       const fy = (L + 16) / 116;
-      return [labfi(fy + a / 500), labfi(fy), labfi(fy - b / 200)].map((v, i) => v * CHART_WHITE[i]) as Vec3;
+      return [labfi(fy + a / 500), labfi(fy), labfi(fy - b / 200)].map((v, i) => v * CHART_WHITE[i])        ;
     },
   },
 
@@ -339,43 +339,43 @@ export const SPACES: Record<string, Space> = {
 
   ipt: {
     name: 'IPT (1998)', axes: ['I', 'P', 'T'],
-    from: (xyz) => apply(IPT_OPP, apply(IPT_LMS, xyz).map((v, i) => spow(v / IPT_W[i], 0.43)) as Vec3).map((v) => v * 100) as Vec3,
-    to: (c) => apply(IPT_LMS_I, apply(IPT_OPP_I, c.map((v) => v / 100) as Vec3).map((v, i) => spow(v, 1 / 0.43) * IPT_W[i]) as Vec3),
+    from: (xyz) => apply(IPT_OPP, apply(IPT_LMS, xyz).map((v, i) => spow(v / IPT_W[i], 0.43))        ).map((v) => v * 100)        ,
+    to: (c) => apply(IPT_LMS_I, apply(IPT_OPP_I, c.map((v) => v / 100)        ).map((v, i) => spow(v, 1 / 0.43) * IPT_W[i])        ),
   },
 
   xyz: {
     name: 'CIE XYZ (1931)', axes: ['X', 'Y', 'Z'],
-    from: (xyz) => xyz.map((v) => v * 100) as Vec3,
-    to: (c) => c.map((v) => v / 100) as Vec3,
+    from: (xyz) => xyz.map((v) => v * 100)        ,
+    to: (c) => c.map((v) => v / 100)        ,
   },
 
   srgb: {
     name: 'sRGB cube', axes: ['R', 'G', 'B'],
-    from: (xyz) => rgb01(xyz).map((v) => v * 100) as Vec3,
-    to: (c) => unrgb01(c.map((v) => v / 100) as Vec3),
+    from: (xyz) => rgb01(xyz).map((v) => v * 100)        ,
+    to: (c) => unrgb01(c.map((v) => v / 100)        ),
   },
 
 };
 
 /** chart ↔ the active working space */
-export const toSpace = (p: Vec3, k = params.space): Vec3 => SPACES[k].from(toXYZ(p));
-export const fromSpace = (c: Vec3, k = params.space): Vec3 => fromXYZ(SPACES[k].to(c));
+export const toSpace = (p      , k = params.space)       => SPACES[k].from(toXYZ(p));
+export const fromSpace = (c      , k = params.space)       => fromXYZ(SPACES[k].to(c));
 
 /**
  * The box a gamut occupies in a space's coordinates. Sampling the RGB cube's
  * surface beats hand-typing twenty-one axis ranges, and it re-fits itself when
  * either the space or the gamut changes rather than going quietly stale.
  */
-export function spaceExtent(k = params.space, g = params.gamut): { lo: Vec3; hi: Vec3 } {
+export function spaceExtent(k = params.space, g = params.gamut)                         {
   const sp = SPACES[k], N = 14;
-  const lo: Vec3 = [Infinity, Infinity, Infinity], hi: Vec3 = [-Infinity, -Infinity, -Infinity];
+  const lo       = [Infinity, Infinity, Infinity], hi       = [-Infinity, -Infinity, -Infinity];
   for (const [u, v, w, f] of CUBE_FACES)
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       // cube, not a gamma: Oklab L goes as the cube root of intensity, so this
       // is what samples the surface at even lightness rather than crowding the
       // bright half and missing the dark end entirely
-      const c: number[] = []; c[u] = (i / N) ** 3; c[v] = (j / N) ** 3; c[w] = f;
-      const q = sp.from(apply(mats(g).to, c as Vec3));
+      const c           = []; c[u] = (i / N) ** 3; c[v] = (j / N) ** 3; c[w] = f;
+      const q = sp.from(apply(mats(g).to, c        ));
       for (let d2 = 0; d2 < 3; d2++) { lo[d2] = Math.min(lo[d2], q[d2]); hi[d2] = Math.max(hi[d2], q[d2]); }
     }
   return { lo, hi };
@@ -383,10 +383,10 @@ export function spaceExtent(k = params.space, g = params.gamut): { lo: Vec3; hi:
 
 // ─── g: the local metric ─────────────────────────────────────────────────────
 
-export type Metric = (p: Vec3) => Mat3;
+                                       
 
 /** Oklab is already an approximately uniform chart, so identity is the default. */
-export const EUCLIDEAN: Metric = () => [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+export const EUCLIDEAN         = () => [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 
 /**
  * Anisotropic metric in the (lightness, chroma, hue) frame at each point.
@@ -394,7 +394,7 @@ export const EUCLIDEAN: Metric = () => [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
  * changes four times as expensive, so geodesics and dispersion both prefer to
  * vary hue and chroma instead.
  */
-export function weighted(wL = 1, wC = 1, wH = 1): Metric {
+export function weighted(wL = 1, wC = 1, wH = 1)         {
   return ([, a, b]) => {
     const C = Math.hypot(a, b);
     if (C < 1e-9) return [[wL ** 2, 0, 0], [0, wC ** 2, 0], [0, 0, wC ** 2]]; // every direction is radial
@@ -419,8 +419,8 @@ export function weighted(wL = 1, wC = 1, wH = 1): Metric {
  * `perceive`, whose knee sits at a fixed ~18.7, would quietly start meaning
  * something else. One scalar per space, measured rather than assumed.
  */
-const NEUTRAL_SCALE: Record<string, number> = {};
-function neutralScale(k: string): number {
+const NEUTRAL_SCALE                         = {};
+function neutralScale(k        )         {
   if (NEUTRAL_SCALE[k] === undefined) {
     let len = 0;
     for (let i = 0; i < 128; i++) {
@@ -432,37 +432,37 @@ function neutralScale(k: string): number {
   return NEUTRAL_SCALE[k];
 }
 
-export function spaceMetric(k = params.space): Metric {
+export function spaceMetric(k = params.space)         {
   if (k === 'oklab') return EUCLIDEAN;                 // the chart is its own space
   const w = neutralScale(k) ** 2, h = 0.05;
   return (p) => {
-    const col: Vec3[] = [];
+    const col         = [];
     for (let i = 0; i < 3; i++) {                      // central differences: J's columns
-      const a = [...p] as Vec3, b = [...p] as Vec3;
+      const a = [...p]        , b = [...p]        ;
       a[i] -= h; b[i] += h;
       const [sa, sb] = [toSpace(a, k), toSpace(b, k)];
-      col.push(sb.map((v, j) => (v - sa[j]) / (2 * h)) as Vec3);
+      col.push(sb.map((v, j) => (v - sa[j]) / (2 * h))        );
     }
     return [0, 1, 2].map((i) => [0, 1, 2].map((j) =>
-      w * (col[i][0] * col[j][0] + col[i][1] * col[j][1] + col[i][2] * col[j][2]))) as Mat3;
+      w * (col[i][0] * col[j][0] + col[i][1] * col[j][1] + col[i][2] * col[j][2])))        ;
   };
 }
 
-const quad = (g: Mat3, d: Vec3) =>
+const quad = (g      , d      ) =>
   d.reduce((acc, di, i) => acc + di * d.reduce((s, dj, j) => s + g[i][j] * dj, 0), 0);
 
 // ─── lengths and distances ───────────────────────────────────────────────────
 
-const lerp = (p: Vec3, q: Vec3, t: number): Vec3 => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
+const lerp = (p      , q      , t        )       => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
 
 /** Midpoint-rule length of one segment. */
-export function segLength(p: Vec3, q: Vec3, g: Metric = EUCLIDEAN): number {
-  const d: Vec3 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+export function segLength(p      , q      , g         = EUCLIDEAN)         {
+  const d       = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
   return Math.sqrt(quad(g(lerp(p, q, 0.5)), d));
 }
 
 /** Additive. The trajectory cost, and the thing you divide up for even spacing. */
-export const arcLength = (path: Vec3[], g: Metric = EUCLIDEAN): number =>
+export const arcLength = (path        , g         = EUCLIDEAN)         =>
   path.slice(1).reduce((acc, q, i) => acc + segLength(path[i], q, g), 0);
 
 /**
@@ -473,7 +473,7 @@ export const arcLength = (path: Vec3[], g: Metric = EUCLIDEAN): number =>
  * CGF 2025 §4 wants the geodesic here specifically to capture Bezold-Brücke —
  * straight lines in the chart are the wrong path for a hue-preserving ramp.
  */
-export const delta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
+export const delta = (p      , q      , g         = EUCLIDEAN, n = 8)         =>
   perceive(arcLength(Array.from({ length: n + 1 }, (_, i) => lerp(p, q, i / n)), g));
 
 // ─── color vision deficiency: a projection on M ──────────────────────────────
@@ -488,9 +488,9 @@ export const delta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
  * dimension. That is the point: it is a constraint surface, and CVD-safety is
  * the ordinary palette objective evaluated after projecting onto it.
  */
-export type CVD = 'protan' | 'deutan' | 'tritan';
+                                                 
 
-const BRETTEL: Record<CVD, [number[], number[], Vec3]> = {
+const BRETTEL                                          = {
   protan: [
     [0.1498, 1.19548, -0.34528, 0.10764, 0.84864, 0.04372, 0.00384, -0.0054, 1.00156],
     [0.1457, 1.16172, -0.30742, 0.10816, 0.85291, 0.03892, 0.00386, -0.00524, 1.00139],
@@ -509,34 +509,34 @@ const BRETTEL: Record<CVD, [number[], number[], Vec3]> = {
 };
 
 /** severity 0 = normal vision, 1 = dichromacy. Anomalous trichromacy in between. */
-export function simulate(type: CVD, severity = 1): View {
+export function simulate(type     , severity = 1)       {
   const [m1, m2, n] = BRETTEL[type];
   return (p) => {
     const rgb = toLinear(p);
     const m = n[0] * rgb[0] + n[1] * rgb[1] + n[2] * rgb[2] >= 0 ? m1 : m2;
     return fromLinear(
-      rgb.map((c, i) => severity * (m[3 * i] * rgb[0] + m[3 * i + 1] * rgb[1] + m[3 * i + 2] * rgb[2]) + (1 - severity) * c) as Vec3,
+      rgb.map((c, i) => severity * (m[3 * i] * rgb[0] + m[3 * i + 1] * rgb[1] + m[3 * i + 2] * rgb[2]) + (1 - severity) * c)        ,
     );
   };
 }
 
-export type View = (p: Vec3) => Vec3;
-export const NORMAL: View = (p) => p;
+                                     
+export const NORMAL       = (p) => p;
 
 /** Normal vision plus all three dichromacies — the usual constraint set. */
-export const ALL_VIEWS: View[] = [NORMAL, simulate('protan'), simulate('deutan'), simulate('tritan')];
+export const ALL_VIEWS         = [NORMAL, simulate('protan'), simulate('deutan'), simulate('tritan')];
 
 // ─── palette primitives ──────────────────────────────────────────────────────
 
-const pairs = <T,>(xs: T[]): [T, T][] => xs.flatMap((p, i) => xs.slice(i + 1).map((q) => [p, q] as [T, T]));
+const pairs =     (xs     )           => xs.flatMap((p, i) => xs.slice(i + 1).map((q) => [p, q]          ));
 
-const dist = (p: Vec3, q: Vec3) => Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+const dist = (p      , q      ) => Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
 
 /** Barry–Goldman evaluation of one centripetal Catmull–Rom span, P[1]→P[2]. */
-function span(P: Vec3[], n: number): Vec3[] {
+function span(P        , n        )         {
   const t = [0];
   for (let i = 1; i < 4; i++) t.push(t[i - 1] + Math.max(1e-6, Math.sqrt(dist(P[i - 1], P[i]))));
-  const mix = (a: Vec3, b: Vec3, ta: number, tb: number, x: number) => lerp(a, b, (x - ta) / (tb - ta));
+  const mix = (a      , b      , ta        , tb        , x        ) => lerp(a, b, (x - ta) / (tb - ta));
   return Array.from({ length: n }, (_, k) => {
     const x = t[1] + ((t[2] - t[1]) * k) / n;
     const [a1, a2, a3] = [mix(P[0], P[1], t[0], t[1], x), mix(P[1], P[2], t[1], t[2], x), mix(P[2], P[3], t[2], t[3], x)];
@@ -554,11 +554,11 @@ function span(P: Vec3[], n: number): Vec3[] {
  * Returns a dense polyline. Hand it to `resample` for even perceptual spacing,
  * or to `arcLength` for the trajectory cost.
  */
-export function spline(controls: Vec3[], perSpan = 24): Vec3[] {
+export function spline(controls        , perSpan = 24)         {
   if (controls.length < 2) return controls.slice();
-  const refl = (a: Vec3, b: Vec3): Vec3 => [2 * a[0] - b[0], 2 * a[1] - b[1], 2 * a[2] - b[2]];
+  const refl = (a      , b      )       => [2 * a[0] - b[0], 2 * a[1] - b[1], 2 * a[2] - b[2]];
   const P = [refl(controls[0], controls[1]), ...controls, refl(controls[controls.length - 1], controls[controls.length - 2])];
-  const out: Vec3[] = [];
+  const out         = [];
   for (let i = 0; i + 3 < P.length; i++) out.push(...span(P.slice(i, i + 4), perSpan));
   return [...out, controls[controls.length - 1]];
 }
@@ -569,7 +569,7 @@ export function spline(controls: Vec3[], perSpan = 24): Vec3[] {
  * additive quantity. Interpolation is linear in the chart between knots, so
  * pass a finely discretized path.
  */
-export function resample(path: Vec3[], n: number, g: Metric = EUCLIDEAN): Vec3[] {
+export function resample(path        , n        , g         = EUCLIDEAN)         {
   const cum = [0];
   for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + segLength(path[i - 1], path[i], g));
   const total = cum[cum.length - 1];
@@ -592,7 +592,7 @@ export function resample(path: Vec3[], n: number, g: Metric = EUCLIDEAN): Vec3[]
  * and the three dichromacies. A pair that collapses for a deutan observer caps
  * the score no matter how far apart it looks to you.
  */
-export const minSeparation = (palette: Vec3[], g: Metric = EUCLIDEAN, views: View[] = [NORMAL]): number =>
+export const minSeparation = (palette        , g         = EUCLIDEAN, views         = [NORMAL])         =>
   Math.min(...views.flatMap((v) => pairs(palette).map(([p, q]) => delta(v(p), v(q), g))));
 
 /**
@@ -604,14 +604,14 @@ export const minSeparation = (palette: Vec3[], g: Metric = EUCLIDEAN, views: Vie
  * need to stay tellable apart. They pull in different directions — a palette
  * can be perfectly distinguishable and still reorder itself under protanopia.
  */
-export const distortion = (palette: Vec3[], view: View, g: Metric = EUCLIDEAN): number =>
+export const distortion = (palette        , view      , g         = EUCLIDEAN)         =>
   Math.max(...pairs(palette).map(([p, q]) => Math.abs(delta(view(p), view(q), g) - delta(p, q, g))));
 
 // ─── self-check ──────────────────────────────────────────────────────────────
 
 function demo() {
-  const ok = (c: boolean, msg: string) => { if (!c) throw new Error(msg); };
-  const close = (x: number, y: number, tol = 1e-6) => Math.abs(x - y) < tol;
+  const ok = (c         , msg        ) => { if (!c) throw new Error(msg); };
+  const close = (x        , y        , tol = 1e-6) => Math.abs(x - y) < tol;
 
   // chart round-trips
   for (const hex of ['#000000', '#ffffff', '#ff0000', '#3b7dd8', '#7f7f7f'])
@@ -627,7 +627,7 @@ function demo() {
   ok(close(unperceive(perceive(42)), 42, 1e-9), 'f invertible');
 
   // g: SPD, reduces to Euclidean, weights do what they say
-  const p: Vec3 = [50, 20, 0]; // chroma 20, hue 0 => +a is radial, +b is tangential
+  const p       = [50, 20, 0]; // chroma 20, hue 0 => +a is radial, +b is tangential
   const gw = weighted(3, 1, 2);
   ok(close(segLength(p, [51, 20, 0], gw), 3), 'wL scales lightness');
   ok(close(segLength(p, [50, 21, 0], gw), 1), 'wC scales chroma');
@@ -636,13 +636,13 @@ function demo() {
   ok(quad(weighted(2, 3, 4)([50, 0, 0]), [1, 1, 1]) > 0, 'SPD on the neutral axis');
 
   // D is still a metric even though it is not intrinsic
-  const pts: Vec3[] = [[20, 10, -30], [70, -40, 50], [50, 0, 0], [90, 5, 5]];
+  const pts         = [[20, 10, -30], [70, -40, 50], [50, 0, 0], [90, 5, 5]];
   for (const a of pts) for (const b of pts) for (const c of pts)
     ok(delta(a, c) <= delta(a, b) + delta(b, c) + 1e-9, 'triangle inequality');
   ok(delta([20, 0, 0], [80, 0, 0]) < arcLength([[20, 0, 0], [80, 0, 0]]), 'D underestimates arc length');
 
   // gamut
-  const wild: Vec3 = [50, 90, 40];
+  const wild       = [50, 90, 40];
   ok(!inGamut(wild) && inGamut(toGamut(wild)), 'toGamut lands in gamut');
   ok(close(toLCh(toGamut(wild))[2], toLCh(wild)[2], 1e-6), 'toGamut preserves hue');
   ok(gamutPenalty(fromHex('#3b7dd8')) === 0 && gamutPenalty(wild) > 0, 'penalty is zero iff in gamut');
@@ -664,7 +664,7 @@ function demo() {
   ok(distortion([blue, orange], deu) < distortion([red, green], deu), 'blue/orange warps less');
 
   // spline interpolates its controls and obstacles are balls in perceived units
-  const ctrl: Vec3[] = [fromHex('#1b2a6b'), fromHex('#3aa6a0'), fromHex('#f2e85c')];
+  const ctrl         = [fromHex('#1b2a6b'), fromHex('#3aa6a0'), fromHex('#f2e85c')];
   const curve = spline(ctrl);
   ok(ctrl.every((c) => Math.min(...curve.map((q) => dist(c, q))) < 1e-6), 'spline hits every control point');
   ok(arcLength(curve) >= arcLength(ctrl) - 1e-9, 'curving is never shorter than the polyline');
@@ -680,7 +680,7 @@ function demo() {
     ok(inGamut(fromHex('#7f3f9f'), k), `sRGB colours are inside ${k}`);
   }
   for (const k of ['display-p3', 'a98-rgb', 'rec2020', 'prophoto-rgb', 'acescg'])
-    ok([[1, 0, 0], [0, 1, 0], [0, 0, 1]].every((c) => inGamut(fromLinear(c as Vec3, 'srgb'), k)), `sRGB fits in ${k}`);
+    ok([[1, 0, 0], [0, 1, 0], [0, 0, 1]].every((c) => inGamut(fromLinear(c        , 'srgb'), k)), `sRGB fits in ${k}`);
   ok(!inGamut(fromLinear([0, 1, 0], 'srgb'), 'ntsc1953'), 'sRGB green is too bright for NTSC 1953');
   // wide gamuts are not a chain: P3's red sits outside Rec.2020's red-green edge
   ok(!inGamut(fromLinear([1, 0, 0], 'display-p3'), 'srgb'), 'P3 red is outside sRGB');
@@ -709,7 +709,7 @@ function demo() {
   // ...and asking for a space's own metric is opt-in, calibrated on the neutral axis
   for (const k of Object.keys(SPACES)) {
     const g2 = spaceMetric(k);
-    const axis = Array.from({ length: 65 }, (_, i) => [(i * 100) / 64, 0, 0] as Vec3);
+    const axis = Array.from({ length: 65 }, (_, i) => [(i * 100) / 64, 0, 0]        );
     ok(close(arcLength(axis, g2), 100, 0.5), `${k} metric is neutral-calibrated`);
     const m = g2([50, 0, 0]);
     ok(quad(m, [1, 2, -3]) > 0 && close(m[0][1], m[1][0], 1e-9), `${k} metric is symmetric positive`);

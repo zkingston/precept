@@ -219,8 +219,8 @@
 </div>
 
 <script type="importmap">
-{ "imports": { "three": "/node_modules/three/build/three.module.js",
-               "three/addons/": "/node_modules/three/examples/jsm/" } }
+{ "imports": { "three": "./vendor/three.module.js",
+               "three/addons/": "./vendor/jsm/" } }
 </script>
 
 <script type="module">
@@ -231,7 +231,7 @@ import {
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty,
   minSeparation, obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, internals,
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
-} from './color-space.ts';
+} from './color-space.js';
 
 // We do every colour computation ourselves and hand three gamma-encoded sRGB
 // directly, so switch three's colour management off rather than have it convert
