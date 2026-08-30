@@ -1052,7 +1052,10 @@ function layout() {
   if (NARROW.matches) {
     // 1-over-3: the cuts are a strip under the 3D view. Stacking them in a
     // column here would leave each one a letterbox a few pixels tall.
-    const rowH = Math.round(h * 0.34), colW = Math.floor(w / 4);
+    // square-ish cells: a quarter of the width is the natural size, and a taller
+    // row only letterboxes the content it holds. Capped so the strip cannot eat
+    // the 3D view on a short canvas.
+    const colW = Math.floor(w / 4), rowH = Math.min(colW, Math.round(h * 0.4));
     RECTS = [
       { x: 0, y: h - rowH, w: colW, h: rowH },
       { x: colW, y: h - rowH, w: colW, h: rowH },
@@ -2418,6 +2421,31 @@ function pointOn(q) {
 }
 
 /**
+ * Where a double-click in the 3D view lands.
+ *
+ * The solid is drawn BackSide, so the colour you see at a pixel is its FAR
+ * wall — and a raycast honours material.side, so the default hit against it is
+ * that same far wall. Clicking therefore adds the colour you clicked on, not
+ * the one hidden behind it.
+ *
+ * Off the solid, fall back to the camera-facing plane through the current cut:
+ * the same plane a drag in 3D already moves in, so a node added in empty space
+ * lands where dragging would have put it.
+ */
+function pointIn3D(q) {
+  if (shell.visible) {
+    const mask = ray.layers.mask;
+    ray.layers.enable(1);                      // the solid lives on the 3D-only layer
+    const hit = ray.intersectObject(shell, false)[0];
+    ray.layers.mask = mask;
+    if (hit) return cpt(hit.point);
+  }
+  plane.setFromNormalAndCoplanarPoint(q.cam.getWorldDirection(new T.Vector3()), world(S.slice));
+  const at = ray.ray.intersectPlane(plane, new T.Vector3());
+  return at && cpt(at);
+}
+
+/**
  * Small handles beat the bodies they sit on. Raw distance order is wrong here:
  * a sphere's near surface is always closer to the camera than the radius handle
  * on its far-ish side, so picking by distance alone made the handle unreachable
@@ -2465,13 +2493,20 @@ canvas.addEventListener('pointerdown', (e) => {
 
 canvas.addEventListener('dblclick', (e) => {
   const q = castFrom(e);
-  if (!q || q.axis === undefined || hitTest()) return;   // only into empty space in a slice panel
-  const p = pointOn(q);
+  if (!q || hitTest()) return;                            // only into empty space
+  const p = q.axis === undefined ? pointIn3D(q) : pointOn(q);
   if (!p) return;
   if (S.tool === 'obstacle') { S.obs.push({ c: p, r: S.rad }); select({ kind: 'obs', i: S.obs.length - 1 }); }
   else if (S.tool === 'plane') {
-    const n = [0, 0, 0]; n[q.axis] = 1;                         // starts axis-aligned; rotate the tip
-    S.planes.push({ n, d: S.slice[q.axis] });                   // excludes n·c > d; flip in the panel
+    // a slice panel has an axis to align to; in 3D the cut faces the camera,
+    // which is the only orientation the click itself carries any information about
+    let n;
+    if (q.axis === undefined) {
+      const d = q.cam.getWorldDirection(new T.Vector3());
+      const len = Math.hypot(d.y, d.x, d.z);
+      n = [d.y / len, d.x / len, d.z / len];               // world → space is that swap
+    } else { n = [0, 0, 0]; n[q.axis] = 1; }               // rotate the tip to change it
+    S.planes.push({ n, d: dot3(n, toSpace(p)) });          // excludes n·c > d; flip in the panel
     select({ kind: 'plane', i: S.planes.length - 1 });
   } else select({ kind: 'pt', i: addPoint(p) });
   disturb();
