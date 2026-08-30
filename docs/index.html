@@ -16,8 +16,6 @@
   #gl { display:block; width:100%; height:100%; touch-action:none; }
   /* one canvas, four scissored viewports; the HUD is plain DOM on top */
   .quad { position:absolute; pointer-events:none; }
-  .quad .tag { position:absolute; top:8px; left:10px; font:10px/1 ui-monospace,monospace; letter-spacing:.1em;
-               text-transform:uppercase; color:var(--hud); }
   .quad .sl { position:absolute; top:10px; bottom:10px; right:9px; display:flex; flex-direction:column;
               align-items:center; gap:6px; pointer-events:auto; font:11px ui-monospace,monospace; color:var(--hud); }
   /* vertical range: writing-mode is the supported route now, and direction:rtl
@@ -152,11 +150,15 @@
     #dock { display:flex; flex-direction:column; gap:11px; }
     section { grid-column:auto; }
 
-    #tip, #lplot { position:static; }
-    #tip { padding:0; background:none; border:0; max-width:300px; }
-    #tipcanvas { width:100%; height:auto; }
-    #lplot { height:auto; flex-direction:column; gap:9px; }
-    .pplot { height:84px; }
+    /* the preview is the fourth cell of the cut strip; layout() places it */
+    #tip { padding:2px; border-radius:4px; display:flex; flex-direction:column; gap:2px; }
+    #tipcanvas { width:100%; height:auto; flex:1; min-height:0; }
+    #tipbtns { margin-top:0; gap:2px; }
+    #tipbtns button { font-size:9px; padding:1px 0; }
+    #toolnote { display:none; }
+    #lplot { position:static; height:auto; flex-direction:column; gap:8px; }
+    /* flex:none, or the desktop flex-basis:0 keeps overriding the height */
+    .pplot { flex:none; height:76px; }
 
     /* nothing above the tools any more, and the bar stops at the cut row */
     #tool { top:10px; right:10px; }
@@ -190,7 +192,7 @@
       <div class="sl"><i id="nA">a</i><input type="range" id="sA" min="-36" max="36" step="0.5" value="0"><b id="vA">0</b></div></div>
     <div class="quad" id="q3">
       <div class="sl"><i id="nB">b</i><input type="range" id="sB" min="-36" max="36" step="0.5" value="0"><b id="vB">0</b></div></div>
-    <div class="quad" id="q0"><span class="tag">3D · orbit</span></div>
+    <div class="quad" id="q0"></div>
     <div id="tool">
       <button data-v="edit" title="Points"><svg viewBox="0 0 24 24">
         <polyline points="4,18 10,8 16,14 20,5"/><circle cx="4" cy="18" r="2.1"/>
@@ -225,7 +227,6 @@
 
   <aside>
     <h1>Precept Palette Optimizer</h1>
-    <div id="dock"></div>
 
     <section>
       <h2>Palette</h2>
@@ -277,6 +278,7 @@
         <canvas id="huewheel" width="112" height="112" title="drag an edge of the arc · double-click for any hue"></canvas>
         <span class="v" style="width:56px;padding-top:44px" id="hboundv">any</span></div>
     </section>
+    <div id="dock"></div>
 
     <section><h2>Metrics</h2><table id="metrics"></table>
       <div id="termhelp" class="note"></div>
@@ -1050,13 +1052,16 @@ function layout() {
   if (NARROW.matches) {
     // 1-over-3: the cuts are a strip under the 3D view. Stacking them in a
     // column here would leave each one a letterbox a few pixels tall.
-    const rowH = Math.round(h * 0.34), colW = Math.floor(w / 3);
+    const rowH = Math.round(h * 0.34), colW = Math.floor(w / 4);
     RECTS = [
       { x: 0, y: h - rowH, w: colW, h: rowH },
       { x: colW, y: h - rowH, w: colW, h: rowH },
-      { x: 2 * colW, y: h - rowH, w: w - 2 * colW, h: rowH },
+      { x: 2 * colW, y: h - rowH, w: colW, h: rowH },
       { x: 0, y: 0, w, h: h - rowH },
     ];
+    // the strip is four across: three cuts and the test image
+    Object.assign($('tip').style, { left: `${3 * colW}px`, top: `${h - rowH}px`,
+      width: `${w - 3 * colW}px`, height: `${rowH}px` });
   } else {
     const colW = Math.min(440, Math.max(200, Math.round(w * 0.3)));
     const rowH = Math.floor(h / 3);
@@ -1082,7 +1087,7 @@ function layout() {
     q.cam.updateProjectionMatrix();
   });
   // only while it is an overlay; docked in the panel it is laid out by flow
-  if (!NARROW.matches) lplotEl.style.left = RECTS[3].x + 14 + 'px';
+  if (!NARROW.matches) { lplotEl.style.left = RECTS[3].x + 14 + 'px'; $('tip').removeAttribute('style'); }
   layoutPlot();
 }
 
@@ -1246,7 +1251,10 @@ const lutOf = (n) => (S.mode === 'continuous' && S.pts.length >= 2 ? resample(cu
   .map((p) => rgb(S.gray ? [p[0], 0, 0] : p).map((c) => Math.round(255 * c)));
 
 function drawTest() {
-  const W = tipc.width, H = tipc.height;
+  // the cell it sits in is a wide strip on desktop and a tall quarter of the
+  // cut row on a phone, so the image is drawn at whatever shape it is given
+  const W = Math.max(1, Math.round(tipc.clientWidth)), H = Math.max(1, Math.round(tipc.clientHeight));
+  if (tipc.width !== W || tipc.height !== H) { tipc.width = W; tipc.height = H; }
   const kind = TESTS[S.tipKind]?.mode === S.mode ? S.tipKind
              : Object.keys(TESTS).find((k) => TESTS[k].mode === S.mode);
   $('tipbtns').innerHTML = Object.entries(TESTS).filter(([, t]) => t.mode === S.mode)
@@ -2386,6 +2394,8 @@ const plane = new T.Plane();
 let drag = null;
 
 let hovered = null;
+let hold = null;
+const dropHold = () => { if (hold) { clearTimeout(hold.t); hold = null; } };
 const quadAt = (x, y) => QUADS.find((q) => x >= q.rect.x && x < q.rect.x + q.rect.w && y >= q.rect.y && y < q.rect.y + q.rect.h);
 
 function castFrom(e) {
@@ -2437,6 +2447,14 @@ canvas.addEventListener('pointerdown', (e) => {
     drag = { ...S.sel };
     controls.enabled = false;
     canvas.setPointerCapture(e.pointerId);
+    // A touch has no right button, so holding still on a node is the delete.
+    // Mouse is excluded deliberately: pausing mid-drag to think is normal with
+    // a mouse and must not destroy what you were about to move.
+    if (e.pointerType !== 'mouse') {
+      const { kind, i } = grabbed.object.userData;
+      hold = { x: e.clientX, y: e.clientY,
+        t: setTimeout(() => { hold = null; drag = null; removeAt(kind, i); }, 520) };
+    }
   } else if (q.axis !== undefined) {            // empty space in a slice panel: pan
     drag = { kind: 'pan', q, x: e.clientX, y: e.clientY };
     canvas.setPointerCapture(e.pointerId);
@@ -2460,15 +2478,18 @@ canvas.addEventListener('dblclick', (e) => {
   sync();
 });
 
+function removeAt(kind, i) {
+  ({ pt: S.pts, obs: S.obs, obsr: S.obs, plane: S.planes, planerot: S.planes })[kind].splice(i, 1);
+  S.sel = null;
+  sync();
+}
+
 canvas.addEventListener('contextmenu', (e) => {
   if (!castFrom(e)) return;
   const hit = hitTest();
   if (!hit) return;
   e.preventDefault();
-  const { kind, i } = hit.object.userData;
-  ({ pt: S.pts, obs: S.obs, obsr: S.obs, plane: S.planes, planerot: S.planes })[kind].splice(i, 1);
-  S.sel = null;
-  sync();
+  removeAt(hit.object.userData.kind, hit.object.userData.i);
 });
 
 // wheel over a slice panel scrolls that cut plane; over 3D it stays OrbitControls'
@@ -2486,6 +2507,7 @@ canvas.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 canvas.addEventListener('pointermove', (e) => {
+  if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 8) dropHold();   // moved: it is a drag
   if (!drag) {
     const r = canvas.getBoundingClientRect();
     const q = quadAt(e.clientX - r.left, e.clientY - r.top);
@@ -2527,7 +2549,8 @@ canvas.addEventListener('pointermove', (e) => {
   sync();
 });
 
-canvas.addEventListener('pointerup', () => { drag = null; });
+canvas.addEventListener('pointerup', () => { drag = null; dropHold(); });
+canvas.addEventListener('pointercancel', () => { drag = null; dropHold(); });
 
 addEventListener('keydown', (e) => {
   if (/^(INPUT|SELECT)$/.test(e.target.tagName)) return;   // the field's own undo wins
@@ -2536,8 +2559,7 @@ addEventListener('keydown', (e) => {
   if (e.key === 'r' && hovered?.axis !== undefined) { resetView(hovered.cam); return; }
   if (!S.sel) return;
   if (e.key === 'Backspace' || e.key === 'Delete') {
-    ({ pt: S.pts, obs: S.obs, obsr: S.obs, plane: S.planes, planerot: S.planes })[S.sel.kind].splice(S.sel.i, 1);
-    S.sel = null; sync();
+    removeAt(S.sel.kind, S.sel.i);
   }
   if (e.key === 'Escape') { S.sel = null; sync(); }
 });
@@ -2911,8 +2933,7 @@ lprofLine(); hprofFit(); mirror(); commit();
 const NARROW = matchMedia('(max-width: 860px)');
 function reflow() {
   const to = NARROW.matches ? $('dock') : main;
-  for (const el of [$('tip'), lplotEl]) if (el.parentElement !== to) to.appendChild(el);
-  if (!NARROW.matches) $('tip').removeAttribute('style');
+  if (lplotEl.parentElement !== to) to.appendChild(lplotEl);
   layout();
   sidebar();                                 // both canvases were just resized
 }
