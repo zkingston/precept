@@ -698,13 +698,17 @@ const shellGeo = (() => {
  */
 function buildShell() {
   const N = SHELL_N, pos = shellGeo.attributes.position;
-  let k = 0;
+  let k = 0, maxC = 0;
   for (const [u, v, w, f] of CUBE_FACES)
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const c = []; c[u] = (i / N) ** 3; c[v] = (j / N) ** 3; c[w] = f;
-      const p = wpt(fromLinear(c));
+      const chart = fromLinear(c);
+      maxC = Math.max(maxC, Math.hypot(chart[1], chart[2]));
+      const p = wpt(chart);
       pos.setXYZ(k++, p.x, p.y, p.z);
     }
+  // the hull is already being walked, so the gamut's reach is free here
+  setChromaCeiling(Math.ceil(maxC * 1.02));
   pos.needsUpdate = true;
   shellGeo.computeBoundingSphere();
 }
@@ -731,16 +735,18 @@ function paintShell() {
 const capGroup = new T.Group();
 capGroup.layers.set(1);                            // part of the solid, so 3D only
 scene.add(capGroup);
-const CAP_N = 36, CAP_R = 60;
+const CAP_N = 36;
+/** caps span the chroma the gamut reaches, with margin — ProPhoto passes 148 */
+const capR = () => BOUND_MAX[1] * 1.35;
 let capKey = null;
 
 /** a point on cap `kind` at value v, parameterised over the unit square */
 const capChart = (kind, v, u, w) => {
-  if (kind === 0) return [v, (2 * u - 1) * CAP_R, (2 * w - 1) * CAP_R];        // L = v
+  if (kind === 0) return [v, (2 * u - 1) * capR(), (2 * w - 1) * capR()];        // L = v
   if (kind === 1) { const h = u * 2 * Math.PI;                                  // chroma = v
     return [w * 100, v * Math.cos(h), v * Math.sin(h)]; }
   const h = (v * Math.PI) / 180;                                                // hue = v
-  return [w * 100, u * CAP_R * Math.cos(h), u * CAP_R * Math.sin(h)];
+  return [w * 100, u * capR() * Math.cos(h), u * capR() * Math.sin(h)];
 };
 
 /**
@@ -763,7 +769,7 @@ function buildCaps() {
   capGroup.clear();
   const wanted = [
     ...(S.lo[0] > 0 ? [[0, S.lo[0], -1]] : []), ...(S.hi[0] < 100 ? [[0, S.hi[0], 1]] : []),
-    ...(S.lo[1] > 0 ? [[1, S.lo[1], -1]] : []), ...(S.hi[1] < 40 ? [[1, S.hi[1], 1]] : []),
+    ...(S.lo[1] > 0 ? [[1, S.lo[1], -1]] : []), ...(S.hi[1] < BOUND_MAX[1] - 1e-9 ? [[1, S.hi[1], 1]] : []),
     ...(S.hue[0] === 0 && S.hue[1] === 360 ? [] : [[2, S.hue[0], -1], [2, S.hue[1], 1]]),
   ];
   for (const [kind, v, sign] of wanted) {
@@ -2492,6 +2498,21 @@ addEventListener('keydown', (e) => {
  * not the slider. The clamp is the same reason: without it, scrolling past
  * the end kept counting in S.slice while the slider sat pinned at its max.
  */
+/**
+ * Retune the chroma bound to a new gamut. A bound parked at the old ceiling
+ * meant "no bound", so it follows the ceiling up or down rather than staying at
+ * a number that now means something; anything else is just clamped.
+ */
+function setChromaCeiling(max) {
+  const was = BOUND_MAX[1];
+  if (max === was) return;
+  BOUND_MAX[1] = max;
+  for (const id of ['cmin', 'cmax']) { $(id).max = max; $(id).step = 'any'; }
+  if (S.hi[1] >= was - 1e-9) S.hi[1] = max; else S.hi[1] = Math.min(S.hi[1], max);
+  S.lo[1] = Math.min(S.lo[1], S.hi[1]);
+  capKey = null;
+}
+
 const setSlice = (k, v) => {
   S.slice[k] = Math.min(FRAME.hi[k], Math.max(FRAME.lo[k], +v));
   $(['sL', 'sA', 'sB'][k]).value = S.slice[k];
@@ -2685,6 +2706,14 @@ wheel.addEventListener('pointermove', (e) => {
 wheel.addEventListener('pointerup', () => { wheelDrag = null; });
 wheel.addEventListener('dblclick', () => { S.hue = [0, 360]; boundsChanged(); });
 
+/**
+ * Lightness always spans 0..100; chroma spans whatever the GAMUT reaches, which
+ * is not a constant — sRGB stops near 32, Rec.2020 at 47, ProPhoto past 148. A
+ * fixed ceiling of 40 meant the slider could not express "no chroma bound" on
+ * the wide gamuts: the shell shader cuts every fragment above the bound, and
+ * buildCaps treats a bound sitting AT the ceiling as inactive, so anything past
+ * 40 was sliced away and left uncapped. On ProPhoto that is most of the solid.
+ */
 const BOUND_MAX = [100, 40];
 /** hard-stop gradient over [0,1] spans, so one code path draws both a plain
  *  band and the two pieces a wrapped hue arc splits into */
