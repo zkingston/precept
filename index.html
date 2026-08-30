@@ -46,26 +46,24 @@
   #huewheel { cursor:crosshair; touch-action:none; }
   /* tools live over the viewport, where the things they make are */
   #tool { position:absolute; top:12px; right:12px; display:flex; gap:4px; }
-  #tip { position:absolute; right:14px; bottom:14px; display:flex; align-items:flex-start; gap:6px; }
-  #tipcard { background:#1c1c20ee; border:1px solid var(--line); border-radius:6px; padding:7px; }
-  #tip[data-open=false] #tipcard { display:none; }
+  #tip { position:absolute; right:14px; bottom:14px; padding:7px;
+         background:#1c1c20ee; border:1px solid var(--line); border-radius:6px; }
   #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
   #tipbtns { display:flex; gap:4px; margin-top:6px; }
   #tipbtns button { flex:1; font-size:10px; padding:2px 0; }
   #tipbtns button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
   #hist { position:absolute; top:12px; right:130px; display:flex; gap:4px; }
   #hist button:disabled { opacity:.3; cursor:default; }
-  #tool button, #graybtn, #hist button, #tiptoggle { width:34px; height:34px; padding:0; display:grid; place-items:center;
+  #tool button, #graybtn, #hist button { width:34px; height:34px; padding:0; display:grid; place-items:center;
     background:#26262bd9; border:1px solid var(--line); border-radius:5px; cursor:pointer;
     color:var(--fg); font-size:15px; line-height:1; }
-  #tool button:hover, #graybtn:hover, #hist button:not(:disabled):hover, #tiptoggle:hover { background:#32323ae6; }
-  #tool button[aria-pressed=true], #graybtn[aria-pressed=true], #tiptoggle[aria-pressed=true] {
-    background:#3d5a6c; border-color:#5f8ba6; }
+  #tool button:hover, #graybtn:hover, #hist button:not(:disabled):hover { background:#32323ae6; }
+  #tool button[aria-pressed=true], #graybtn[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
   #tool svg { width:19px; height:19px; fill:none; stroke:var(--fg); stroke-width:1.5;
     stroke-linecap:round; stroke-linejoin:round; }
   /* the button strip hangs 52px off the plot's right edge, so this is the
-     preview's 318px plus a gap plus that strip */
-  #lplot { position:absolute; bottom:14px; right:400px; height:106px; }
+     preview's 278px plus a gap plus that strip */
+  #lplot { position:absolute; bottom:14px; right:360px; height:106px; }
   #lcanvas { width:100%; height:100%; display:block; cursor:ns-resize; touch-action:none; }
   /* outside the plot's right edge: inside, they sat exactly where the curve
      ends up once lightness rises to the right */
@@ -131,12 +129,9 @@
 <div id="app">
   <main>
     <canvas id="gl"></canvas>
-    <div id="tip" data-open="true">
-      <button id="tiptoggle" aria-pressed="true" title="test image preview">▦</button>
-      <div id="tipcard">
-        <canvas id="tipcanvas" width="264" height="128"></canvas>
-        <div id="tipbtns"></div>
-      </div>
+    <div id="tip">
+      <canvas id="tipcanvas" width="264" height="128"></canvas>
+      <div id="tipbtns"></div>
     </div>
     <div id="hist">
       <button id="undo" title="undo · ctrl+Z">↶</button>
@@ -278,7 +273,7 @@ const S = {
   shell: 0.8, sliceOp: 0.8, rad: 12, rate: 0.3, pinEnds: true,
   bg: '#f0ead6', lock: true, planes3d: false, hard: true,
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection colour format
-  tip: true, tipKind: 'sineramp',                // test-image preview
+  tipKind: 'sineramp',                           // which test image is showing
   lprof: [],                                     // target lightness profile, evenly spaced along t
   hprof: [],                                     // target hue profile, UNWRAPPED degrees
   plot: 'L',                                     // which of the two the plot is showing
@@ -1149,7 +1144,6 @@ const lutOf = (n) => (S.mode === 'continuous' && S.pts.length >= 2 ? resample(cu
   .map((p) => rgb(S.gray ? [p[0], 0, 0] : p).map((c) => Math.round(255 * c)));
 
 function drawTest() {
-  if (!S.tip) return;
   const W = tipc.width, H = tipc.height;
   const kind = TESTS[S.tipKind]?.mode === S.mode ? S.tipKind
              : Object.keys(TESTS).find((k) => TESTS[k].mode === S.mode);
@@ -1194,11 +1188,6 @@ function drawScatter(W, H, lut) {
 $('tipbtns').onclick = (e) => {
   const k = e.target.dataset.tip;
   if (k) { S.tipKind = k; drawTest(); }
-};
-$('tiptoggle').onclick = () => {
-  S.tip = !S.tip;
-  $('tip').dataset.open = S.tip; $('tiptoggle').ariaPressed = S.tip;
-  drawTest();
 };
 
 // ─── export ──────────────────────────────────────────────────────────────────
@@ -2566,7 +2555,6 @@ function mirror() {
   $('pinends').checked = S.pinEnds; $('hard').checked = S.hard;
   $('exportfmt').value = S.fmt; $('colorfmt').value = S.cfmt;
   $('hex').placeholder = COLORFMT[S.cfmt].hint;
-  $('tip').dataset.open = S.tip; $('tiptoggle').ariaPressed = S.tip;
   $('sevv').textContent = S.sev.toFixed(1);
   $('shellv').textContent = S.shell.toFixed(2).slice(1);
   $('spacesel').value = params.space; $('gamutsel').value = params.gamut;
