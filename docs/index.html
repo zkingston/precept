@@ -87,7 +87,7 @@
   label.f { flex:0 0 68px; color:var(--dim); }
   input[type=range] { flex:1; min-width:0; accent-color:#7dd3fc; }
   .v { width:32px; text-align:right; font-variant-numeric:tabular-nums; }
-  select, button, textarea { background:#26262b; color:var(--fg); border:1px solid var(--line);
+  select, button { background:#26262b; color:var(--fg); border:1px solid var(--line);
                              border-radius:4px; padding:4px 6px; font:inherit; }
   button { cursor:pointer; } button:hover { background:#32323a; }
   .seg { display:flex; } .seg button { border-radius:0; flex:1; }
@@ -121,7 +121,6 @@
   #metrics input.w:disabled { opacity:.3; }
   #metrics td.btns { width:52px; text-align:right; white-space:nowrap; padding-left:6px; }
   #metrics td.btns button { padding:0 5px; font:11px/1.5 ui-monospace,monospace; margin-left:3px; }
-  textarea { width:100%; height:76px; font:11px/1.4 ui-monospace,monospace; resize:vertical; }
   code { color:#9fd; }
   .note { color:var(--dim); font-size:11px; }
 </style>
@@ -239,8 +238,7 @@
         <input type="file" id="scenefile" accept=".json,application/json" hidden></div>
       <div class="row"><label class="f">format</label><select id="exportfmt" style="flex:1"></select></div>
       <div class="row"><button id="copypy" style="flex:1">copy</button>
-        <button id="savepy" style="flex:1">save</button></div>
-      <textarea id="export" readonly></textarea></section>
+        <button id="savepy" style="flex:1">save</button></div></section>
   </aside>
 </div>
 
@@ -1106,7 +1104,6 @@ function sidebar() {
     plane: 'double-click a slice panel to cut · drag the centre to slide, the tip to rotate' }[S.tool];
 
   drawPlot();
-  $('export').value = FORMATS[S.fmt].gen();
   drawTest();
 }
 
@@ -1356,9 +1353,7 @@ $('copypy').onclick = async (e) => {
   e.target.textContent = 'copied';
   setTimeout(() => (e.target.textContent = 'copy'), 900);
 };
-const repaintExport = () => ($('export').value = FORMATS[S.fmt].gen());
-$('scenename').oninput = repaintExport;
-$('exportfmt').onchange = (e) => { S.fmt = e.target.value; repaintExport(); };
+$('exportfmt').onchange = (e) => { S.fmt = e.target.value; };
 
 // ─── the selection, in whichever notation you think in ───────────────────────
 // LCh and oklch() read the CHART directly and are not gamut-mapped, so they
@@ -2263,7 +2258,7 @@ canvas.addEventListener('pointermove', (e) => {
 canvas.addEventListener('pointerup', () => { drag = null; });
 
 addEventListener('keydown', (e) => {
-  if (/^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName)) return;   // the field's own undo wins
+  if (/^(INPUT|SELECT)$/.test(e.target.tagName)) return;   // the field's own undo wins
   const z = (e.ctrlKey || e.metaKey) && e.key.toLowerCase();
   if (z === 'z' || z === 'y') { e.preventDefault(); return z === 'y' || e.shiftKey ? redo() : undo(); }
   if (e.key === 'r' && hovered?.axis !== undefined) { resetView(hovered.cam); return; }
