@@ -62,12 +62,24 @@ path across all of them.
   *reachable*, the screen stays sRGB.
 - **Spaces** — Oklab, CIELAB, CIELUV, IPT, XYZ, sRGB. A change of chart: points
   live in the chart, so switching view never moves a palette.
-- **Constraints** — keep-out spheres and halfplanes, lightness/chroma bounds,
-  and a hard gamut projection applied wherever state becomes geometry.
-- **Optimisation** — numeric gradients over the control points, per term or
-  combined, with pinnable endpoints.
+- **Constraints** — keep-out spheres, rotatable halfplanes, lightness/chroma/hue
+  bounds shaded into the views, and a hard gamut projection applied wherever
+  state becomes geometry.
+- **Optimisation** — Adam over the control points, one step at a time or run
+  continuously, with per-term enable and weight, and pinnable endpoints.
 
 ## Status
 
-The optimiser takes single steps at a fixed rate; there is no line search and no
-solver loop yet. Relative term weights would be the next knob.
+Adam runs over the control points, either stepped or continuous. Each term's
+gradient is normalised before weighting, so a weight is a relative pull rather
+than a number that has to fight the term's units — these objectives span four
+orders of magnitude, and an unnormalised sum is just the largest one.
+
+Gradients are numeric (central differences over 3n coordinates), which is the
+dominant cost and caps the solver at roughly ten iterations a second; analytic
+gradients for the cheap terms are the obvious next win.
+
+Reconstructing a known colormap from its endpoints reproduces every property it
+was designed around — lightness linearity, monotonicity, CVD separation — but
+not its hue path, which was a human choice and has to be supplied as a
+constraint. With one hue arc, mean ΔE to viridis drops from 16.2 to 6.2.

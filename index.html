@@ -28,7 +28,7 @@
   /* no native dual range exists, so stack two: tracks inert, thumbs live */
   .dual { position:relative; flex:1; height:18px; min-width:0; }
   .dual::before { content:''; position:absolute; left:0; right:0; top:8px; height:3px; border-radius:2px; background:#3a3a42; }
-  .dual .fill { position:absolute; top:8px; height:3px; border-radius:2px; background:#7dd3fc; }
+  .dual .fill { position:absolute; left:0; right:0; top:8px; height:3px; border-radius:2px; }
   .dual input { position:absolute; inset:0; width:100%; height:18px; margin:0; background:none;
                 pointer-events:none; -webkit-appearance:none; appearance:none; }
   .dual input::-webkit-slider-thumb { pointer-events:auto; -webkit-appearance:none; appearance:none;
@@ -69,6 +69,14 @@
   table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
   td { padding:2px 0; } td:first-child { color:var(--dim); } td:last-child { text-align:right; }
   td.warn { color:var(--hot); }
+  #metrics td:nth-child(2) { white-space:nowrap; }
+  #metrics td.w { width:40px; padding-left:4px; }
+  #metrics input.w { width:38px; background:#26262b; color:var(--fg); border:1px solid var(--line);
+    border-radius:3px; padding:1px 3px; font:11px ui-monospace,monospace; text-align:right;
+    -moz-appearance:textfield; appearance:textfield; }
+  #metrics input.w::-webkit-outer-spin-button, #metrics input.w::-webkit-inner-spin-button {
+    -webkit-appearance:none; margin:0; }
+  #metrics input.w:disabled { opacity:.3; }
   #metrics td.btns { width:52px; text-align:right; white-space:nowrap; padding-left:6px; }
   #metrics td.btns button { padding:0 5px; font:11px/1.5 ui-monospace,monospace; margin-left:3px; }
   textarea { width:100%; height:76px; font:11px/1.4 ui-monospace,monospace; resize:vertical; }
@@ -157,13 +165,19 @@
           <input type="range" id="cmin" min="0" max="40" step="0.5" value="0">
           <input type="range" id="cmax" min="0" max="40" step="0.5" value="40"></span>
         <span class="v" style="width:56px" id="cboundv">0–40</span></div>
+      <div class="row"><label class="f">hue</label>
+        <span class="dual" id="hdual"><span class="fill"></span>
+          <input type="range" id="hmin" min="0" max="360" step="1" value="0">
+          <input type="range" id="hmax" min="0" max="360" step="1" value="360"></span>
+        <span class="v" style="width:56px" id="hboundv">any</span></div>
     </section>
 
     <section><h2>Metrics</h2><table id="metrics"></table>
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
         <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span></div>
       <div class="row"><label class="chk"><input type="checkbox" id="pinends">lock endpoints</label></div>
-      <div class="row"><button id="steptotal" style="flex:1">step all checked terms</button></div>
+      <div class="row"><button id="steptotal" style="flex:1">step once</button>
+        <button id="run" style="flex:1">run Adam</button></div>
     </section>
     <section><h2>Export</h2><textarea id="export" readonly></textarea></section>
   </aside>
@@ -199,6 +213,7 @@ const S = {
   obs: [],
   planes: [],                                    // {n, d} in SPACE coords; n·c > d is excluded
   lo: [0, 0], hi: [100, 40],                     // lightness and chroma bounds, in CHART units
+  hue: [0, 360],                                 // allowed hue arc, degrees, counterclockwise lo→hi
   sel: null,                                     // {kind:'pt'|'obs'|'plane', i}
 };
 let view = NORMAL;
@@ -232,10 +247,29 @@ function reframe() {
     el.min = lo[cut]; el.max = hi[cut]; el.step = (hi[cut] - lo[cut]) / 500;
   });
 }
-/** Inside the lightness and chroma bounds? Both are chart quantities. */
+const hueOf = (p) => ((Math.atan2(p[2], p[1]) * 180) / Math.PI + 360) % 360;
+const angGap = (x, y) => { const t = Math.abs(x - y) % 360; return Math.min(t, 360 - t); };
+
+/** Hue is a circle, so the allowed arc runs lo→hi counterclockwise and may wrap
+ *  through 0°. Magma's corridor does exactly that, so a non-wrapping range
+ *  would not have been able to express it. */
+const inHueArc = (h) => {
+  const [lo, hi] = S.hue;
+  if (hi - lo >= 360 || (lo === 0 && hi === 360)) return true;
+  return lo <= hi ? h >= lo && h <= hi : h >= lo || h <= hi;
+};
+/** degrees off the arc; zero for near-neutrals, whose hue is not a real angle */
+const hueGap = (p) => {
+  const c = Math.hypot(p[1], p[2]);
+  if (c < 1) return 0;
+  const h = hueOf(p);
+  return inHueArc(h) ? 0 : Math.min(angGap(h, S.hue[0]), angGap(h, S.hue[1]));
+};
+
+/** Inside the lightness, chroma and hue bounds? All three are chart quantities. */
 const inBounds = (p) => {
   const c = Math.hypot(p[1], p[2]);
-  return p[0] >= S.lo[0] && p[0] <= S.hi[0] && c >= S.lo[1] && c <= S.hi[1];
+  return p[0] >= S.lo[0] && p[0] <= S.hi[0] && c >= S.lo[1] && c <= S.hi[1] && hueGap(p) === 0;
 };
 
 /** on-screen appearance: gamut-map, then push through the colour-vision view */
@@ -647,12 +681,12 @@ function sidebar() {
   if (pal.length >= 2) {
     const worst = minSeparation(pal, M(), criteria());
     rows.push([`min Δ · ${observer()}`, minSeparation(pal, M(), [primary()]).toFixed(1)],
-      ['min Δ · worst case', worst.toFixed(1), worst < 8]);
+      ['min Δ · worst', worst.toFixed(1), worst < 8]);
   }
   if (S.mode === 'continuous' && S.pts.length >= 2) {
     const c = curve(), bad = c.filter((p) => !inGamut(p)).length;
     rows.push(['perceived end-to-end', perceive(arcLength(c, M())).toFixed(1)],
-      ['out of gamut', `${bad} / ${c.length}`, bad > 0]);
+      ['out of gamut', `${bad}/${c.length}`, bad > 0]);
   }
   if (S.obs.length) {
     const probe = S.mode === 'continuous' && S.pts.length >= 2 ? curve() : pal;
@@ -669,9 +703,11 @@ function sidebar() {
   $('metrics').innerHTML = rows.map(([k, v, warn, obj]) =>
     `<tr><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}</td>` +
     `<td class="${warn ? 'warn' : ''}">${v}</td>` +
-    (obj ? `<td class="btns"><button data-obj="${obj}" data-dir="1" title="descend">−</button>`
+    (obj ? `<td class="w"><input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
+         + ` value="${S.w[obj]}"${S.on[obj] ? '' : ' disabled'} title="relative pull in the combined step"></td>`
+         + `<td class="btns"><button data-obj="${obj}" data-dir="1" title="descend">−</button>`
          + `<button data-obj="${obj}" data-dir="-1" title="ascend">+</button></td>`
-         : '<td class="btns"></td>') + '</tr>').join('');
+         : '<td class="w"></td><td class="btns"></td>') + '</tr>').join('');
 
   const s = S.sel;
   $('selpanel').style.display = s ? '' : 'none';
@@ -773,7 +809,7 @@ const planePenalty = (p) => {
 
 const OBJ = [
   { key: 'rep', label: () => `repulsion · ${observer()}`, f: (x) => repulsion(x.pal, [primary()]) },
-  { key: 'repcvd', label: () => `repulsion · ${S.cvd === 'none' ? 'all observers' : 'normal + ' + S.cvd}`,
+  { key: 'repcvd', label: () => `repulsion · ${S.cvd === 'none' ? 'all' : '+' + S.cvd}`,
     f: (x) => repulsion(x.pal, criteria()) },
   { key: 'arc', label: 'arc length', mode: 'continuous', f: (x) => arcLength(x.curve, M()) },
   { key: 'obs', label: 'obstacle cost', bad: true, f: (x) => x.probe.reduce((a, p) => a + obstaclePenalty(p, S.obs, M(), primary()), 0) },
@@ -806,7 +842,61 @@ const OBJ = [
    * exactly when resampling in a non-perceptual space has bunched the steps,
    * and when curvature makes chords shorter than the arcs they subtend.
    */
-  { key: 'unif', label: 'perceptual uniformity', bad: true,
+  /**
+   * Lightness linear in the palette index — stronger than monotone, and the
+   * property the matplotlib maps were actually built around. Measured against
+   * the line through the ramp's own endpoints, so it does not care which way
+   * the ramp runs or how far it travels.
+   */
+  { key: 'lramp', label: 'lightness ramp', bad: true, mode: 'continuous',
+    f: (x) => {
+      const P = x.pal, n = P.length;
+      if (n < 3) return 0;
+      const [a, b] = [P[0][0], P[n - 1][0]];
+      return P.reduce((e, p, i) => e + (p[0] - (a + ((b - a) * i) / (n - 1))) ** 2, 0) / n;
+    } },
+  /**
+   * Chroma aims at the middle of the band rather than climbing as high as the
+   * gamut allows. Maximising was measurably the wrong prior: viridis's chroma
+   * DIPS through the middle of the ramp (14→8→19) while a maximiser pushes it
+   * up (14→22→19). A target plus the gamut penalty reproduces a dip or an arc
+   * on its own, because the reachable chroma varies with lightness and hue —
+   * the profile falls out of the constraint rather than being asked for.
+   */
+  { key: 'chroma', label: 'chroma target',
+    f: (x) => {
+      const t = (S.lo[1] + S.hi[1]) / 2;
+      return x.pal.reduce((e, p) => e + (Math.hypot(p[1], p[2]) - t) ** 2, 0) / x.pal.length;
+    } },
+  { key: 'hb', label: 'hue bounds', bad: true,
+    // weighted by chroma so it is a distance in the chart, not an angle: being
+    // 40° off the arc barely matters at chroma 2 and matters a lot at chroma 20
+    f: (x) => x.probe.reduce((e, p) => e + ((Math.hypot(p[1], p[2]) * hueGap(p) * Math.PI) / 180) ** 2, 0) },
+  /**
+   * Keeps consecutive control points evenly spaced, and repels them apart when
+   * they bunch. Σ(d̄/dᵢ) − n, not the variance of the segment lengths: variance
+   * is minimised by every segment being equal AND ZERO, so it would happily
+   * collapse the whole trajectory onto a point. The ratio form is minimised at
+   * even spacing by AM–HM, blows up as any single segment closes, and is scale
+   * invariant — so it fights bunching without also fighting `arc length` over
+   * how long the ramp should be. Zero exactly when the waypoints are even.
+   *
+   * ponytail: scale invariance cuts both ways. It cannot see a UNIFORM collapse
+   * — every segment shrinking together leaves the ratios at 1 and the term at
+   * zero — so the overall scale has to be held by something else: pinned
+   * endpoints, or simply not descending arc length. It stops relative bunching,
+   * which is the failure this term exists for, and nothing more.
+   */
+  { key: 'space', label: 'waypoint spacing', mode: 'continuous',
+    f: (x) => {
+      const P = x.pts, n = P.length - 1;
+      if (n < 2) return 0;
+      const g = M(), d = [];
+      for (let i = 0; i < n; i++) d.push(Math.max(0.05, segLength(P[i], P[i + 1], g)));
+      const mean = d.reduce((a2, b) => a2 + b, 0) / n;
+      return d.reduce((a2, b) => a2 + mean / b, 0) - n;
+    } },
+  { key: 'unif', label: 'uniformity', bad: true,
     f: (x) => {
       const P = x.pal, v = primary();
       if (P.length < 3) return 0;
@@ -818,7 +908,9 @@ const OBJ = [
 ];
 
 /** Terms included in the combined step. Constraints on, shaping opt-in. */
-S.on = Object.fromEntries(OBJ.map((o) => [o.key, o.key !== 'rep' && o.key !== 'arc']));
+S.on = Object.fromEntries(OBJ.map((o) => [o.key, !['rep', 'arc', 'chroma'].includes(o.key)]));
+/** Relative pull of each term in the combined step. */
+S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
 
 const STEP_MAX = 4;        // chart units moved by the largest component at rate 1
 
@@ -827,12 +919,13 @@ const STEP_MAX = 4;        // chart units moved by the largest component at rate
  * once. Each perturbation builds ONE context and every term reads it, so a
  * combined step costs barely more than a single-term one.
  *
- * Each term's gradient is normalised to unit max before the terms are summed.
- * That is a deliberate choice and not the gradient of Σf: these objectives span
- * four orders of magnitude, so an honest sum is simply the plane-cost gradient
- * with rounding noise attached. Normalising first gives every enabled term an
- * equal say in the direction, which is what "step all of them at once" has to
- * mean to be useful. Relative weights would be the next knob, not a fix.
+ * Each term's gradient is normalised to unit max and then scaled by its weight
+ * before the terms are summed. The normalisation is deliberate and this is not
+ * the gradient of Σ wᵢfᵢ: these objectives span four orders of magnitude, so an
+ * honest sum is simply the plane-cost gradient with rounding noise attached.
+ * Normalising first puts every term on the same footing; the weight then says
+ * how hard each one pulls, in units anyone can reason about — weight 2 against
+ * weight 1 is twice the pull, whatever the term happens to measure in.
  *
  * A pinned endpoint is a variable removed from the problem, not a move undone
  * afterwards: its gradient is never formed, so it cannot skew the normalisation
@@ -853,11 +946,12 @@ function gradientOf(terms) {
     }
   }
   const total = base.map(() => [0, 0, 0]);
-  for (const g of per) {
+  per.forEach((g, m) => {
     const mx = Math.max(...g.flat().map(Math.abs));
-    if (!Number.isFinite(mx) || mx === 0) continue;          // flat term: no opinion
-    g.forEach((row, i) => row.forEach((v, k) => { total[i][k] += v / mx; }));
-  }
+    if (!Number.isFinite(mx) || mx === 0) return;            // flat term: no opinion
+    const w = S.w[terms[m].key] / mx;
+    g.forEach((row, i) => row.forEach((v, k) => { total[i][k] += v * w; }));
+  });
   return { base, total };
 }
 
@@ -874,7 +968,65 @@ function stepBy(terms, dir) {
 }
 
 const stepAlong = (obj, dir) => stepBy([obj], dir);
-const activeTerms = () => OBJ.filter((o) => S.on[o.key] && (!o.mode || o.mode === S.mode));
+
+/**
+ * Adam over the control points. `gradientOf` already returns the weighted sum
+ * of unit-normalised term gradients, so what Adam adds on top is per-coordinate
+ * step sizing — which is precisely what the fixed-rate stepper lacked: a heavily
+ * weighted term used to bulldoze the others, because every coordinate moved by
+ * the same amount regardless of how confident the gradient was there.
+ *
+ * Moments are reset whenever the problem changes shape under them (a point
+ * added or removed), since a stale moment for a coordinate that no longer means
+ * the same thing is worse than no moment at all.
+ */
+const ADAM = { b1: 0.9, b2: 0.999, eps: 1e-8, lr: 1.2 };
+let adam = null;
+const adamReset = () => { adam = { m: S.pts.map(() => [0, 0, 0]), v: S.pts.map(() => [0, 0, 0]), t: 0 }; };
+
+function adamStep() {
+  const terms = activeTerms();
+  if (!terms.length || !S.pts.length) return false;
+  if (!adam || adam.m.length !== S.pts.length) adamReset();
+  const { base, total } = gradientOf(terms);
+  adam.t++;
+  const lr = S.rate * ADAM.lr;
+  let moved = 0;
+  S.pts = base.map((p, i) => p.map((val, k) => {
+    const g = total[i][k];
+    adam.m[i][k] = ADAM.b1 * adam.m[i][k] + (1 - ADAM.b1) * g;
+    adam.v[i][k] = ADAM.b2 * adam.v[i][k] + (1 - ADAM.b2) * g * g;
+    const mh = adam.m[i][k] / (1 - ADAM.b1 ** adam.t);
+    const vh = adam.v[i][k] / (1 - ADAM.b2 ** adam.t);
+    const d = (lr * mh) / (Math.sqrt(vh) + ADAM.eps);
+    moved = Math.max(moved, Math.abs(d));
+    return val - d;
+  }));
+  return moved;
+}
+
+let running = false, tick = 0;
+function solve() {
+  if (!running) return;
+  const moved = adamStep();
+  // the sidebar rebuilds its whole table and re-evaluates every term, which is
+  // far too much to do at solver rate; the views stay live, the numbers lag
+  sync({ light: ++tick % 8 !== 0 });
+  if (moved === false) return stopSolver();
+  requestAnimationFrame(solve);
+}
+function startSolver() {
+  if (running) return;
+  running = true; tick = 0; adamReset();
+  $('run').textContent = 'stop'; $('run').style.background = '#6c3030';
+  requestAnimationFrame(solve);
+}
+function stopSolver() {
+  running = false;
+  $('run').textContent = 'run Adam'; $('run').style.background = '';
+  sync();
+}
+const activeTerms = () => OBJ.filter((o) => S.on[o.key] && S.w[o.key] > 0 && (!o.mode || o.mode === S.mode));
 
 // ─── minimap: the standard RGB colour triangle ───────────────────────────────
 // Linear r:g:b normalised to sum 1, plotted barycentrically. Lightness divides
@@ -1029,14 +1181,16 @@ function select(sel) {
  * penalty term still has work to do on the curve samples.
  */
 const constrain = () => { S.pts = S.pts.map((p) => toGamut(p)); };
+/** hand edits make the accumulated moments meaningless */
+const disturb = () => { if (adam) adam = null; };
 
 /** Rebuild whatever the change touched. Small enough to be blunt about it. */
-function sync({ colors = false } = {}) {
+function sync({ colors = false, light = false } = {}) {
   constrain();
   if (colors) { paintShell(); slices.forEach((s) => (s.key = null)); miniKey = null; }
   slices.forEach(paintSlice);
   buildTube(); buildPoints(); buildObstacles(); buildPlanes();
-  sidebar();
+  if (!light) sidebar();
 }
 
 // ─── picking: one path for all four panels ───────────────────────────────────
@@ -1099,6 +1253,7 @@ canvas.addEventListener('dblclick', (e) => {
     S.planes.push({ n, d: S.slice[q.axis] });                   // excludes n·c > d; flip in the panel
     select({ kind: 'plane', i: S.planes.length - 1 });
   } else select({ kind: 'pt', i: addPoint(p) });
+  disturb();
   sync();
 });
 
@@ -1142,6 +1297,7 @@ canvas.addEventListener('pointermove', (e) => {
   } else if (drag.kind === 'pt') S.pts[drag.i] = p;
   else S.obs[drag.i].c = p;
   if (S.lock && drag.kind === 'pt') setSlices(p);
+  disturb();
   sync();
 });
 
@@ -1214,7 +1370,14 @@ $('metrics').onclick = (e) => {
   if (obj) stepAlong(OBJ.find((o) => o.key === obj), +e.target.dataset.dir);
   if (on) { S.on[on] = e.target.checked; sidebar(); }
 };
+// no re-render on input: the table is rebuilt from S.w anyway, and rebuilding
+// under the cursor would take the field's focus away mid-number
+$('metrics').oninput = (e) => {
+  const k = e.target.dataset?.w;
+  if (k) S.w[k] = Math.max(0, +e.target.value || 0);
+};
 $('steptotal').onclick = () => stepBy(activeTerms(), 1);
+$('run').onclick = () => (running ? stopSolver() : startSolver());
 $('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1); };
 $('pinends').onchange = (e) => { S.pinEnds = e.target.checked; };
 $('flip').onclick = () => {
@@ -1224,25 +1387,43 @@ $('flip').onclick = () => {
   sync();
 };
 const BOUND_MAX = [100, 40];
+/** hard-stop gradient over [0,1] spans, so one code path draws both a plain
+ *  band and the two pieces a wrapped hue arc splits into */
+const fillCss = (spans) => {
+  const stops = ['transparent 0%'];
+  for (const [a, b] of spans) stops.push(`transparent ${a * 100}%`, `#7dd3fc ${a * 100}%`,
+    `#7dd3fc ${b * 100}%`, `transparent ${b * 100}%`);
+  return `linear-gradient(90deg, ${stops.join(',')}, transparent 100%)`;
+};
 function paintBounds() {
   [['ldual', 'lmin', 'lmax', 'lboundv', 0], ['cdual', 'cmin', 'cmax', 'cboundv', 1]]
     .forEach(([wrap, lo, hi, out, k]) => {
       $(lo).value = S.lo[k]; $(hi).value = S.hi[k];
       $(out).textContent = `${S.lo[k]}–${S.hi[k]}`;
-      const f = $(wrap).querySelector('.fill');
-      f.style.left = `${(100 * S.lo[k]) / BOUND_MAX[k]}%`;
-      f.style.right = `${100 - (100 * S.hi[k]) / BOUND_MAX[k]}%`;
+      $(wrap).querySelector('.fill').style.background =
+        fillCss([[S.lo[k] / BOUND_MAX[k], S.hi[k] / BOUND_MAX[k]]]);
     });
+  const [h0, h1] = S.hue;
+  $('hmin').value = h0; $('hmax').value = h1;
+  const all = h0 === 0 && h1 === 360;
+  $('hboundv').textContent = all ? 'any' : `${h0}–${h1}°`;
+  $('hdual').querySelector('.fill').style.background =
+    fillCss(all ? [[0, 1]] : h0 <= h1 ? [[h0 / 360, h1 / 360]] : [[0, h1 / 360], [h0 / 360, 1]]);
 }
+const boundsChanged = () => {
+  paintBounds();
+  slices.forEach((sl) => (sl.key = null));        // the shading is baked into the textures
+  sync({ colors: true });
+};
 [['lmin', 'lo', 0], ['lmax', 'hi', 0], ['cmin', 'lo', 1], ['cmax', 'hi', 1]].forEach(([id, side, k]) => {
   $(id).oninput = (e) => {
     S[side][k] = +e.target.value;
     if (S.lo[k] > S.hi[k]) S[side === 'lo' ? 'hi' : 'lo'][k] = S[side][k];   // thumbs never cross
-    paintBounds();
-    slices.forEach((sl) => (sl.key = null));      // the shading is baked into the textures
-    sync({ colors: true });
+    boundsChanged();
   };
 });
+// hue thumbs DO cross: crossing is how you ask for the arc through 0°
+['hmin', 'hmax'].forEach((id, j) => { $(id).oninput = (e) => { S.hue[j] = +e.target.value; boundsChanged(); }; });
 $('lock').onchange = (e) => { S.lock = e.target.checked; };
 $('planes3d').onchange = (e) => { S.planes3d = e.target.checked; setPlanes3d(); };
 const setPlanes3d = () => (S.planes3d ? cam3.layers.enable(3) : cam3.layers.disable(3));
