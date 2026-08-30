@@ -306,12 +306,6 @@ const hueGap = (p) => {
   return inHueArc(h) ? 0 : Math.min(angGap(h, S.hue[0]), angGap(h, S.hue[1]));
 };
 
-/** Inside the lightness, chroma and hue bounds? All three are chart quantities. */
-const inBounds = (p) => {
-  const c = Math.hypot(p[1], p[2]);
-  return p[0] >= S.lo[0] && p[0] <= S.hi[0] && c >= S.lo[1] && c <= S.hi[1] && hueGap(p) === 0;
-};
-
 /** on-screen appearance: gamut-map, then push through the colour-vision view */
 const rgb = (p) => toSRGB(view(toGamut(p, 'srgb'))).map(clamp01);
 const paint = (p) => `rgb(${rgb(p).map((c) => Math.round(255 * c)).join(' ')})`;
@@ -483,14 +477,13 @@ bool inArc(float h) {
   return uHue.x <= uHue.y ? (h >= uHue.x && h <= uHue.y) : (h >= uHue.x || h <= uHue.y);
 }
 
-/** dim factor for the lightness / chroma / hue bounds, from a chart point */
-float boundsDim(vec3 lab) {
+/** inside the lightness / chroma / hue bounds? */
+bool inBounds(vec3 lab) {
   float chroma = length(lab.yz);
   float hue = degrees(atan(lab.z, lab.y));
   hue = hue < 0.0 ? hue + 360.0 : hue;
-  bool ok = lab.x >= uLB.x && lab.x <= uLB.y && chroma >= uCB.x && chroma <= uCB.y
-            && (chroma < 1.0 || inArc(hue));
-  return ok ? 1.0 : 72.0 / 255.0;
+  return lab.x >= uLB.x && lab.x <= uLB.y && chroma >= uCB.x && chroma <= uCB.y
+         && (chroma < 1.0 || inArc(hue));
 }
 
 /** XYZ, through the selected observer, to something a monitor can show */
@@ -521,7 +514,10 @@ void main() {
   vec3 xyz = spaceToXyz(c);
   vec3 ling = uGamut * xyz;
   if (any(lessThan(ling, vec3(-1e-9))) || any(greaterThan(ling, vec3(1.0 + 1e-9)))) discard;
-  gl_FragColor = vec4(shown(xyz) * boundsDim(chartOf(xyz)), uOpacity);
+  // out of bounds is cut away rather than dimmed: what is left is exactly the
+  // set you asked for, with nothing to read past
+  if (!inBounds(chartOf(xyz))) discard;
+  gl_FragColor = vec4(shown(xyz), uOpacity);
 }`;
 
 // The solid is the gamut boundary, so there is nothing to test — every fragment
@@ -533,7 +529,37 @@ varying vec3 vPos;
 void main() {
   vec3 c = vec3(vPos.y / uScale + uMid.x, vPos.x / uScale + uMid.y, vPos.z / uScale + uMid.z);
   vec3 xyz = spaceToXyz(c);
-  gl_FragColor = vec4(shown(xyz) * boundsDim(chartOf(xyz)), uOpacity);
+  if (!inBounds(chartOf(xyz))) discard;
+  gl_FragColor = vec4(shown(xyz), uOpacity);
+}`;
+
+/**
+ * The caps. Cutting the shell by the bounds leaves a punctured surface, not a
+ * solid: the boundary of the feasible set is the in-bounds part of the gamut
+ * shell PLUS the parts of the bound surfaces lying inside the gamut. Those are
+ * the two lightness planes, the two chroma cylinders and the two hue
+ * half-planes, each carrying the same colour pipeline.
+ *
+ * A cap satisfies its own bound by construction, to within its tessellation,
+ * so testing it again would make the surface flicker along its own edge. Each
+ * cap is told which bound it is and skips exactly that test.
+ */
+const CAP_FRAG = COLOR_GLSL + `
+varying vec3 vPos;
+uniform int uCap;
+void main() {
+  vec3 c = vec3(vPos.y / uScale + uMid.x, vPos.x / uScale + uMid.y, vPos.z / uScale + uMid.z);
+  vec3 xyz = spaceToXyz(c);
+  vec3 ling = uGamut * xyz;
+  if (any(lessThan(ling, vec3(-1e-9))) || any(greaterThan(ling, vec3(1.0 + 1e-9)))) discard;
+  vec3 lab = chartOf(xyz);
+  float chroma = length(lab.yz);
+  float hue = degrees(atan(lab.z, lab.y));
+  hue = hue < 0.0 ? hue + 360.0 : hue;
+  if (uCap != 0 && (lab.x < uLB.x || lab.x > uLB.y)) discard;
+  if (uCap != 1 && (chroma < uCB.x || chroma > uCB.y)) discard;
+  if (uCap != 2 && chroma >= 1.0 && !inArc(hue)) discard;
+  gl_FragColor = vec4(shown(xyz), uOpacity);
 }`;
 
 const SLICE_VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }';
@@ -642,6 +668,88 @@ scene.add(shell);
 function paintShell() {
   setColorUniforms(shell.material.uniforms);
   shell.material.uniforms.uOpacity.value = S.shell;
+  buildCaps();
+  paintCaps();
+}
+
+// ─── caps: the feasible set's boundary where a bound cuts it ────────────────
+const capGroup = new T.Group();
+capGroup.layers.set(1);                            // part of the solid, so 3D only
+scene.add(capGroup);
+const CAP_N = 36, CAP_R = 60;
+let capKey = null;
+
+/** a point on cap `kind` at value v, parameterised over the unit square */
+const capChart = (kind, v, u, w) => {
+  if (kind === 0) return [v, (2 * u - 1) * CAP_R, (2 * w - 1) * CAP_R];        // L = v
+  if (kind === 1) { const h = u * 2 * Math.PI;                                  // chroma = v
+    return [w * 100, v * Math.cos(h), v * Math.sin(h)]; }
+  const h = (v * Math.PI) / 180;                                                // hue = v
+  return [w * 100, u * CAP_R * Math.cos(h), u * CAP_R * Math.sin(h)];
+};
+
+/**
+ * Which way is out of the feasible set, in the chart. `sign` is +1 for a cap
+ * on an upper bound and -1 for a lower one: leaving through the top of the
+ * lightness band means increasing L, leaving through the bottom means
+ * decreasing it, and likewise for chroma and for the two ends of the hue arc.
+ */
+const capOut = (kind, q, sign) => {
+  const h = Math.atan2(q[2], q[1]);
+  return kind === 0 ? [sign, 0, 0]
+       : kind === 1 ? [0, sign * Math.cos(h), sign * Math.sin(h)]
+       : [0, -sign * Math.sin(h), sign * Math.cos(h)];
+};
+
+function buildCaps() {
+  const key = `${S.lo}|${S.hi}|${S.hue}|${params.space}|${params.gamut}`;
+  if (key === capKey) return;
+  capKey = key;
+  capGroup.clear();
+  const wanted = [
+    ...(S.lo[0] > 0 ? [[0, S.lo[0], -1]] : []), ...(S.hi[0] < 100 ? [[0, S.hi[0], 1]] : []),
+    ...(S.lo[1] > 0 ? [[1, S.lo[1], -1]] : []), ...(S.hi[1] < 40 ? [[1, S.hi[1], 1]] : []),
+    ...(S.hue[0] === 0 && S.hue[1] === 360 ? [] : [[2, S.hue[0], -1], [2, S.hue[1], 1]]),
+  ];
+  for (const [kind, v, sign] of wanted) {
+    const pos = [], idx = [];
+    for (let j = 0; j <= CAP_N; j++) for (let i = 0; i <= CAP_N; i++)
+      pos.push(...wpt(capChart(kind, v, i / CAP_N, j / CAP_N)).toArray());
+    for (let j = 0; j < CAP_N; j++) for (let i = 0; i < CAP_N; i++) {
+      const o = j * (CAP_N + 1) + i;
+      idx.push(o, o + 1, o + CAP_N + 1, o + 1, o + CAP_N + 2, o + CAP_N + 1);
+    }
+    // The grid's u×v normal points outward on one cap of each pair and inward
+    // on the other, and world() mirrors it again — the same trap the shell
+    // hit. So measure it rather than predict it: compare one triangle against
+    // a step in the known outward direction, and reverse the winding if they
+    // disagree. Consistently outward is what lets these render BackSide.
+    const q = capChart(kind, v, 0.5, 0.5), d = capOut(kind, q, sign);
+    const outward = wpt(q.map((c, i) => c + 1e-3 * d[i])).sub(wpt(q));
+    const t0 = 6 * ((CAP_N / 2 | 0) * CAP_N + (CAP_N / 2 | 0));
+    const [A, B, C] = [0, 1, 2].map((k) => new T.Vector3().fromArray(pos, 3 * idx[t0 + k]));
+    if (B.sub(A).cross(C.sub(A)).dot(outward) < 0)
+      for (let t = 0; t < idx.length; t += 3) [idx[t + 1], idx[t + 2]] = [idx[t + 2], idx[t + 1]];
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    const m = new T.Mesh(g, new T.ShaderMaterial({
+      vertexShader: SHELL_VERT, fragmentShader: CAP_FRAG,
+      transparent: true, side: T.BackSide, depthWrite: false,
+      uniforms: { ...colorUniforms(), uCap: { value: kind } },
+    }));
+    m.layers.set(1);
+    m.renderOrder = 2;
+    capGroup.add(m);
+  }
+  paintCaps();
+}
+
+function paintCaps() {
+  for (const m of capGroup.children) {
+    setColorUniforms(m.material.uniforms);
+    m.material.uniforms.uOpacity.value = S.shell;
+  }
 }
 
 // ─── slice planes: evaluated per fragment on the GPU ────────────────────────
@@ -1882,6 +1990,8 @@ $('sB').oninput = (e) => setSlice(2, e.target.value);
 $('shell').oninput = (e) => {
   S.shell = +e.target.value; $('shellv').textContent = S.shell.toFixed(2).slice(1);
   shell.material.uniforms.uOpacity.value = S.shell; shell.visible = S.shell > 0;
+  capGroup.visible = S.shell > 0;
+  paintCaps();
 };
 $('bg').oninput = (e) => { S.bg = e.target.value; applyBg(); };
 $('sliceop').oninput = (e) => {
@@ -1890,12 +2000,12 @@ $('sliceop').oninput = (e) => {
 };
 $('gamutsel').onchange = (e) => {
   params.gamut = e.target.value;      // changes what is REACHABLE; the screen stays sRGB
-  reframe(); layout(); buildShell();  // the box the gamut occupies moved
+  reframe(); layout(); buildShell(); capKey = null;   // the box the gamut occupies moved
   sync({ colors: true });
 };
 $('spacesel').onchange = (e) => {
   params.space = e.target.value;      // a change of chart: no distance moves
-  reframe(); layout(); buildShell();
+  reframe(); layout(); buildShell(); capKey = null;
   S.slice = [...FRAME.mid];
   ['sL', 'sA', 'sB'].forEach((id, k) => ($(id).value = S.slice[k]));
   [$('vL'), $('vA'), $('vB')].forEach((el, k) => (el.textContent = S.slice[k].toFixed(0)));
