@@ -1072,7 +1072,8 @@ function sidebar() {
   // that end is against the page is worth knowing even when nothing optimises it.
   {
     const bg = fromHex(S.cbg);
-    const lo = pal.length ? Math.min(...pal.map((p) => contrastRatio(p, bg))) : null;
+    const set = S.mode === 'continuous' && S.pts.length >= 2 ? curve() : pal;
+    const lo = set.length ? Math.min(...set.map((p) => contrastRatio(p, bg))) : null;
     $('cnow').textContent = lo === null ? '–' : `${lo.toFixed(2)}:1`;
     $('cnow').style.color = lo !== null && lo < S.cmin ? 'var(--hot)' : '';
   }
@@ -1113,7 +1114,7 @@ function sidebar() {
     if (o.mode && o.mode !== S.mode) continue;
     const v = o.f(cx);
     rows.push([typeof o.label === 'function' ? o.label() : o.label,
-      v < 10 ? v.toFixed(2) : v.toFixed(0), !!o.bad && v > 0, o.key, HELP[o.key]]);
+      v < 10 ? v.toFixed(2) : v.toFixed(0), !!o.bad && v > WARN_EPS, o.key, HELP[o.key]]);
   }
   $('metrics').innerHTML = rows.map(([k, v, warn, obj, help]) => {
     // data-help, not title: the OS tooltip makes you wait a second to find out
@@ -1519,6 +1520,7 @@ function repulsion(P, views) {
   return e;                                        // the floor keeps coincident colours finite
 }
 
+const WARN_EPS = 0.005;    // below this a `bad` term reads 0.00, so do not flag it
 const LK = 9;                                    // knots in the editable profile
 
 /**
@@ -1627,7 +1629,6 @@ const HELP = {
   pair:     "Even perceived spacing over every pair, corrected for diminishing returns.",
   contr:    "Swatches under the contrast floor.",
   space:    "Control points bunched or unevenly spaced.",
-  unif:     "Unevenness of the perceived steps between swatches.",
 };
 
 const hinge = (v) => (v > 0 ? v : 0);
@@ -1790,22 +1791,16 @@ const OBJ = [
    * categorical palette needs. A floor asks only that nothing is unreadable and
    * leaves the rest of the palette alone once it is met.
    */
-  { key: 'contr', label: 'contrast floor', mode: 'discrete', bad: true,
+  { key: 'contr', label: 'contrast floor', bad: true,
     f: (x) => { const bg = fromHex(S.cbg);
-      return x.pal.reduce((a, p) => a + hinge(S.cmin - contrastRatio(p, bg)) ** 2, 0); } },
-  { key: 'unif', label: 'uniformity', bad: true,
-    f: (x) => {
-      const P = x.pal, v = primary();
-      if (P.length < 3) return 0;
-      const d = [];
-      for (let i = 1; i < P.length; i++) d.push(pd(v(P[i - 1]), v(P[i]), EUCLIDEAN));
-      const m = d.reduce((a, b) => a + b, 0) / d.length;
-      return d.reduce((a, b) => a + (b - m) ** 2, 0) / d.length;
-    } },
+      return x.probe.reduce((a, p) => a + hinge(S.cmin - contrastRatio(p, bg)) ** 2, 0); } },
+
 ];
 
 /** Terms included in the combined step. Constraints on, shaping opt-in. */
-S.on = Object.fromEntries(OBJ.map((o) => [o.key, o.key !== 'rep' && o.key !== 'unif']));
+// Shaping terms that fight the rest of the palette unless you ask for them.
+const OPT_IN = ['rep', 'contr'];
+S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
 /** Relative pull of each term in the combined step. */
 S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
 
@@ -2570,14 +2565,8 @@ $('metrics').onclick = (e) => {
 // no re-render on input: the table is rebuilt from S.w anyway, and rebuilding
 // under the cursor would take the field's focus away mid-number
 const REPULSIONS = ['rep', 'repcvd'];
-/**
- * Groups where running two members at once is incoherent rather than merely
- * redundant. The two uniformities are the second such pair: `uniformity` asks
- * for equal neighbour steps, which is only the right question if differences
- * compose additively, and `pairwise uniformity` exists because they do not.
- * Weighting both means optimising for and against the same assumption.
- */
-const EXCLUSIVE = [REPULSIONS, ['unif', 'pair']];
+/** Groups where running two members at once is incoherent, not just redundant. */
+const EXCLUSIVE = [REPULSIONS];
 const HELP_IDLE = 'hover a ? for what the term measures';
 $('termhelp').textContent = HELP_IDLE;
 $('metrics').onmouseover = (e) => {
