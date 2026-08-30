@@ -46,7 +46,7 @@
   #huewheel { cursor:crosshair; touch-action:none; }
   /* tools live over the viewport, where the things they make are */
   #tool { position:absolute; top:12px; right:12px; display:flex; gap:4px; }
-  #tip { position:absolute; right:14px; bottom:14px; padding:7px;
+  #tip { position:absolute; right:14px; top:88px; padding:7px;
          background:#1c1c20ee; border:1px solid var(--line); border-radius:6px; }
   #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
   #tipbtns { display:flex; gap:4px; margin-top:6px; }
@@ -61,16 +61,16 @@
   #tool button[aria-pressed=true], #graybtn[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
   #tool svg { width:19px; height:19px; fill:none; stroke:var(--fg); stroke-width:1.5;
     stroke-linecap:round; stroke-linejoin:round; }
-  /* the button strip hangs 52px off the plot's right edge, so this is the
-     preview's 278px plus a gap plus that strip */
-  #lplot { position:absolute; bottom:14px; right:360px; height:106px; }
-  #lcanvas { width:100%; height:100%; display:block; cursor:ns-resize; touch-action:none; }
-  /* outside the plot's right edge: inside, they sat exactly where the curve
-     ends up once lightness rises to the right */
-  #lbtns { position:absolute; right:-52px; top:50%; transform:translateY(-50%);
-           display:flex; flex-direction:column; gap:4px; }
-  #lbtns button { padding:1px 7px; font:10px ui-monospace,monospace; background:#26262bcc;
+  #lplot { position:absolute; bottom:14px; right:14px; height:126px; display:flex; gap:16px; }
+  .pplot { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  /* the controls sit above the plot rather than beside it: inside, they landed
+     exactly where the curve ends up once lightness rises to the right */
+  .phead { display:flex; align-items:center; gap:6px; height:18px;
+           font:10px ui-sans-serif,system-ui,sans-serif; color:var(--hud); }
+  .phead .pbtns { margin-left:auto; display:flex; gap:3px; }
+  .phead button { padding:1px 7px; font:10px ui-monospace,monospace; background:#26262bcc;
     color:var(--fg); border:1px solid var(--line); border-radius:3px; cursor:pointer; }
+  .pcanvas { flex:1; min-height:0; width:100%; display:block; cursor:ns-resize; touch-action:none; }
   #toolnote { position:absolute; top:52px; right:12px; max-width:340px; text-align:right;
     font:11px/1.4 ui-sans-serif,system-ui,sans-serif; color:var(--hud); pointer-events:none; }
   #hex { flex:1; min-width:0; font:12px ui-monospace,monospace; text-transform:lowercase; }
@@ -95,8 +95,8 @@
   .seg button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
 
   /* the output belongs next to the thing it came from, not in a side panel;
-     it sits clear of the toolbar above and the preview below */
-  #bar { position:absolute; right:14px; top:96px; bottom:202px; width:38px; min-height:130px;
+     it sits between the preview above and the profile plots below */
+  #bar { position:absolute; right:14px; top:270px; bottom:154px; width:38px; min-height:130px;
          display:flex; flex-direction:column; align-items:center; gap:6px; }
   #strip { width:100%; flex:1; min-height:0; display:block; border-radius:5px; border:1px solid #0004; }
   #swatches { display:flex; flex-direction:column-reverse; gap:3px; width:100%; flex:1; min-height:0; }
@@ -154,12 +154,19 @@
     </div>
     <div id="toolnote"></div>
     <div id="lplot">
-      <canvas id="lcanvas"></canvas>
-      <div id="lbtns">
-        <button data-p="axis" title="switch the plot between lightness and hue">L</button>
-        <button data-p="fit" title="target ← the ramp's current profile">fit</button>
-        <button data-p="p1">line</button>
-        <button data-p="p2">arch</button>
+      <div class="pplot" data-plot="L">
+        <div class="phead">
+          <label class="chk"><input type="checkbox" data-on="lramp">lightness profile</label>
+          <span class="pbtns"><button data-p="fit" title="target ← the ramp's current profile">fit</button>
+            <button data-p="p1"></button><button data-p="p2"></button></span>
+        </div><canvas class="pcanvas"></canvas>
+      </div>
+      <div class="pplot" data-plot="H">
+        <div class="phead">
+          <label class="chk"><input type="checkbox" data-on="hprof">hue profile</label>
+          <span class="pbtns"><button data-p="fit" title="target ← the ramp's current profile">fit</button>
+            <button data-p="p1"></button><button data-p="p2"></button></span>
+        </div><canvas class="pcanvas"></canvas>
       </div>
     </div>
     <div id="bar">
@@ -273,7 +280,6 @@ const S = {
   tipKind: 'sineramp',                           // which test image is showing
   lprof: [],                                     // target lightness profile, evenly spaced along t
   hprof: [],                                     // target hue profile, UNWRAPPED degrees
-  plot: 'L',                                     // which of the two the plot is showing
   slice: [55, 0, 0],                             // cut planes along L, a, b
   pts: [],                                       // filled from PRESETS below
   obs: [],
@@ -1103,7 +1109,7 @@ function sidebar() {
     obstacle: 'double-click a slice panel to place · drag the small handle to resize',
     plane: 'double-click a slice panel to cut · drag the centre to slide, the tip to rotate' }[S.tool];
 
-  drawPlot();
+  paintPlotButtons(); drawPlots();
   drawTest();
 }
 
@@ -1317,7 +1323,7 @@ function loadScene(text) {
   if (!o.planes?.every((x) => vec3(x.n) && Number.isFinite(x.d))) throw new Error('bad planes');
   if (!deepFinite(o)) throw new Error('scene contains a non-finite number');
   for (const [k, ok] of [['cvd', Object.keys(CVD_ID)], ['mode', menu('mode')],
-                         ['tool', menu('tool')], ['plot', ['L', 'H']]])
+                         ['tool', menu('tool')]])
     if (k in o && !ok.includes(o[k])) throw new Error(`bad ${k}: ${o[k]}`);
   // Validation can only reject what it thought to check, and anything it misses
   // throws halfway through the assignment below — leaving a half-loaded scene
@@ -1776,55 +1782,76 @@ function stopSolver() {
 const activeTerms = () => OBJ.filter((o) => S.on[o.key] && S.w[o.key] > 0 && (!o.mode || o.mode === S.mode));
 
 // ─── lightness plot: what the ramp does, and what you want it to do ─────────
-const lcanvas = $('lcanvas'), lctx = lcanvas.getContext('2d');
 const LPAD = { l: 26, r: 10, t: 10, b: 15 };
+
+/**
+ * The two profiles, side by side. They were one canvas with a toggle, which
+ * made them look like alternatives — but a ramp has a lightness shape AND a
+ * hue shape at the same time, and you edit one against the other. The axes are
+ * fixed at 0..100 and 0..360, never derived from the data: an axis that fits
+ * itself means dragging a knot up grows the range, so the next pixel is worth
+ * more than the last and the knot runs away from the cursor.
+ */
+const PLOTS = {
+  L: { key: 'lprof', term: 'lramp', lo: 0, hi: 100, ticks: [0, 50, 100], hue: false,
+       meas: (P) => P.map((p) => p[0]),
+       clamp: (v) => Math.min(100, Math.max(0, v)),          // lightness has ends
+       fit: lprofFit, p1: lprofLine, p2: lprofArch, labels: ['line', 'arch'],
+       tips: ['a straight ramp over the waypoints’ lightness range · double-click to reverse it',
+              'a tent, dark ends and light middle, for a diverging ramp · double-click for a dark middle'] },
+  H: { key: 'hprof', term: 'hprof', lo: 0, hi: 360, ticks: [0, 90, 180, 270, 360], hue: true,
+       meas: (P) => P.map(hueOf).map(norm360),
+       clamp: norm360,                                       // hue does not, so it wraps
+       fit: hprofFit, p1: hprofSweep, p2: hprofSplit, labels: ['sweep', 'split'],
+       tips: ['a steady turn from the first hue to the last · double-click to turn the other way',
+              'two hue plateaus meeting in the middle, for a diverging ramp'] },
+};
+for (const [id, p] of Object.entries(PLOTS)) {
+  p.root = document.querySelector(`.pplot[data-plot=${id}]`);
+  p.el = p.root.querySelector('canvas');
+  p.ctx = p.el.getContext('2d');
+  p.prof = () => S[p.key];
+}
+const PLOTLIST = Object.values(PLOTS);
+
+const lpx = (p, t) => LPAD.l + t * (p.el.clientWidth - LPAD.l - LPAD.r);
+const lpy = (p, v) => p.el.clientHeight - LPAD.b - ((v - p.lo) / (p.hi - p.lo)) * (p.el.clientHeight - LPAD.t - LPAD.b);
+const lpt = (p, x) => (x - LPAD.l) / (p.el.clientWidth - LPAD.l - LPAD.r);
+const lpv = (p, y) => p.lo + ((p.el.clientHeight - LPAD.b - y) / (p.el.clientHeight - LPAD.t - LPAD.b)) * (p.hi - p.lo);
 
 function layoutPlot() {
   const dpr = Math.min(2, devicePixelRatio || 1);
-  const w = Math.max(1, Math.round(lcanvas.clientWidth * dpr));
-  const h = Math.max(1, Math.round(lcanvas.clientHeight * dpr));
-  if (lcanvas.width === w && lcanvas.height === h) return;   // assigning either one wipes the canvas
-  lcanvas.width = w; lcanvas.height = h;
-  lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  // the wipe means the redraw has to live here rather than at the call site:
-  // the resize observer fires after the last draw, and so does un-hiding
-  if (profile().length) drawPlot();
-}
-// 0..100 for lightness, 0..360 for hue; both fixed, neither derived from data
-let PLO = 0, PHI = 100;
-const lpx = (t) => LPAD.l + t * (lcanvas.clientWidth - LPAD.l - LPAD.r);
-const lpy = (v) => lcanvas.clientHeight - LPAD.b - ((v - PLO) / (PHI - PLO)) * (lcanvas.clientHeight - LPAD.t - LPAD.b);
-const lpt = (x) => (x - LPAD.l) / (lcanvas.clientWidth - LPAD.l - LPAD.r);
-const lpL = (y) => PLO + ((lcanvas.clientHeight - LPAD.b - y) / (lcanvas.clientHeight - LPAD.t - LPAD.b)) * (PHI - PLO);
-const profile = () => (S.plot === 'H' ? S.hprof : S.lprof);
-/** lightness stops at the ends of its scale; hue has no ends, so it wraps */
-const clampProf = (v) => (S.plot === 'H' ? norm360(v) : Math.min(100, Math.max(0, v)));
-
-function drawPlot() {
-  const W = lcanvas.clientWidth, H = lcanvas.clientHeight;
-  if (!W || !H || !profile().length) return;
-  const hud = getComputedStyle(document.documentElement).getPropertyValue('--hud').trim() || '#3a3a42';
-  const hue = S.plot === 'H';
-  const P = palette();
-
-  const meas = P.length >= 2 ? (hue ? P.map(hueOf).map(norm360) : P.map((p) => p[0])) : [];
-  // One full turn, fixed. The axis used to fit itself to the data, which meant
-  // dragging a knot up grew the range and made the next pixel worth more degrees
-  // than the last — the knot ran away from the cursor — and re-deriving the
-  // unwrap each frame let the whole curve jump a turn. Neither can happen now.
-  [PLO, PHI] = hue ? [0, 360] : [0, 100];
-
-  lctx.clearRect(0, 0, W, H);
-  lctx.strokeStyle = hud; lctx.globalAlpha = 0.28; lctx.lineWidth = 1;
-  lctx.font = '9px ui-monospace,monospace'; lctx.fillStyle = hud;
-  const ticks = hue ? [0, 90, 180, 270, 360] : [0, 50, 100];
-  for (const v of ticks) {
-    lctx.beginPath(); lctx.moveTo(LPAD.l, lpy(v)); lctx.lineTo(W - LPAD.r, lpy(v)); lctx.stroke();
-    lctx.globalAlpha = 0.75;
-    lctx.fillText(String(v).padStart(3), 2, lpy(v) + 3);
-    lctx.globalAlpha = 0.28;
+  for (const p of PLOTLIST) {
+    const w = Math.max(1, Math.round(p.el.clientWidth * dpr));
+    const h = Math.max(1, Math.round(p.el.clientHeight * dpr));
+    if (p.el.width === w && p.el.height === h) continue;   // assigning either one wipes the canvas
+    p.el.width = w; p.el.height = h;
+    p.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // the wipe means the redraw has to live here rather than at the call site:
+    // the resize observer fires after the last draw, and so does un-hiding
+    if (p.prof().length) drawPlot(p);
   }
-  lctx.globalAlpha = 1;
+}
+
+const drawPlots = () => PLOTLIST.forEach(drawPlot);
+
+function drawPlot(p) {
+  const ctx = p.ctx, W = p.el.clientWidth, H = p.el.clientHeight;
+  if (!W || !H || !p.prof().length) return;
+  const hud = getComputedStyle(document.documentElement).getPropertyValue('--hud').trim() || '#3a3a42';
+  const P = palette();
+  const meas = P.length >= 2 ? p.meas(P) : [];
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = hud; ctx.globalAlpha = 0.28; ctx.lineWidth = 1;
+  ctx.font = '9px ui-monospace,monospace'; ctx.fillStyle = hud;
+  for (const v of p.ticks) {
+    ctx.beginPath(); ctx.moveTo(LPAD.l, lpy(p, v)); ctx.lineTo(W - LPAD.r, lpy(p, v)); ctx.stroke();
+    ctx.globalAlpha = 0.75;
+    ctx.fillText(String(v).padStart(3), 2, lpy(p, v) + 3);
+    ctx.globalAlpha = 0.28;
+  }
+  ctx.globalAlpha = 1;
 
   /**
    * A polyline on a circle. Where the short way between two samples crosses the
@@ -1835,9 +1862,9 @@ function drawPlot() {
   const wrapped = (vals, paint) => {
     for (let i = 1; i < vals.length; i++) {
       const [a, b] = [vals[i - 1], vals[i]];
-      const x0 = lpx((i - 1) / (vals.length - 1)), x1 = lpx(i / (vals.length - 1));
-      const d = hue ? angDiff(b, a) : b - a;
-      if (!hue || Math.abs(a + d - b) < 1e-9) { paint(x0, a, x1, b, i); continue; }
+      const x0 = lpx(p, (i - 1) / (vals.length - 1)), x1 = lpx(p, i / (vals.length - 1));
+      const d = p.hue ? angDiff(b, a) : b - a;
+      if (!p.hue || Math.abs(a + d - b) < 1e-9) { paint(x0, a, x1, b, i); continue; }
       const edge = d > 0 ? 360 : 0;
       const xm = x0 + (x1 - x0) * ((edge - a) / d);
       paint(x0, a, xm, edge, i);
@@ -1846,62 +1873,63 @@ function drawPlot() {
   };
 
   if (meas.length >= 2) {
-    lctx.lineCap = 'round';
+    ctx.lineCap = 'round';
     wrapped(meas, (x0, a, x1, b, i) => {
-      lctx.beginPath(); lctx.moveTo(x0, lpy(a)); lctx.lineTo(x1, lpy(b));
-      lctx.strokeStyle = '#000'; lctx.lineWidth = 5; lctx.stroke();
-      lctx.strokeStyle = out(P[i]); lctx.lineWidth = 3.5; lctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x0, lpy(p, a)); ctx.lineTo(x1, lpy(p, b));
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 5; ctx.stroke();
+      ctx.strokeStyle = out(P[i]); ctx.lineWidth = 3.5; ctx.stroke();
     });
   }
-  const prof = profile();
-  lctx.setLineDash([4, 3]); lctx.lineWidth = 1.5; lctx.strokeStyle = hud;
+  const prof = p.prof();
+  ctx.setLineDash([4, 3]); ctx.lineWidth = 1.5; ctx.strokeStyle = hud;
   wrapped(prof, (x0, a, x1, b) => {
-    lctx.beginPath(); lctx.moveTo(x0, lpy(a)); lctx.lineTo(x1, lpy(b)); lctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x0, lpy(p, a)); ctx.lineTo(x1, lpy(p, b)); ctx.stroke();
   });
-  lctx.setLineDash([]);
+  ctx.setLineDash([]);
   prof.forEach((v, i) => {
-    lctx.beginPath(); lctx.arc(lpx(i / (LK - 1)), lpy(v), 3.6, 0, 7);
-    lctx.fillStyle = hud; lctx.fill();
-    lctx.strokeStyle = 'rgba(255,255,255,.7)'; lctx.lineWidth = 1; lctx.stroke();
+    ctx.beginPath(); ctx.arc(lpx(p, i / (LK - 1)), lpy(p, v), 3.6, 0, 7);
+    ctx.fillStyle = hud; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1; ctx.stroke();
   });
 }
 
 let lDrag = null;
-const lAt = (e) => { const r = lcanvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-lcanvas.addEventListener('pointerdown', (e) => {
-  const [x, y] = lAt(e);
-  lDrag = Math.min(LK - 1, Math.max(0, Math.round(lpt(x) * (LK - 1))));   // nearest knot by position
-  lcanvas.setPointerCapture(e.pointerId);
-  profile()[lDrag] = clampProf(lpL(y));
-  sidebar();
-});
-lcanvas.addEventListener('pointermove', (e) => {
-  if (lDrag === null) return;
-  profile()[lDrag] = clampProf(lpL(lAt(e)[1]));   // to the visible window, no further
-  sidebar();
-});
-lcanvas.addEventListener('pointerup', () => { lDrag = null; });
-const PLOT_ACTIONS = {
-  L: { fit: lprofFit, p1: lprofLine, p2: lprofArch, labels: ['line', 'arch'],
-       tips: ['a straight ramp over the waypoints’ lightness range · double-click to reverse it',
-              'a tent, dark ends and light middle, for a diverging ramp · double-click for a dark middle'] },
-  H: { fit: hprofFit, p1: hprofSweep, p2: hprofSplit, labels: ['sweep', 'split'],
-       tips: ['a steady turn from the first hue to the last · double-click to turn the other way',
-              'two hue plateaus meeting in the middle, for a diverging ramp'] },
-};
-function paintPlotButtons() {
-  const a = PLOT_ACTIONS[S.plot];
-  $('lbtns').querySelector('[data-p=axis]').textContent = S.plot;
-  ['p1', 'p2'].forEach((k, i) => {
-    const b = $('lbtns').querySelector(`[data-p=${k}]`);
-    b.textContent = a.labels[i]; b.title = a.tips[i];
+for (const p of PLOTLIST) {
+  const at = (e) => { const r = p.el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  p.el.addEventListener('pointerdown', (e) => {
+    const [x, y] = at(e);
+    lDrag = { p, i: Math.min(LK - 1, Math.max(0, Math.round(lpt(p, x) * (LK - 1)))) };  // nearest knot
+    p.el.setPointerCapture(e.pointerId);
+    p.prof()[lDrag.i] = p.clamp(lpv(p, y));
+    sidebar();
   });
+  p.el.addEventListener('pointermove', (e) => {
+    if (lDrag?.p !== p) return;
+    p.prof()[lDrag.i] = p.clamp(lpv(p, at(e)[1]));   // to the visible window, no further
+    sidebar();
+  });
+  p.el.addEventListener('pointerup', () => { lDrag = null; });
 }
-$('lbtns').onclick = (e) => {
-  const p = e.target.dataset?.p;
+
+/** Each plot's checkbox is the same flag as its row in Metrics, so both are
+ *  written from S rather than from each other. */
+function paintPlotButtons() {
+  for (const p of PLOTLIST) {
+    p.root.querySelector('[data-on]').checked = !!S.on[p.term];
+    ['p1', 'p2'].forEach((k, i) => {
+      const b = p.root.querySelector(`[data-p=${k}]`);
+      b.textContent = p.labels[i]; b.title = p.tips[i];
+    });
+  }
+}
+
+const plotOf = (e) => PLOTS[e.target.closest('.pplot')?.dataset.plot];
+$('lplot').onclick = (e) => {
+  const p = plotOf(e), { on, p: act } = e.target.dataset ?? {};
   if (!p) return;
-  if (p === 'axis') { S.plot = S.plot === 'L' ? 'H' : 'L'; paintPlotButtons(); }
-  else PLOT_ACTIONS[S.plot][p]();
+  if (on) S.on[on] = e.target.checked;
+  else if (act) p[act]();
+  else return;
   sidebar();
 };
 /**
@@ -1913,11 +1941,11 @@ $('lbtns').onclick = (e) => {
  * instead, turning a light-centred diverging ramp into a dark-centred one,
  * while an asymmetric one is reversed, turning dark-to-light into light-to-dark.
  */
-$('lbtns').ondblclick = (e) => {
-  const p = e.target.dataset?.p;
-  if (p !== 'p1' && p !== 'p2') return;
-  const prof = profile();
-  if (S.plot === 'H') {
+$('lplot').ondblclick = (e) => {
+  const p = plotOf(e), act = e.target.dataset?.p;
+  if (!p || (act !== 'p1' && act !== 'p2')) return;
+  const prof = p.prof();
+  if (p.hue) {
     S.hprof = prof.slice().reverse();      // a hue sweep flips by running backwards
   } else {
     const [lo, hi] = [Math.min(...prof), Math.max(...prof)];
@@ -1935,7 +1963,7 @@ function applyBg() {
   const light = fromHex(S.bg)[0] > 55;
   document.documentElement.style.setProperty('--hud', light ? '#3a3a42' : '#c6c6d0');
   slices.forEach((s) => s.edge.material.color.set(light ? 0x3a3a42 : 0xc6c6d0));
-  drawPlot();
+  drawPlots();
 }
 
 /** Slices track the node you touched, so every panel is cut through it. */
