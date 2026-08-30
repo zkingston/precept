@@ -52,10 +52,10 @@
   #tipbtns button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
   #hist { position:absolute; top:190px; right:130px; display:flex; gap:4px; }
   #hist button:disabled { opacity:.3; cursor:default; }
-  #tool button, #graybtn, #hist button { width:34px; height:34px; padding:0; display:grid; place-items:center;
+  #tool button, #graybtn, #hist button, #aboutbtn { width:34px; height:34px; padding:0; display:grid; place-items:center;
     background:#26262bd9; border:1px solid var(--line); border-radius:5px; cursor:pointer;
     color:var(--fg); font-size:15px; line-height:1; }
-  #tool button:hover, #graybtn:hover, #hist button:not(:disabled):hover { background:#32323ae6; }
+  #tool button:hover, #graybtn:hover, #hist button:not(:disabled):hover, #aboutbtn:hover { background:#32323ae6; }
   #tool button[aria-pressed=true], #graybtn[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
   #tool svg { width:19px; height:19px; fill:none; stroke:var(--fg); stroke-width:1.5;
     stroke-linecap:round; stroke-linejoin:round; }
@@ -133,6 +133,23 @@
   #metrics td.btns button { padding:0 5px; font:11px/1.5 ui-monospace,monospace; margin-left:3px; }
   code { color:#9fd; }
   .note { color:var(--dim); font-size:11px; }
+
+  #aboutbtn { position:absolute; top:190px; right:210px; font-size:17px; }
+  #aboutdlg { max-width:min(560px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto; overscroll-behavior:contain; padding:20px 22px;
+    background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:9px;
+    font:13px/1.55 ui-sans-serif,system-ui,sans-serif; }
+  #aboutdlg::backdrop { background:#000a; }
+  #aboutdlg h3 { margin:0; font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
+  #aboutdlg h4 { margin:17px 0 5px; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
+  #aboutdlg p { margin:0 0 9px; }
+  #aboutdlg .lede { color:var(--dim); margin:3px 0 13px; }
+  #aboutdlg ul { margin:6px 0 0; padding-left:17px; color:var(--dim); font-size:12px; }
+  #aboutdlg li + li { margin-top:5px; }
+  #aboutdlg a { color:#7dd3fc; }
+  #aboutdlg .q { opacity:1; vertical-align:baseline; margin:0; font-size:inherit; color:#7dd3fc; }
+  #aboutclose { position:absolute; top:12px; right:12px; width:26px; height:26px; padding:0;
+    background:none; border:0; color:var(--dim); font-size:19px; line-height:1; cursor:pointer; }
+  #aboutclose:hover { color:var(--fg); }
   /* ── narrow ────────────────────────────────────────────────────────────────
      One column: canvas above, controls below. 48vh of canvas cannot also carry
      a 278px preview, a colour bar and two plots on top of four viewports, so
@@ -157,7 +174,7 @@
     #tipcanvas { width:100%; height:auto; }
     #lplot { height:auto; flex-direction:column; gap:9px; }
     .pplot { flex:none; height:84px; }          /* flex:1 would beat the height */
-    #tool, #hist { top:12px; }
+    #tool, #hist, #aboutbtn { top:12px; }
     #toolnote { top:52px; white-space:normal; max-width:min(340px,60%); }
     #bar { top:56px; bottom:14px; }
   }
@@ -206,6 +223,7 @@
       <canvas id="tipcanvas" width="264" height="128"></canvas>
       <div id="tipbtns"></div>
     </div>
+    <button id="aboutbtn" title="about precept">?</button>
     <div id="hist">
       <button id="undo" title="undo · ctrl+Z">↶</button>
       <button id="redo" title="redo · ctrl+shift+Z">↷</button>
@@ -329,6 +347,48 @@
         <button id="savepy" style="flex:1">save</button></div></section>
   </aside>
 </div>
+
+<dialog id="aboutdlg">
+  <button id="aboutclose" title="close">&times;</button>
+  <h3>Precept</h3>
+  <p class="lede">Palette design as trajectory optimisation.</p>
+  <p>A colour is a point, a continuous colormap is a path through the space, and a categorical
+     palette is a set of points that have to stay apart. Precept treats designing one as a
+     constrained problem over that geometry: the gamut, the lightness, chroma and hue bounds,
+     keep-out spheres and halfplanes are constraints on the path; uniform spacing, contrast,
+     a drawn lightness or hue profile and separation under colour-vision deficiency are what
+     it optimises for.</p>
+
+  <h4>Why the geometry is unusual</h4>
+  <p>Perceptual colour space is not Riemannian. A large colour difference is perceived as
+     <em>less</em> than the sum of the small steps that make it up, so differences do not
+     simply add. Precept keeps the two structures apart — arc length for anything integrated
+     along a path, perceived difference for anything compared as a jump — because conflating
+     them is what most colormap criteria quietly do. Summing viridis's neighbour differences
+     overstates its true end-to-end difference by about 2×, which the Metrics panel reports
+     as the <em>additivity gap</em>.</p>
+  <ul>
+    <li>Bujack, Teti, Miller, Caffrey &amp; Turton. <em>The non-Riemannian nature of perceptual
+        color space.</em> PNAS 2022.
+        <a href="https://doi.org/10.1073/pnas.2119753119" target="_blank" rel="noopener">10.1073/pnas.2119753119</a></li>
+    <li>Bujack, Stark, Turton, Miller &amp; Rogers. <em>The Geometry of Color in the Light of a
+        Non-Riemannian Space.</em> CGF 2025.
+        <a href="https://doi.org/10.1111/cgf.70136" target="_blank" rel="noopener">10.1111/cgf.70136</a></li>
+  </ul>
+
+  <h4>Getting around</h4>
+  <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view
+     it takes the colour you clicked on. Drag to move, right-click — or press and hold on a
+     touchscreen — to delete. The tools switch between nodes, keep-out spheres and halfplanes.
+     Run Adam to optimise against the enabled terms, and export as matplotlib, CSS, CSV,
+     ParaView or JSON. Hover any <span class="q">?</span> for what a control or a term means.</p>
+
+  <h4>Credit</h4>
+  <p>Built by Zachary Kingston.<br>
+     <a href="https://zkingston.com" target="_blank" rel="noopener">zkingston.com</a> ·
+     <a href="mailto:zkingston@purdue.edu">zkingston@purdue.edu</a> ·
+     <a href="https://github.com/zkingston/precept" target="_blank" rel="noopener">source on GitHub</a></p>
+</dialog>
 
 <script type="importmap">
 { "imports": { "three": "/node_modules/three/build/three.module.js",
@@ -2415,6 +2475,12 @@ const paintHist = () => {
   $('undo').disabled = !HIST.past.length;
   $('redo').disabled = !HIST.future.length;
 };
+$('aboutbtn').onclick = () => $('aboutdlg').showModal();
+$('aboutclose').onclick = () => $('aboutdlg').close();
+// clicking the backdrop closes it: the dialog's own box is the only child, so a
+// click whose target IS the dialog landed outside it
+$('aboutdlg').onclick = (e) => { if (e.target === $('aboutdlg')) $('aboutdlg').close(); };
+
 $('undo').onclick = undo;
 $('redo').onclick = redo;
 
