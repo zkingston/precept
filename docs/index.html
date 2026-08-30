@@ -47,14 +47,17 @@
   #huewheel { cursor:crosshair; touch-action:none; }
   /* tools live over the viewport, where the things they make are */
   #tool { position:absolute; top:12px; right:12px; display:flex; gap:4px; }
-  #tip { position:absolute; top:12px; left:12px; display:flex; align-items:flex-start; gap:6px; }
+  #tip { position:absolute; top:12px; display:flex; align-items:flex-start; gap:6px; }
+  /* the 3D panel's own hint shares this corner: drop it under the toggle, and
+     out of the way entirely while the card is covering that space */
+  #q0 .tag { top:54px; }
+  #tip[data-open=true] ~ #q0 .tag { display:none; }
   #tipcard { background:#1c1c20ee; border:1px solid var(--line); border-radius:6px; padding:7px; }
   #tip[data-open=false] #tipcard { display:none; }
   #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
   #tipbtns { display:flex; gap:4px; margin-top:6px; }
   #tipbtns button { flex:1; font-size:10px; padding:2px 0; }
   #tipbtns button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
-  #tipnote { color:var(--dim); font-size:10px; margin-top:5px; line-height:1.35; max-width:264px; }
   #hist { position:absolute; top:12px; right:130px; display:flex; gap:4px; }
   #hist button:disabled { opacity:.3; cursor:default; }
   #tool button, #graybtn, #hist button, #tiptoggle { width:34px; height:34px; padding:0; display:grid; place-items:center;
@@ -136,7 +139,6 @@
       <div id="tipcard">
         <canvas id="tipcanvas" width="264" height="128"></canvas>
         <div id="tipbtns"></div>
-        <div id="tipnote"></div>
       </div>
     </div>
     <div id="hist">
@@ -991,6 +993,7 @@ function layout() {
     { x: 0, y: 2 * rowH, w: colW, h: h - 2 * rowH },
     { x: colW, y: 0, w: w - colW, h },
   ];
+  $('tip').style.left = `${RECTS[3].x + 12}px`;      // top left of the 3D view
   QUADS.forEach((q, i) => {
     q.rect = RECTS[i];
     Object.assign(q.el.style, { left: q.rect.x + 'px', top: q.rect.y + 'px', width: q.rect.w + 'px', height: q.rect.h + 'px' });
@@ -1157,8 +1160,7 @@ function drawTest() {
   const kind = TESTS[S.tipKind]?.mode === S.mode ? S.tipKind
              : Object.keys(TESTS).find((k) => TESTS[k].mode === S.mode);
   $('tipbtns').innerHTML = Object.entries(TESTS).filter(([, t]) => t.mode === S.mode)
-    .map(([k, t]) => `<button data-tip="${k}" aria-pressed="${k === kind}">${t.label}</button>`).join('');
-  $('tipnote').textContent = TESTS[kind]?.note ?? '';
+    .map(([k, t]) => `<button data-tip="${k}" aria-pressed="${k === kind}" title="${t.note}">${t.label}</button>`).join('');
   const lut = lutOf(256);
   tctx.clearRect(0, 0, W, H);
   if (!lut.length) return;
