@@ -43,7 +43,6 @@
   /* inline-flex, not flex: as a block it claimed the whole table cell and
      pushed the ? marker onto a line of its own */
   label.chk { display:inline-flex; align-items:center; gap:7px; cursor:pointer; vertical-align:middle; }
-  #mini { position:absolute; right:14px; bottom:14px; cursor:crosshair; touch-action:none; }
   #huewheel { cursor:crosshair; touch-action:none; }
   /* tools live over the viewport, where the things they make are */
   #tool { position:absolute; top:12px; right:12px; display:flex; gap:4px; }
@@ -68,7 +67,9 @@
     background:#3d5a6c; border-color:#5f8ba6; }
   #tool svg { width:19px; height:19px; fill:none; stroke:var(--fg); stroke-width:1.5;
     stroke-linecap:round; stroke-linejoin:round; }
-  #lplot { position:absolute; bottom:14px; right:274px; height:106px; }
+  /* right:118 leaves the button strip — which hangs 52px off the plot's right
+     edge — clear of the colour bar at right:14–52 */
+  #lplot { position:absolute; bottom:14px; right:118px; height:106px; }
   #lcanvas { width:100%; height:100%; display:block; cursor:ns-resize; touch-action:none; }
   /* outside the plot's right edge: inside, they sat exactly where the curve
      ends up once lightness rises to the right */
@@ -100,8 +101,8 @@
   .seg button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
 
   /* the output belongs next to the thing it came from, not in a side panel;
-     it sits clear of the toolbar above and the minimap below */
-  #bar { position:absolute; right:14px; top:96px; bottom:202px; width:38px; min-height:130px;
+     it sits clear of the toolbar above and runs to the floor below */
+  #bar { position:absolute; right:14px; top:96px; bottom:14px; width:38px; min-height:130px;
          display:flex; flex-direction:column; align-items:center; gap:6px; }
   #strip { width:100%; flex:1; min-height:0; display:block; border-radius:5px; border:1px solid #0004; }
   #swatches { display:flex; flex-direction:column-reverse; gap:3px; width:100%; flex:1; min-height:0; }
@@ -152,7 +153,6 @@
     <div class="quad" id="q3">
       <div class="sl"><i id="nB">b</i><input type="range" id="sB" min="-36" max="36" step="0.5" value="0"><b id="vB">0</b></div></div>
     <div class="quad" id="q0"><span class="tag">3D · orbit</span></div>
-    <canvas id="mini" width="190" height="172"></canvas>
     <div id="tool">
       <button data-v="edit" title="Points"><svg viewBox="0 0 24 24">
         <polyline points="4,18 10,8 16,14 20,5"/><circle cx="4" cy="18" r="2.1"/>
@@ -263,7 +263,7 @@
 import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
-  fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
+  fromHex, toHex, toSRGB, fromSRGB, fromLinear, toGamut, inGamut, toLCh, fromLCh,
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty,
   minSeparation, obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, internals,
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
@@ -1120,7 +1120,6 @@ function sidebar() {
     obstacle: 'double-click a slice panel to place · drag the small handle to resize',
     plane: 'double-click a slice panel to cut · drag the centre to slide, the tip to rotate' }[S.tool];
 
-  drawMini();
   drawPlot();
   $('export').value = FORMATS[S.fmt].gen();
   drawTest();
@@ -1978,118 +1977,6 @@ $('lbtns').ondblclick = (e) => {
   sidebar();
 };
 
-// ─── minimap: the standard RGB colour triangle ───────────────────────────────
-// Linear r:g:b normalised to sum 1, plotted barycentrically. Lightness divides
-// out, so this shows chromaticity alone — the one thing the three Oklab panels,
-// which are all lightness and opponent axes, do not make obvious at a glance.
-const mini = $('mini'), mctx = mini.getContext('2d');
-const MW = mini.width, MH = mini.height, MP = 13;
-const TRI = [[MW / 2, MP], [MP, MH - MP], [MW - MP, MH - MP]];   // R, G, B corners
-let miniKey = null, miniBg = null;
-
-function bary(lin) {
-  const c = lin.map((v) => Math.max(0, v));
-  const t = c[0] + c[1] + c[2];
-  const [u, v, w] = t < 1e-9 ? [1 / 3, 1 / 3, 1 / 3] : c.map((x) => x / t);  // black has no chromaticity
-  return [u * TRI[0][0] + v * TRI[1][0] + w * TRI[2][0], u * TRI[0][1] + v * TRI[1][1] + w * TRI[2][1]];
-}
-
-const [MA, MB, MC] = TRI;
-const MDEN = (MB[1] - MC[1]) * (MA[0] - MC[0]) + (MC[0] - MB[0]) * (MA[1] - MC[1]);
-
-/** pixel → linear r:g:b ratio, or null outside the triangle */
-function unbary(x, y) {
-  const u = ((MB[1] - MC[1]) * (x - MC[0]) + (MC[0] - MB[0]) * (y - MC[1])) / MDEN;
-  const v = ((MC[1] - MA[1]) * (x - MC[0]) + (MA[0] - MC[0]) * (y - MC[1])) / MDEN;
-  const w = 1 - u - v;
-  return u < 0 || v < 0 || w < 0 ? null : [u, v, w];
-}
-
-/**
- * The colour with this chromaticity at this lightness. Oklab's L is a cube root
- * of a linear map, so scaling linear RGB by s scales L by s^(1/3) exactly —
- * the scale that hits a target L is a closed form, not a search.
- */
-function atLightness(uvw, L) {
-  const s = (L / fromLinear(uvw)[0]) ** 3;
-  return fromLinear(uvw.map((c) => c * s));
-}
-
-function miniField() {
-  const key = `${S.cvd}|${S.sev}|${params.gamut}`;
-  if (key === miniKey) return miniBg;
-  miniKey = key;
-  const img = mctx.createImageData(MW, MH), d = img.data;
-  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
-    const uvw = unbary(x, y);
-    if (!uvw) continue;                                       // outside stays transparent
-    const m = Math.max(...uvw);                               // scale onto the gamut surface
-    const c = toSRGB(view(fromLinear(uvw.map((v) => v / m))));
-    const o = 4 * (y * MW + x);
-    d[o] = 255 * clamp01(c[0]); d[o + 1] = 255 * clamp01(c[1]); d[o + 2] = 255 * clamp01(c[2]); d[o + 3] = 255;
-  }
-  return (miniBg = img);
-}
-
-const miniPos = (p) => bary(toLinear(toGamut(p)));
-
-function drawMini() {
-  mctx.putImageData(miniField(), 0, 0);
-  mctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--hud').trim() || '#3a3a42';
-  mctx.lineWidth = 1; mctx.lineJoin = 'round';
-  mctx.beginPath();
-  TRI.forEach(([x, y], i) => (i ? mctx.lineTo(x, y) : mctx.moveTo(x, y)));
-  mctx.closePath(); mctx.stroke();
-
-  // the whole path is the highlight; only the controls get a grabbable dot
-  if (S.mode === 'continuous' && S.pts.length >= 2) {
-    const c = curve(), xy = c.map(miniPos);
-    mctx.lineCap = mctx.lineJoin = 'round';
-    mctx.beginPath();
-    xy.forEach(([x, y], i) => (i ? mctx.lineTo(x, y) : mctx.moveTo(x, y)));
-    mctx.strokeStyle = '#000'; mctx.lineWidth = 4.5; mctx.stroke();
-    for (let i = 1; i < xy.length; i++) {
-      mctx.beginPath(); mctx.moveTo(...xy[i - 1]); mctx.lineTo(...xy[i]);
-      mctx.strokeStyle = paint(c[i]); mctx.lineWidth = 2.6; mctx.stroke();
-    }
-  }
-  S.pts.forEach((p, i) => {
-    const [x, y] = miniPos(p), sel = S.sel?.kind === 'pt' && S.sel.i === i;
-    mctx.beginPath(); mctx.arc(x, y, sel ? 5 : 4, 0, 7);
-    mctx.fillStyle = paint(p); mctx.fill();
-    mctx.strokeStyle = sel ? '#fff' : '#000'; mctx.lineWidth = sel ? 2 : 1.2; mctx.stroke();
-  });
-}
-
-// ── minimap dragging: chromaticity moves, lightness stays put ───────────────
-let miniDrag = null;
-const miniAt = (e) => {
-  const r = mini.getBoundingClientRect();
-  return [((e.clientX - r.left) * MW) / r.width, ((e.clientY - r.top) * MH) / r.height];
-};
-
-mini.addEventListener('pointerdown', (e) => {
-  const [x, y] = miniAt(e);
-  const i = S.pts.findIndex((p) => { const [px, py] = miniPos(p); return Math.hypot(px - x, py - y) < 9; });
-  if (i < 0) return;
-  miniDrag = i;
-  mini.setPointerCapture(e.pointerId);
-  select({ kind: 'pt', i });
-  sync();
-});
-
-mini.addEventListener('pointermove', (e) => {
-  if (miniDrag === null) return;
-  const uvw = unbary(...miniAt(e));
-  if (!uvw) return;                                   // dragged outside the triangle: ignore
-  const p = atLightness(uvw, S.pts[miniDrag][0]);
-  S.pts[miniDrag] = p;
-  if (S.lock) setSlices(p);
-  sync();
-});
-
-mini.addEventListener('pointerup', () => { miniDrag = null; });
-
 /** The backdrop drives the HUD and outline colours too — a light surround with
  *  light labels on it is unreadable. Contrast is decided by the backdrop's own
  *  lightness in the chart, which is the one perceptual number we already have. */
@@ -2098,7 +1985,6 @@ function applyBg() {
   const light = fromHex(S.bg)[0] > 55;
   document.documentElement.style.setProperty('--hud', light ? '#3a3a42' : '#c6c6d0');
   slices.forEach((s) => s.edge.material.color.set(light ? 0x3a3a42 : 0xc6c6d0));
-  drawMini();
   drawPlot();
 }
 
@@ -2118,7 +2004,7 @@ function select(sel) {
 
 /**
  * The feasibility constraint, applied where state becomes geometry. Every path
- * that writes a node — drag, hex field, minimap, preset load, gradient step,
+ * that writes a node — drag, hex field, preset load, gradient step,
  * gamut switch — already routes through sync(), so projecting here makes an
  * out-of-gamut node impossible rather than merely unlikely.
  *
@@ -2230,7 +2116,6 @@ const disturb = () => { if (adam) adam = null; };
 /** Rebuild whatever the change touched. Small enough to be blunt about it. */
 function sync({ colors = false, light = false } = {}) {
   constrain();
-  if (colors) miniKey = null;
   slices.forEach(paintSlice);
   paintShell();
   buildTube(); buildPoints(); buildObstacles(); buildPlanes();
