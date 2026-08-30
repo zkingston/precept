@@ -75,6 +75,7 @@
     font:11px/1.4 ui-sans-serif,system-ui,sans-serif; color:var(--hud); pointer-events:none; }
   #hex { flex:1; min-width:0; font:12px ui-monospace,monospace; text-transform:lowercase; }
 
+
   aside { background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:14px;
           display:flex; flex-direction:column; gap:13px; }
   h1 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0; font-weight:600; }
@@ -134,6 +135,42 @@
   #metrics td.btns button { padding:0 5px; font:11px/1.5 ui-monospace,monospace; margin-left:3px; }
   code { color:#9fd; }
   .note { color:var(--dim); font-size:11px; }
+  /* ── narrow ────────────────────────────────────────────────────────────────
+     One column: canvas above, controls below. 48vh of canvas cannot also carry
+     a 278px preview, a colour bar and two plots on top of four viewports, so
+     the preview and the plots move into the panel — see reflow(). They are the
+     two overlays that are readouts and editors rather than camera furniture,
+     and the plots want the full width anyway, since you drag their knots.
+     The breakpoint is shared with the JS through matchMedia; the viewport
+     split it selects lives in layout(). */
+  #dock { display:none; }
+  @media (max-width: 860px) {
+    #app { grid-template-columns:1fr; grid-template-rows:48vh minmax(0,1fr); height:100dvh; }
+    aside { border-left:0; border-top:1px solid var(--line); gap:11px;
+            display:grid; grid-template-columns:repeat(auto-fill,minmax(258px,1fr)); align-content:start; }
+    h1, #dock, section { grid-column:1/-1; }
+    #dock { display:flex; flex-direction:column; gap:11px; }
+    section { grid-column:auto; }
+
+    #tip, #lplot { position:static; }
+    #tip { padding:0; background:none; border:0; max-width:300px; }
+    #tipcanvas { width:100%; height:auto; }
+    #lplot { height:auto; flex-direction:column; gap:9px; }
+    .pplot { height:84px; }
+
+    /* nothing above the tools any more, and the bar stops at the cut row */
+    #tool { top:10px; right:10px; }
+    #hist { top:10px; right:128px; }
+    #toolnote { top:52px; left:10px; right:56px; white-space:normal; }   /* clear of the bar */
+    #bar { top:52px; bottom:36%; right:10px; min-height:80px; }
+  }
+  /* A phone on its side is 390px tall: stacking there leaves a canvas too
+     short to orbit in. Side by side is the shape that fits, with the panel
+     narrow — the dock inside it is already a column either way. */
+  @media (max-width: 860px) and (min-aspect-ratio: 1/1) {
+    #app { grid-template-columns:1fr minmax(240px,38%); grid-template-rows:1fr; }
+    aside { border-top:0; border-left:1px solid var(--line); grid-template-columns:1fr; }
+  }
 </style>
 
 <div id="app">
@@ -188,6 +225,7 @@
 
   <aside>
     <h1>Precept Palette Optimizer</h1>
+    <div id="dock"></div>
 
     <section>
       <h2>Palette</h2>
@@ -1008,14 +1046,27 @@ function layout() {
   renderer.setSize(w, h, false);
   // 3|1: the three cuts stacked in a column, 3D taking the rest. QUADS is
   // already ordered with the ortho views first, so index 3 is the big one.
-  const colW = Math.min(440, Math.max(200, Math.round(w * 0.3)));
-  const rowH = Math.floor(h / 3);
-  const RECTS = [
-    { x: 0, y: 0, w: colW, h: rowH },
-    { x: 0, y: rowH, w: colW, h: rowH },
-    { x: 0, y: 2 * rowH, w: colW, h: h - 2 * rowH },
-    { x: colW, y: 0, w: w - colW, h },
-  ];
+  let RECTS;
+  if (NARROW.matches) {
+    // 1-over-3: the cuts are a strip under the 3D view. Stacking them in a
+    // column here would leave each one a letterbox a few pixels tall.
+    const rowH = Math.round(h * 0.34), colW = Math.floor(w / 3);
+    RECTS = [
+      { x: 0, y: h - rowH, w: colW, h: rowH },
+      { x: colW, y: h - rowH, w: colW, h: rowH },
+      { x: 2 * colW, y: h - rowH, w: w - 2 * colW, h: rowH },
+      { x: 0, y: 0, w, h: h - rowH },
+    ];
+  } else {
+    const colW = Math.min(440, Math.max(200, Math.round(w * 0.3)));
+    const rowH = Math.floor(h / 3);
+    RECTS = [
+      { x: 0, y: 0, w: colW, h: rowH },
+      { x: 0, y: rowH, w: colW, h: rowH },
+      { x: 0, y: 2 * rowH, w: colW, h: h - 2 * rowH },
+      { x: colW, y: 0, w: w - colW, h },
+    ];
+  }
   QUADS.forEach((q, i) => {
     q.rect = RECTS[i];
     Object.assign(q.el.style, { left: q.rect.x + 'px', top: q.rect.y + 'px', width: q.rect.w + 'px', height: q.rect.h + 'px' });
@@ -1030,7 +1081,8 @@ function layout() {
     }
     q.cam.updateProjectionMatrix();
   });
-  lplotEl.style.left = RECTS[3].x + 14 + 'px';    // the plot belongs to the 3D panel
+  // only while it is an overlay; docked in the panel it is laid out by flow
+  if (!NARROW.matches) lplotEl.style.left = RECTS[3].x + 14 + 'px';
   layoutPlot();
 }
 
@@ -2850,8 +2902,24 @@ const HINTS = {
 }
 
 lprofLine(); hprofFit(); mirror(); commit();
+/**
+ * The two overlays that are readouts rather than camera furniture move into the
+ * panel when there is no room for them over the canvas. Reparenting rather than
+ * duplicating: one plot canvas with one set of listeners, in whichever place
+ * the width can afford.
+ */
+const NARROW = matchMedia('(max-width: 860px)');
+function reflow() {
+  const to = NARROW.matches ? $('dock') : main;
+  for (const el of [$('tip'), lplotEl]) if (el.parentElement !== to) to.appendChild(el);
+  if (!NARROW.matches) $('tip').removeAttribute('style');
+  layout();
+  sidebar();                                 // both canvases were just resized
+}
+NARROW.addEventListener('change', reflow);
+
 new ResizeObserver(layout).observe(main);   // catches sidebar and devtools resizes too
-layout();
+reflow();
 applyBg();
 setView();
 frame();
