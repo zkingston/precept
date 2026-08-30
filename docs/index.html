@@ -1302,19 +1302,7 @@ function sidebar() {
     rows.push([typeof o.label === 'function' ? o.label() : o.label,
       v < 10 ? v.toFixed(2) : v.toFixed(0), !!o.bad && v > WARN_EPS, o.key, HELP[o.key]]);
   }
-  $('metrics').innerHTML = rows.map(([k, v, warn, obj, help]) => {
-    // data-help, not title: the OS tooltip makes you wait a second to find out
-    // whether hovering does anything, and the sidebar scrolls, which would clip
-    // a positioned one. A line under the table is instant and never clipped.
-    const q = help ? `<span class="q" data-help="${esc(help)}">?</span>` : '';
-    return `<tr><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}${q}</td>` +
-    `<td class="${warn ? 'warn' : ''}">${v}</td>` +
-    (obj ? `<td class="w"><input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
-         + ` value="${S.w[obj]}"${S.on[obj] ? '' : ' disabled'} title="relative pull in the combined step"></td>`
-         + `<td class="btns"><button data-obj="${obj}" data-dir="1" title="descend">−</button>`
-         + `<button data-obj="${obj}" data-dir="-1" title="ascend">+</button></td>`
-         : '<td class="w"></td><td class="btns"></td>') + '</tr>';
-  }).join('');
+  paintMetrics(rows);
 
   const s = S.sel;
   $('selpanel').style.display = s ? '' : 'none';
@@ -1383,8 +1371,18 @@ function drawTest() {
   if (tipc.width !== W || tipc.height !== H) { tipc.width = W; tipc.height = H; }
   const kind = TESTS[S.tipKind]?.mode === S.mode ? S.tipKind
              : Object.keys(TESTS).find((k) => TESTS[k].mode === S.mode);
-  $('tipbtns').innerHTML = Object.entries(TESTS).filter(([, t]) => t.mode === S.mode)
-    .map(([k, t]) => `<button data-tip="${k}" aria-pressed="${k === kind}" title="${t.note}">${t.label}</button>`).join('');
+  // same reason as the metrics table: redrawing at solver rate would replace
+  // these between mousedown and mouseup, so only touch what actually changed
+  for (const [k, t] of Object.entries(TESTS)) {
+    let b = $('tipbtns').querySelector(`[data-tip="${k}"]`);
+    const want = t.mode === S.mode;
+    if (want && !b) {
+      $('tipbtns').insertAdjacentHTML('beforeend',
+        `<button data-tip="${k}" title="${t.note}">${t.label}</button>`);
+      b = $('tipbtns').lastElementChild;
+    } else if (!want && b) { b.remove(); continue; }
+    if (b) b.ariaPressed = String(k === kind);
+  }
   const lut = lutOf(256);
   tctx.clearRect(0, 0, W, H);
   if (!lut.length) return;
@@ -1816,6 +1814,52 @@ const hprofSplit = (long = false) => {
   S.hprof = Array.from({ length: LK }, (_, i) =>
     norm360(i < mid ? a : i > mid ? b : a + d / 2));
 };
+
+/**
+ * Rebuild the table only when its SHAPE changes, and otherwise write the
+ * numbers into the cells that already exist.
+ *
+ * A solver run syncs the sidebar about eight times a second, and replacing
+ * innerHTML each time destroyed the checkbox between mousedown and mouseup and
+ * took the focus out of a weight field mid-number. Both were unusable while
+ * Adam ran. The shape is the labels and the term keys, so a row appearing, a
+ * mode switch or an observer change still rebuilds.
+ */
+let metricsShape = null;
+function paintMetrics(rows) {
+  const tbl = $('metrics');
+  const shape = rows.map(([k, , , obj]) => `${k}|${obj ?? ''}`).join(';');
+  if (shape !== metricsShape) {
+    metricsShape = shape;
+    tbl.innerHTML = rows.map(([k, v, warn, obj, help]) => {
+      // data-help, not title: the OS tooltip makes you wait a second to find out
+      // whether hovering does anything, and the sidebar scrolls, which would clip
+      // a positioned one. A line under the table is instant and never clipped.
+      const q = help ? `<span class="q" data-help="${esc(help)}">?</span>` : '';
+      return `<tr><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}${q}</td>` +
+      `<td class="${warn ? 'warn' : ''}">${v}</td>` +
+      (obj ? `<td class="w"><input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
+           + ` value="${S.w[obj]}"${S.on[obj] ? '' : ' disabled'} title="relative pull in the combined step"></td>`
+           + `<td class="btns"><button data-obj="${obj}" data-dir="1" title="descend">−</button>`
+           + `<button data-obj="${obj}" data-dir="-1" title="ascend">+</button></td>`
+           : '<td class="w"></td><td class="btns"></td>') + '</tr>';
+    }).join('');
+    return;
+  }
+  rows.forEach(([, v, warn, obj], i) => {
+    const tr = tbl.rows[i], cell = tr.cells[1];
+    if (cell.textContent !== String(v)) cell.textContent = v;
+    const cls = warn ? 'warn' : '';
+    if (cell.className !== cls) cell.className = cls;
+    if (!obj) return;
+    const box = tr.querySelector('[data-on]');
+    if (box && box.checked !== !!S.on[obj]) box.checked = S.on[obj];
+    const w = tr.querySelector('input.w');
+    if (!w || document.activeElement === w) return;     // never overwrite what is being typed
+    if (+w.value !== S.w[obj]) w.value = S.w[obj];
+    if (w.disabled === !!S.on[obj]) w.disabled = !S.on[obj];
+  });
+}
 
 /** one line per term, shown under the table while its ? is hovered */
 const HELP = {
