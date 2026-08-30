@@ -142,6 +142,26 @@
      The breakpoint is shared with the JS through matchMedia; the viewport
      split it selects lives in layout(). */
   #dock { display:none; }
+
+  /* ── compact: the panel takes the overlays ──────────────────────────────
+     Two thresholds, not one. The SHELL only has to stack on a phone, but the
+     overlays stop fitting long before that: at 1280x720 the preview is most
+     of the 3D panel's width, and by 933 the two plots are ~180px each and
+     their button strips collide with their own labels. So the preview and the
+     profiles move into the side panel here, while the layout stays side by
+     side, and the tools rise to the top now that nothing sits above them. */
+  @media (max-width: 1280px), (max-height: 719px) {
+    #dock { display:flex; flex-direction:column; gap:11px; }
+    #tip, #lplot { position:static; }
+    #tip { padding:0; background:none; border:0; }
+    #tipcanvas { width:100%; height:auto; }
+    #lplot { height:auto; flex-direction:column; gap:9px; }
+    .pplot { flex:none; height:84px; }          /* flex:1 would beat the height */
+    #tool, #hist { top:12px; }
+    #toolnote { top:52px; white-space:normal; max-width:min(340px,60%); }
+    #bar { top:56px; bottom:14px; }
+  }
+
   @media (max-width: 860px) {
     #app { grid-template-columns:1fr; grid-template-rows:48vh minmax(0,1fr); height:100dvh; }
     aside { border-left:0; border-top:1px solid var(--line); gap:11px;
@@ -157,6 +177,7 @@
     #tipbtns button { font-size:9px; padding:1px 0; }
     #toolnote { display:none; }
     #lplot { position:static; height:auto; flex-direction:column; gap:8px; }
+    #bar { top:52px; right:10px; min-height:80px; }
     /* flex:none, or the desktop flex-basis:0 keeps overriding the height */
     .pplot { flex:none; height:76px; }
 
@@ -164,7 +185,6 @@
     #tool { top:10px; right:10px; }
     #hist { top:10px; right:128px; }
     #toolnote { top:52px; left:10px; right:56px; white-space:normal; }   /* clear of the bar */
-    #bar { top:52px; bottom:36%; right:10px; min-height:80px; }
   }
   /* A phone on its side is 390px tall: stacking there leaves a canvas too
      short to orbit in. Side by side is the shape that fits, with the panel
@@ -1065,6 +1085,7 @@ function layout() {
     // the strip is four across: three cuts and the test image
     Object.assign($('tip').style, { left: `${3 * colW}px`, top: `${h - rowH}px`,
       width: `${w - 3 * colW}px`, height: `${rowH}px` });
+    $('bar').style.bottom = `${rowH + 12}px`;    // a percentage cannot track a square strip
   } else {
     const colW = Math.min(440, Math.max(200, Math.round(w * 0.3)));
     const rowH = Math.floor(h / 3);
@@ -1090,7 +1111,10 @@ function layout() {
     q.cam.updateProjectionMatrix();
   });
   // only while it is an overlay; docked in the panel it is laid out by flow
-  if (!NARROW.matches) { lplotEl.style.left = RECTS[3].x + 14 + 'px'; $('tip').removeAttribute('style'); }
+  if (!NARROW.matches) {
+    if (!DOCK.matches) lplotEl.style.left = RECTS[3].x + 14 + 'px';
+    $('tip').removeAttribute('style'); $('bar').style.bottom = '';
+  }
   layoutPlot();
 }
 
@@ -2966,13 +2990,19 @@ lprofLine(); hprofFit(); mirror(); commit();
  * the width can afford.
  */
 const NARROW = matchMedia('(max-width: 860px)');
+const DOCK = matchMedia('(max-width: 1280px), (max-height: 719px)');
 function reflow() {
-  const to = NARROW.matches ? $('dock') : main;
-  if (lplotEl.parentElement !== to) to.appendChild(lplotEl);
+  // the profiles dock whenever the overlays are cramped; the preview does too,
+  // except on a phone, where it has a better home as the fourth cut cell
+  const homes = [[$('tip'), DOCK.matches && !NARROW.matches], [lplotEl, DOCK.matches]];
+  for (const [el, docked] of homes) {
+    const to = docked ? $('dock') : main;
+    if (el.parentElement !== to) to.appendChild(el);
+  }
   layout();
   sidebar();                                 // both canvases were just resized
 }
-NARROW.addEventListener('change', reflow);
+for (const mq of [NARROW, DOCK]) mq.addEventListener('change', reflow);
 
 new ResizeObserver(layout).observe(main);   // catches sidebar and devtools resizes too
 reflow();
