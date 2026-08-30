@@ -228,7 +228,6 @@
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
         <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span></div>
       <div class="row"><label class="chk"><input type="checkbox" id="pinends">lock endpoints</label></div>
-      <div class="row"><label class="chk"><input type="checkbox" id="hard">hard constraints</label></div>
       <div class="row"><button id="steptotal" style="flex:1">step once</button>
         <button id="run" style="flex:1">run Adam</button></div>
     </section>
@@ -255,7 +254,7 @@ import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toGamut, inGamut, toLCh, fromLCh,
-  arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty,
+  arcLength, segLength, perceive, unperceive, resample, spline,
   minSeparation, obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, internals,
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
 } from './color-space.ts';
@@ -271,7 +270,7 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const S = {
   mode: 'continuous', tool: 'edit', cvd: 'none', sev: 1, gray: false,
   shell: 0.8, sliceOp: 0.8, rad: 12, rate: 0.3, pinEnds: true,
-  bg: '#f0ead6', lock: true, planes3d: false, hard: true,
+  bg: '#f0ead6', lock: true, planes3d: false,
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection colour format
   tipKind: 'sineramp',                           // which test image is showing
   lprof: [],                                     // target lightness profile, evenly spaced along t
@@ -1074,16 +1073,12 @@ function sidebar() {
     // whether hovering does anything, and the sidebar scrolls, which would clip
     // a positioned one. A line under the table is instant and never clipped.
     const q = help ? `<span class="q" data-help="${esc(help)}">?</span>` : '';
-    // a constrained term is not weighted and not steppable — it is satisfied
-    const hard = obj && constrained(obj), off = hard ? ' disabled' : S.on[obj] ? '' : ' disabled';
-    return `<tr${hard ? ' title="enforced by projection, not weighted"' : ''}><td>`
-    + `${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}${hard ? ' disabled' : ''}>${k}</label>` : k}${q}</td>` +
+    return `<tr><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}${q}</td>` +
     `<td class="${warn ? 'warn' : ''}">${v}</td>` +
-    (obj ? `<td class="w">${hard ? '<span class="note">≤</span>'
-             : `<input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
-               + ` value="${S.w[obj]}"${off} title="relative pull in the combined step">`}</td>`
-         + `<td class="btns">${hard ? '' : `<button data-obj="${obj}" data-dir="1" title="descend">−</button>`
-         + `<button data-obj="${obj}" data-dir="-1" title="ascend">+</button>`}</td>`
+    (obj ? `<td class="w"><input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
+         + ` value="${S.w[obj]}"${S.on[obj] ? '' : ' disabled'} title="relative pull in the combined step"></td>`
+         + `<td class="btns"><button data-obj="${obj}" data-dir="1" title="descend">−</button>`
+         + `<button data-obj="${obj}" data-dir="-1" title="ascend">+</button></td>`
          : '<td class="w"></td><td class="btns"></td>') + '</tr>';
   }).join('');
 
@@ -1543,15 +1538,9 @@ const HELP = {
   rep:      "Spread swatches apart, as the selected observer sees them.",
   repcvd:   "Spread them apart for every observer at once.",
   arc:      "Total length of the trajectory. Descend to shorten it.",
-  obs:      "Overlap with the keep-out spheres.",
-  gam:      "How far the curve strays outside the gamut.",
-  lb:       "Lightness outside the band set in Bounds.",
-  cb:       "Chroma outside the band set in Bounds.",
-  pl:       "Palette on the excluded side of a halfplane.",
   lramp:    "Distance from the profile drawn in the plot below.",
   chroma:   "Distance from the middle of the chroma band.",
   hprof:    "Distance from the hue profile drawn in the plot below.",
-  hb:       "Hue outside the arc set on the wheel.",
   space:    "Control points bunched or unevenly spaced.",
   unif:     "Unevenness of the perceived steps between swatches.",
 };
@@ -1577,14 +1566,6 @@ const OBJ = [
   { key: 'repcvd', label: () => `repulsion · ${S.cvd === 'none' ? 'all' : '+' + S.cvd}`,
     f: (x) => repulsion(x.pal, criteria()) },
   { key: 'arc', label: 'arc length', mode: 'continuous', f: (x) => arcLength(x.curve, M()) },
-  { key: 'gam', label: 'gamut penalty', bad: true, f: (x) => x.probe.reduce((a, p) => a + gamutPenalty(p), 0) },
-  { key: 'lb', label: 'lightness bounds', bad: true,
-    f: (x) => x.probe.reduce((a, p) => a + hinge(S.lo[0] - p[0]) ** 2 + hinge(p[0] - S.hi[0]) ** 2, 0) },
-  { key: 'cb', label: 'chroma bounds', bad: true,
-    f: (x) => x.probe.reduce((a, p) => {
-      const c = Math.hypot(p[1], p[2]);
-      return a + hinge(S.lo[1] - c) ** 2 + hinge(c - S.hi[1]) ** 2;
-    }, 0) },
   /**
    * Perceptual uniformity: equal perceived steps between consecutive swatches.
    * Measured with the CHART metric, deliberately, not the active space's — the
@@ -1642,10 +1623,6 @@ const OBJ = [
       }
       return e / n;
     } },
-  { key: 'hb', label: 'hue bounds', bad: true,
-    // weighted by chroma so it is a distance in the chart, not an angle: being
-    // 40° off the arc barely matters at chroma 2 and matters a lot at chroma 20
-    f: (x) => x.probe.reduce((e, p) => e + ((Math.hypot(p[1], p[2]) * hueGap(p) * Math.PI) / 180) ** 2, 0) },
   /**
    * Keeps consecutive control points evenly spaced, and repels them apart when
    * they bunch. Σ(d̄/dᵢ) − n, not the variance of the segment lengths: variance
@@ -1679,10 +1656,6 @@ const OBJ = [
       const m = d.reduce((a, b) => a + b, 0) / d.length;
       return d.reduce((a, b) => a + (b - m) ** 2, 0) / d.length;
     } },
-  // the placed-object terms live at the end: they read zero until you put
-  // something in the way, so they are the least interesting rows by default
-  { key: 'obs', label: 'obstacle cost', bad: true, f: (x) => x.probe.reduce((a, p) => a + obstaclePenalty(p, S.obs, M(), primary()), 0) },
-  { key: 'pl', label: 'plane cost', bad: true, f: (x) => x.probe.reduce((a, p) => a + planePenalty(p), 0) },
 ];
 
 /** Terms included in the combined step. Constraints on, shaping opt-in. */
@@ -1805,9 +1778,7 @@ function stopSolver() {
   $('run').textContent = 'run Adam'; $('run').style.background = '';
   sync();
 }
-const constrained = (key) => S.hard && CONSTRAINTS.includes(key);
-const activeTerms = () => OBJ.filter((o) =>
-  S.on[o.key] && S.w[o.key] > 0 && (!o.mode || o.mode === S.mode) && !constrained(o.key));
+const activeTerms = () => OBJ.filter((o) => S.on[o.key] && S.w[o.key] > 0 && (!o.mode || o.mode === S.mode));
 
 // ─── lightness plot: what the ramp does, and what you want it to do ─────────
 const lcanvas = $('lcanvas'), lctx = lcanvas.getContext('2d');
@@ -2003,12 +1974,11 @@ function select(sel) {
  */
 const constrain = () => { S.pts = S.pts.map(feasify); };
 
-// ─── hard constraints ────────────────────────────────────────────────────────
-// The six terms that describe a FEASIBLE SET rather than a preference. With
-// `hard` off they are penalties and the optimiser trades them against the rest;
-// with it on they are enforced by projection and drop out of the objective,
-// because a penalty pulling against an exact projection only wastes gradient.
-const CONSTRAINTS = ['gam', 'lb', 'cb', 'hb', 'obs', 'pl'];
+// ─── the feasible set ────────────────────────────────────────────────────────
+// The gamut, the lightness and chroma bands, the hue arc, the keep-out spheres
+// and the halfplanes. These describe a feasible set rather than a preference,
+// so they are enforced by projection rather than weighted against the rest: a
+// palette outside them is not a worse palette, it is not a palette.
 
 /** how far outside the feasible set, in chart units; 0 means feasible */
 function infeasibility(q) {
@@ -2084,12 +2054,9 @@ function clampObs(q) {
  * finds A feasible point near the input, which is what a projected gradient
  * step needs, not the metrically nearest one.
  *
- * With `hard` off the gamut alone is projected, which is what this did before
- * the other five existed, and the rest stay penalties.
  */
 function feasify(p) {
   let q = toGamut(p);
-  if (!S.hard) return q;
   for (let it = 0; it < 12 && infeasibility(q) > 1e-4; it++)
     q = toGamut(clampObs(clampPlanes(clampH(clampC(clampL(q))))));
   return q;
@@ -2392,7 +2359,6 @@ $('run').onclick = () => (running ? stopSolver() : startSolver());
 $('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; sidebar(); };
 $('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1); };
 $('pinends').onchange = (e) => { S.pinEnds = e.target.checked; };
-$('hard').onchange = (e) => { S.hard = e.target.checked; adamReset(); sync(); };
 $('flip').onclick = () => {
   const pl = S.planes[S.sel?.i];
   if (!pl || !S.sel.kind.startsWith('plane')) return;
@@ -2552,7 +2518,7 @@ function mirror() {
   $('lock').checked = S.lock; $('planes3d').checked = S.planes3d; setPlanes3d();
   $('sliceop').value = S.sliceOp; $('sliceopv').textContent = S.sliceOp.toFixed(2).slice(1);
   $('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
-  $('pinends').checked = S.pinEnds; $('hard').checked = S.hard;
+  $('pinends').checked = S.pinEnds;
   $('exportfmt').value = S.fmt; $('colorfmt').value = S.cfmt;
   $('hex').placeholder = COLORFMT[S.cfmt].hint;
   $('sevv').textContent = S.sev.toFixed(1);
