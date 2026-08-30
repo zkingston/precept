@@ -112,12 +112,14 @@
   .q { cursor:help; opacity:.4; margin-left:4px; font-size:10px; vertical-align:super; }
   /* A Metrics row has a help line under the table to write into; a control row
      does not, so these carry their own. */
-  .q[data-h] { position:relative; }
+  .row, section h2 { position:relative; }
+  .row:has(.q[data-h]:hover), section h2:has(.q[data-h]:hover) { z-index:30; }
   .q[data-h]:hover::after {
-    content:attr(data-h); position:absolute; left:0; top:calc(100% + 7px); z-index:20;
-    width:max-content; max-width:232px; padding:6px 8px; text-align:left; white-space:normal;
+    content:attr(data-h); position:absolute; left:0; right:0; top:calc(100% + 6px); z-index:30;
+    padding:6px 8px; text-align:left; white-space:normal;
     background:#111116; border:1px solid var(--line); border-radius:5px; color:var(--fg);
     font:11px/1.45 ui-sans-serif,system-ui,sans-serif; box-shadow:0 5px 16px #000a;
+    text-transform:none; letter-spacing:normal;   /* h2 hosts would pass theirs down */
     vertical-align:baseline; pointer-events:none; }
   .q:hover { opacity:1; color:#7dd3fc; }
   #termhelp { min-height:2.6em; margin-top:7px; padding-top:6px; border-top:1px solid var(--line); }
@@ -249,13 +251,13 @@
         <span class="note" style="flex:1">:1 floor</span>
         <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
       <div class="row"><label class="chk"><input type="checkbox" id="pinends">lock endpoints</label></div>
-      <div class="row"><button id="steptotal" style="flex:1">step once</button>
+      <div class="row"><label class="f">solve</label><button id="steptotal" style="flex:1">step once</button>
         <button id="run" style="flex:1">run Adam</button></div>
     </section>
     <section><h2>Export</h2>
       <div class="row"><label class="f">name</label>
         <input type="text" id="scenename" value="precept" style="flex:1;min-width:0"></div>
-      <div class="row"><button id="savescene" style="flex:1">save scene</button>
+      <div class="row"><label class="f">scene</label><button id="savescene" style="flex:1">save scene</button>
         <button id="loadscene" style="flex:1">load scene</button>
         <input type="file" id="scenefile" accept=".json,application/json" hidden></div>
       <div class="row"><label class="f">format</label><select id="exportfmt" style="flex:1"></select></div>
@@ -296,9 +298,6 @@ const S = {
   cbg: '#ffffff', cmin: 3,                       // contrast: against what, and how much
   tipKind: 'sineramp',                           // which test image is showing
   lprof: [],                                     // target lightness profile, evenly spaced along t
-  feas:     "How far the CURVE leaves the feasible set, between the nodes.",
-  pair:     "Even perceived spacing over every pair, corrected for diminishing returns.",
-  contr:    "Swatches below the contrast floor against the chosen ground.",
   hprof: [],                                     // target hue profile, UNWRAPPED degrees
   slice: [55, 0, 0],                             // cut planes along L, a, b
   pts: [],                                       // filled from PRESETS below
@@ -1624,6 +1623,9 @@ const HELP = {
   lramp:    "Distance from the profile drawn in the plot below.",
   chroma:   "Distance from the middle of the chroma band.",
   hprof:    "Distance from the hue profile drawn in the plot below.",
+  feas:     "How far the curve leaves the feasible set between the nodes.",
+  pair:     "Even perceived spacing over every pair, corrected for diminishing returns.",
+  contr:    "Swatches under the contrast floor.",
   space:    "Control points bunched or unevenly spaced.",
   unif:     "Unevenness of the perceived steps between swatches.",
 };
@@ -2800,33 +2802,29 @@ select(S.sel);
  * markup. The marker is the same ? the Metrics rows use.
  */
 const HINTS = {
-  mode: 'Continuous is a ramp read as a scale; discrete is a set of swatches read as categories. It decides which terms apply and what the bar on the right shows.',
-  preset: 'Load a published palette as a starting point. Replaces the control points and refits both profiles.',
-  spacesel: 'The space the panels are drawn in and distances are measured with. The underlying chart is always Oklab — this is the chart you look at it through.',
-  gamutsel: 'Which primaries and white point bound the reachable colours. Derived from the primaries, so it is the real gamut and not a transfer curve.',
-  cvd: 'Simulate a colour-vision deficiency. Every panel, the test images and the objective terms all follow this.',
-  sev: 'How complete the deficiency is. 1.0 is full dichromacy; most colour-vision deficiency is partial.',
-  shell: 'Opacity of the gamut solid, including the caps that close it where a bound cuts through.',
+  mode: 'A ramp read as a scale, or a set of swatches read as categories.',
+  preset: 'Load a published palette. Replaces the control points and refits both profiles.',
+  spacesel: 'The space the panels are drawn in and distances are measured with.',
+  gamutsel: 'The primaries and white point that bound the reachable colours.',
+  cvd: 'Simulate a colour-vision deficiency. Panels, test images and objective terms all follow it.',
+  sev: 'How complete the deficiency is. 1.0 is full dichromacy.',
+  shell: 'Opacity of the gamut solid and the caps that close it.',
   sliceop: 'Opacity of the three cut planes.',
-  bg: 'Backdrop colour. It also decides whether labels and outlines are drawn light or dark.',
-  planes3d: 'Draw the three cut planes inside the 3D view as well as in their own panels.',
-  lock: 'Move all three cuts to whichever node you last touched, so every panel is cut through it.',
-  colorfmt: 'Notation for the selected node. LCh and oklch read the chart directly and are not gamut-mapped, so they round-trip exactly and will show an out-of-gamut node as out of gamut; hex and rgb cannot.',
-  flip: 'Swap which side of the selected halfplane is the excluded one.',
-  lmin: 'Lightness the palette is held between. Enforced by projection, and the solid is cut to match.',
-  cmin: 'Chroma the palette is held between, measured out from the neutral axis.',
-  huewheel: 'The arc of hues the palette may use. Drag an edge to move it; double-click for the full circle.',
-  cbg: 'The ground swatches are judged against — the page they will end up on.',
-  cfloor: 'Contrast ratio to reach. WCAG asks 3:1 for graphics and 4.5:1 for text. A floor, not a target: once met the term stops pulling, so it will not flatten the palette to one lightness.',
+  bg: 'Backdrop colour. Also sets whether labels and outlines are drawn light or dark.',
+  planes3d: 'Draw the cut planes in the 3D view as well as in their own panels.',
+  lock: 'Move all three cuts to the node you last touched.',
+  colorfmt: 'Notation for the selected node. LCh and oklch are not gamut-mapped, so they round-trip exactly.',
+  lmin: 'Lightness band the palette is held inside.',
+  cmin: 'Chroma band, measured out from the neutral axis.',
+  huewheel: 'The hue arc the palette may use. Drag an edge; double-click for the full circle.',
+  cbg: 'The ground swatches are judged against, and the ratio to reach. WCAG asks 3:1 for graphics, 4.5:1 for text.',
   rate: 'Step size, for the per-term buttons and for Adam.',
-  pinends: 'Hold the first and last control points still. Constraints still apply to them, and win if a bound moves past one.',
-  steptotal: 'One combined step over every enabled term.',
-  run: 'Run Adam until you stop it. Curve-feasibility multipliers update every 25 steps.',
-  scenename: 'Names the saved file and the identifier inside the exported code.',
-  savescene: 'The whole configuration — points, obstacles, planes, bounds, profiles, weights and the chart they mean something in — to a file and back.',
-  exportfmt: 'What copy and save produce. Continuous maps are resampled to 256 by arc length first, because every one of these interpolates evenly in t.',
-};
-for (const [k, text] of Object.entries(HINTS)) {
+  pinends: 'Hold the first and last control points still.',
+  steptotal: 'One combined step over every enabled term, or run Adam until you stop it.',
+  scenename: 'Names the saved file and the identifier in the exported code.',
+  savescene: 'The whole configuration to a file, and back.',
+  exportfmt: 'What copy and save produce. Continuous maps resample to 256 by arc length first.',
+};for (const [k, text] of Object.entries(HINTS)) {
   const el = document.getElementById(k);
   const host = el.closest('label.chk') ?? el.closest('.row')?.querySelector('label.f')
             ?? el.closest('.row') ?? el.closest('section').querySelector('h2');
