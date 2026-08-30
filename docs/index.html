@@ -46,11 +46,7 @@
   #huewheel { cursor:crosshair; touch-action:none; }
   /* tools live over the viewport, where the things they make are */
   #tool { position:absolute; top:12px; right:12px; display:flex; gap:4px; }
-  #tip { position:absolute; top:12px; display:flex; align-items:flex-start; gap:6px; }
-  /* the 3D panel's own hint shares this corner: drop it under the toggle, and
-     out of the way entirely while the card is covering that space */
-  #q0 .tag { top:54px; }
-  #tip[data-open=true] ~ #q0 .tag { display:none; }
+  #tip { position:absolute; right:14px; bottom:14px; display:flex; align-items:flex-start; gap:6px; }
   #tipcard { background:#1c1c20ee; border:1px solid var(--line); border-radius:6px; padding:7px; }
   #tip[data-open=false] #tipcard { display:none; }
   #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
@@ -67,9 +63,9 @@
     background:#3d5a6c; border-color:#5f8ba6; }
   #tool svg { width:19px; height:19px; fill:none; stroke:var(--fg); stroke-width:1.5;
     stroke-linecap:round; stroke-linejoin:round; }
-  /* right:118 leaves the button strip — which hangs 52px off the plot's right
-     edge — clear of the colour bar at right:14–52 */
-  #lplot { position:absolute; bottom:14px; right:118px; height:106px; }
+  /* the button strip hangs 52px off the plot's right edge, so this is the
+     preview's 318px plus a gap plus that strip */
+  #lplot { position:absolute; bottom:14px; right:400px; height:106px; }
   #lcanvas { width:100%; height:100%; display:block; cursor:ns-resize; touch-action:none; }
   /* outside the plot's right edge: inside, they sat exactly where the curve
      ends up once lightness rises to the right */
@@ -101,8 +97,8 @@
   .seg button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
 
   /* the output belongs next to the thing it came from, not in a side panel;
-     it sits clear of the toolbar above and runs to the floor below */
-  #bar { position:absolute; right:14px; top:96px; bottom:14px; width:38px; min-height:130px;
+     it sits clear of the toolbar above and the preview below */
+  #bar { position:absolute; right:14px; top:96px; bottom:202px; width:38px; min-height:130px;
          display:flex; flex-direction:column; align-items:center; gap:6px; }
   #strip { width:100%; flex:1; min-height:0; display:block; border-radius:5px; border:1px solid #0004; }
   #swatches { display:flex; flex-direction:column-reverse; gap:3px; width:100%; flex:1; min-height:0; }
@@ -993,7 +989,6 @@ function layout() {
     { x: 0, y: 2 * rowH, w: colW, h: h - 2 * rowH },
     { x: colW, y: 0, w: w - colW, h },
   ];
-  $('tip').style.left = `${RECTS[3].x + 12}px`;      // top left of the 3D view
   QUADS.forEach((q, i) => {
     q.rect = RECTS[i];
     Object.assign(q.el.style, { left: q.rect.x + 'px', top: q.rect.y + 'px', width: q.rect.w + 'px', height: q.rect.h + 'px' });
