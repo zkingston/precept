@@ -1138,7 +1138,7 @@ const TESTS = {
       return 0.95 * g(0.26, 0.62, 0.20) + 0.75 * g(0.68, 0.36, 0.26) + 0.45 * g(0.46, 0.84, 0.14);
     } },
   lines: { mode: 'discrete', label: 'lines',
-    note: 'One series per class, crossing and overlapping. Line work is thin, so a pair that reads as distinct in a swatch row can still merge here.' },
+    note: 'One series per class, crossing and overlapping, over a light and a dark ground. Line work is thin, so a pair that reads as distinct in a swatch row can still merge here.' },
   scatter: { mode: 'discrete', label: 'scatter',
     note: 'Every class on a light and a dark ground. A swatch that vanishes against either, or that you cannot tell from its neighbour, fails here and not in the metrics.' },
 };
@@ -1182,11 +1182,16 @@ function drawTest() {
  * do — which is where thin strokes of two similar hues stop being two.
  */
 function drawLines(W, H, lut) {
-  tctx.fillStyle = '#ececec'; tctx.fillRect(0, 0, W, H);
-  tctx.strokeStyle = '#00000014'; tctx.lineWidth = 1;
+  const half = Math.round(W / 2);
+  tctx.fillStyle = '#ececec'; tctx.fillRect(0, 0, half, H);
+  tctx.fillStyle = '#101014'; tctx.fillRect(half, 0, W - half, H);
+  tctx.lineWidth = 1;
   for (let i = 1; i < 4; i++) {
     const y = Math.round((i * H) / 4) + 0.5;
-    tctx.beginPath(); tctx.moveTo(0, y); tctx.lineTo(W, y); tctx.stroke();
+    tctx.strokeStyle = '#00000014';
+    tctx.beginPath(); tctx.moveTo(0, y); tctx.lineTo(half, y); tctx.stroke();
+    tctx.strokeStyle = '#ffffff1c';
+    tctx.beginPath(); tctx.moveTo(half, y); tctx.lineTo(W, y); tctx.stroke();
   }
   tctx.lineJoin = 'round'; tctx.lineCap = 'round'; tctx.lineWidth = 2;
   lut.forEach((c, i) => {
