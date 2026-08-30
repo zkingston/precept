@@ -354,21 +354,46 @@
   <button id="aboutclose" title="close">&times;</button>
   <h3>Precept</h3>
   <p class="lede">Palette design as trajectory optimisation.</p>
-  <p>A colour is a point, a continuous colormap is a path through the space, and a categorical
-     palette is a set of points that have to stay apart. Precept treats designing one as a
-     constrained problem over that geometry: the gamut, the lightness, chroma and hue bounds,
-     keep-out spheres and halfplanes are constraints on the path; uniform spacing, contrast,
-     a drawn lightness or hue profile and separation under colour-vision deficiency are what
-     it optimises for.</p>
+  <p>A colour is a point in a colour space — a set of parameters like red, green and blue, or hue,
+     saturation and lightness, or chroma, lightness and hue. The <em>gamut</em> is the set of colours
+     that space can actually represent; your monitor's is probably sRGB. Many people also have a
+     colour vision deficiency, which changes how distinct those colours are from one another.</p>
+  <p>A colormap is either a continuous path through that space, or a set of points for categorical
+     data, subject to constraints you would like to hold — uniform perception, maximal distinctness,
+     and so on. This tool solves that palette generation problem with optimisation, and provides a
+     number of metrics to help design pleasing and scientifically validated palettes.</p>
 
-  <h4>Why the geometry is unusual</h4>
-  <p>Perceptual colour space is not Riemannian. A large colour difference is perceived as
-     <em>less</em> than the sum of the small steps that make it up, so differences do not
-     simply add. Precept keeps the two structures apart — arc length for anything integrated
-     along a path, perceived difference for anything compared as a jump — because conflating
-     them is what most colormap criteria quietly do. Summing viridis's neighbour differences
-     overstates its true end-to-end difference by about 2×, which the Metrics panel reports
-     as the <em>additivity gap</em>.</p>
+  <h4>Getting around</h4>
+  <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view it
+     takes the colour you clicked on. Drag to move, right-click — or press and hold on a touchscreen
+     — to delete. The tools switch between nodes, keep-out spheres and halfplanes. Run Adam to
+     optimise against the enabled terms, and export as matplotlib, CSS, CSV, ParaView or JSON.
+     Hover any <span class="q">?</span> for what a control or a term means.</p>
+
+  <h4>Motivation (personal)</h4>
+  <p>Colour palettes have been on my mind for a long time, as someone who makes plots, charts and
+     data visualisations for work — usually a figure in some paper. Early on I remember a mentor (I
+     believe it was Mark Moll) pointing out that I should be concerned about red–green colour
+     blindness — protanopia and deuteranopia, more precisely — after seeing a plot of mine that used
+     bright red and green in a categorical palette.</p>
+  <p>At that point I was fairly unaware of the concerns of graphic design. Some reading on colour
+     palettes, including the excellent
+     <a href="https://www.youtube.com/watch?v=xAoljeRJ3lU" target="_blank" rel="noopener">talk on
+     viridis for matplotlib</a>, sent me down a rabbit hole into colour perception and how to design
+     palettes scientifically. I was always a little frustrated by the lack of flexibility and
+     visualisation in tools like
+     <a href="https://people.phy.cam.ac.uk/dag9/CUBEHELIX/" target="_blank" rel="noopener">cubehelix</a>
+     and <a href="https://seaborn.pydata.org/tutorial/color_palettes.html" target="_blank" rel="noopener">Seaborn's
+     palettes</a>. That led to a custom viridis-like palette I used in
+     <a href="https://kavrakilab.org/publications/kingston2019exploring-implicit-spaces-for-constrained.pdf"
+        target="_blank" rel="noopener">many of my papers</a>, and eventually to the weekend project
+     you are looking at now.</p>
+
+  <h4>Motivation (professional)</h4>
+  <p>Perceptual colour space is not Riemannian: a large colour difference is perceived as
+     <em>less</em> than the sum of the small steps that make it up. This tool was an exercise in
+     trajectory optimisation in a non-Riemannian space, and hopefully produces better palettes than
+     most colormap generators do.</p>
   <ul>
     <li>Bujack, Teti, Miller, Caffrey &amp; Turton. <em>The non-Riemannian nature of perceptual
         color space.</em> PNAS 2022.
@@ -378,18 +403,10 @@
         <a href="https://doi.org/10.1111/cgf.70136" target="_blank" rel="noopener">10.1111/cgf.70136</a></li>
   </ul>
 
-  <h4>Getting around</h4>
-  <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view
-     it takes the colour you clicked on. Drag to move, right-click — or press and hold on a
-     touchscreen — to delete. The tools switch between nodes, keep-out spheres and halfplanes.
-     Run Adam to optimise against the enabled terms, and export as matplotlib, CSS, CSV,
-     ParaView or JSON. Hover any <span class="q">?</span> for what a control or a term means.</p>
-
   <h4>Credit</h4>
   <p>Built by Zachary Kingston.<br>
-     <a href="https://zkingston.com" target="_blank" rel="noopener">zkingston.com</a> ·
-     <a href="mailto:zkingston@purdue.edu">zkingston@purdue.edu</a> ·
-     <a href="https://github.com/zkingston/precept" target="_blank" rel="noopener">source on GitHub</a></p>
+     <a href="https://zkingston.com" target="_blank" rel="noopener">zkingston.com</a> /
+     <a href="mailto:zkingston@purdue.edu">zkingston@purdue.edu</a></p>
 </dialog>
 
 <script type="importmap">
