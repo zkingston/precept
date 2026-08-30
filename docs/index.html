@@ -354,46 +354,55 @@
   <button id="aboutclose" title="close">&times;</button>
   <h3>Precept</h3>
   <p class="lede">Palette design as trajectory optimization.</p>
-  <p>A color is a point in a color space — a set of parameters like red, green and blue, or hue,
-     saturation and lightness, or chroma, lightness and hue. The <em>gamut</em> is the set of colors
-     that space can actually represent; your monitor's is probably sRGB. Many people also have a
-     color vision deficiency, which changes how distinct those colors are from one another.</p>
-  <p>A colormap is either a continuous path through that space, or a set of points for categorical
-     data, subject to constraints you would like to hold — uniform perception, maximal distinctness,
-     and so on. This tool solves that palette generation problem with optimization, and provides a
-     number of metrics to help design pleasing and scientifically validated palettes.</p>
+  <p>A color is a point in a <a href="https://en.wikipedia.org/wiki/Color_space" target="_blank" rel="noopener">color space</a>,
+     which is determined by parameters like the
+     <a href="https://en.wikipedia.org/wiki/RGB_color_model" target="_blank" rel="noopener">red, green, and blue</a> values, the
+     <a href="https://en.wikipedia.org/wiki/HSL_and_HSV" target="_blank" rel="noopener">hue, saturation, and lightness</a>, or
+     <a href="https://en.wikipedia.org/wiki/CIELAB_color_space" target="_blank" rel="noopener">chroma, lightness</a>, etc.,
+     where the <a href="https://en.wikipedia.org/wiki/Gamut" target="_blank" rel="noopener">gamut</a> is the set of
+     representable colors (your monitor is probably a gamut called
+     <a href="https://en.wikipedia.org/wiki/SRGB" target="_blank" rel="noopener">sRGB</a>). Many people also have a
+     <a href="https://en.wikipedia.org/wiki/Color_blindness" target="_blank" rel="noopener">color vision deficiency</a>, which
+     affects the distinctness of colors in this space. A colormap is either a continuous path
+     through that space or a set of points for categorical data, subject to some constraints that
+     you'd like to enforce, like uniform perception, maximal distinctness, and so on. This tool
+     solves that palette generation problem with optimization, and provides a number of metrics to
+     help design pleasing and scientifically validated palettes.</p>
 
   <h4>Getting around</h4>
   <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view it
-     takes the color you clicked on. Drag to move, right-click — or press and hold on a touchscreen
-     — to delete. The tools switch between nodes, keep-out spheres and halfplanes. Run Adam to
-     optimize against the enabled terms, and export as matplotlib, CSS, CSV, ParaView or JSON.
+     takes the color you clicked on.<br>
+     Drag to move, right-click (or press and hold on a touchscreen) to delete.<br>
+     The tools switch between nodes, keep-out spheres and halfplanes.<br>
+     Run Adam to optimize against the enabled terms.<br>
+     Export as matplotlib, CSS, CSV, ParaView or JSON.<br>
      Hover any <span class="q">?</span> for what a control or a term means.</p>
 
   <h4>Motivation (personal)</h4>
-  <p>Color palettes have been on my mind for a long time, as someone who makes plots, charts and
-     data visualizations for work — usually a figure in some paper. Early on I remember a mentor (I
-     believe it was Mark Moll) pointing out that I should be concerned about red–green color
-     blindness — protanopia and deuteranopia, more precisely — after seeing a plot of mine that used
-     bright red and green in a categorical palette.</p>
-  <p>At that point I was fairly unaware of the concerns of graphic design. Some reading on color
-     palettes, including the excellent
+  <p>Color palettes have been on my mind for quite some time as someone who creates plots, charts,
+     data visualization, etc. for my work (normally, a figure in some paper). I recall very early on
+     having a discussion with a mentor (I believe it was Mark Moll) who mentioned that I should be
+     concerned with red-green colorblindness (protanopia and deuteranopia, more precisely) after
+     seeing a plot I had made which had bright red and green as part of a categorical palette.</p>
+  <p>At that point in my life I was relatively unaware of the many concerns of graphic design, and
+     after some research on color palettes (e.g., the great
      <a href="https://www.youtube.com/watch?v=xAoljeRJ3lU" target="_blank" rel="noopener">talk on
-     viridis for matplotlib</a>, sent me down a rabbit hole into color perception and how to design
-     palettes scientifically. I was always a little frustrated by the lack of flexibility and
-     visualization in tools like
-     <a href="https://people.phy.cam.ac.uk/dag9/CUBEHELIX/" target="_blank" rel="noopener">cubehelix</a>
-     and <a href="https://seaborn.pydata.org/tutorial/color_palettes.html" target="_blank" rel="noopener">Seaborn's
-     palettes</a>. That led to a custom viridis-like palette I used in
+     viridis for matplotlib</a>) I was quickly sent down a rabbit hole as I learned about color
+     perception and how to scientifically design palettes. I was always a bit frustrated by the lack
+     of flexibility and visualization available in tools like
+     <a href="https://people.phy.cam.ac.uk/dag9/CUBEHELIX/" target="_blank" rel="noopener">cubehelix
+     palettes</a> or other offerings like
+     <a href="https://seaborn.pydata.org/tutorial/color_palettes.html" target="_blank" rel="noopener">Seaborn</a>.
+     This led to a custom viridis-like palette I used for
      <a href="https://kavrakilab.org/publications/kingston2019exploring-implicit-spaces-for-constrained.pdf"
-        target="_blank" rel="noopener">many of my papers</a>, and eventually to the weekend project
-     you are looking at now.</p>
+        target="_blank" rel="noopener">many of my papers</a>, and eventually this weekend project you
+     see now.</p>
 
   <h4>Motivation (professional)</h4>
-  <p>Perceptual color space is not Riemannian: a large color difference is perceived as
-     <em>less</em> than the sum of the small steps that make it up. This tool was an exercise in
-     trajectory optimization in a non-Riemannian space, and hopefully produces better palettes than
-     most colormap generators do.</p>
+  <p>Perceptual color space is not Riemannian, i.e., a large color difference is perceived as
+     <em>less</em> than the sum of steps that make it up. This tool was an exercise in trajectory
+     optimization in a non-Riemannian space, to hopefully provide better palettes than many other
+     colormap generating tools do.</p>
   <ul>
     <li>Bujack, Teti, Miller, Caffrey &amp; Turton. <em>The non-Riemannian nature of perceptual
         color space.</em> PNAS 2022.
