@@ -71,7 +71,7 @@
   .phead button { padding:1px 7px; font:10px ui-monospace,monospace; background:#26262bcc;
     color:var(--fg); border:1px solid var(--line); border-radius:3px; cursor:pointer; }
   .pcanvas { flex:1; min-height:0; width:100%; display:block; cursor:ns-resize; touch-action:none; }
-  #toolnote { position:absolute; top:230px; right:12px; max-width:340px; text-align:right;
+  #toolnote { position:absolute; top:230px; right:12px; white-space:nowrap; text-align:right;
     font:11px/1.4 ui-sans-serif,system-ui,sans-serif; color:var(--hud); pointer-events:none; }
   #hex { flex:1; min-width:0; font:12px ui-monospace,monospace; text-transform:lowercase; }
 
@@ -1105,9 +1105,9 @@ function sidebar() {
     const o = S.obs[s.i];
     $('selinfo').innerHTML = `sphere ${s.i} · <code>${toHex(o.c)}</code> · r ${o.r.toFixed(1)} perceived, ${unperceive(o.r).toFixed(1)} in chart units`;
   }
-  $('toolnote').textContent = { edit: 'double-click to add · drag a node to move · right-click to delete · drag empty space to pan, ctrl-wheel zooms, r resets',
-    obstacle: 'double-click a slice panel to place · drag the small handle to resize',
-    plane: 'double-click a slice panel to cut · drag the centre to slide, the tip to rotate' }[S.tool];
+  $('toolnote').textContent = { edit: 'double-click to add · drag to move · right-click to delete',
+    obstacle: 'double-click a slice to place · drag the handle to resize',
+    plane: 'double-click a slice to cut · drag the centre or the tip' }[S.tool];
 
   paintPlotButtons(); drawPlots();
   drawTest();
