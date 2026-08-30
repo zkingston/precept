@@ -1259,9 +1259,9 @@ function sidebar() {
   if (pal.length >= 2) {
     const worst = minSeparation(pal, M(), criteria());
     rows.push([`min Δ · ${observer()}`, minSeparation(pal, M(), [primary()]).toFixed(1), false, null,
-      'Closest pair, as the selected observer sees it.'],
+      'Closest pair.'],
       ['min Δ · worst', worst.toFixed(1), worst < 8, null,
-      'Closest pair over every observer. Red below 8.']);
+      'Closest pair over every observer.']);
   }
   if (S.mode === 'continuous' && S.pts.length >= 2) {
     const c = curve(), bad = c.filter((p) => !inGamut(p)).length;
@@ -1271,7 +1271,7 @@ function sidebar() {
       'Curve samples outside the gamut.']);
     const off = violations(c).filter((x) => x > 1e-4).length;
     rows.push(['curve off-set', `${off}/${c.length}`, off > 0, null,
-      'Curve samples outside the feasible set. Only the nodes are projected.']);
+      'Curve samples outside the feasible set.']);
     /**
      * Neighbor differences summed, over the true end-to-end one. This is a
      * reading about the SPACE, not about the palette: it tracks arc length and
@@ -1287,7 +1287,7 @@ function sidebar() {
     if (pal.length >= 3) {
       const steps = pal.reduce((a, p, i) => (i ? a + pd(pal[i - 1], p, EUCLIDEAN) : 0), 0);
       rows.push(['additivity gap', `${(steps / perceive(arcLength(c, EUCLIDEAN))).toFixed(2)}×`, false, null,
-        'Neighbor differences summed, over the true end-to-end one.']);
+        'Summed neighbor steps over the true difference.']);
     }
   }
   if (S.obs.length) {
@@ -1819,16 +1819,16 @@ const hprofSplit = (long = false) => {
 
 /** one line per term, shown under the table while its ? is hovered */
 const HELP = {
-  rep:      "Spread swatches apart, as the selected observer sees them.",
-  repcvd:   "Spread them apart for every observer at once.",
-  arc:      "Total length of the trajectory.",
-  lramp:    "Distance from the profile drawn in the plot below.",
-  chroma:   "Distance from the middle of the chroma band.",
-  hprof:    "Distance from the hue profile drawn in the plot below.",
-  feas:     "How far the curve leaves the feasible set.",
-  pair:     "Even spacing over every pair, after diminishing returns.",
+  rep:      "Spread swatches apart.",
+  repcvd:   "Spread apart for every observer.",
+  arc:      "Trajectory length.",
+  lramp:    "Distance from the lightness profile.",
+  chroma:   "Distance from the chroma band.",
+  hprof:    "Distance from the hue profile.",
+  feas:     "Curve outside the feasible set.",
+  pair:     "Even spacing over every pair.",
   contr:    "Swatches under the contrast floor.",
-  space:    "Control points bunched or unevenly spaced.",
+  space:    "Uneven control point spacing.",
 };
 
 const hinge = (v) => (v > 0 ? v : 0);
@@ -2253,14 +2253,14 @@ const PLOTS = {
        meas: (P) => P.map((p) => p[0]),
        clamp: (v) => Math.min(100, Math.max(0, v)),          // lightness has ends
        fit: lprofFit, p1: lprofLine, p2: lprofArch, labels: ['line', 'arch'],
-       tips: ['straight ramp over the current lightness range · double-click to reverse',
-              'tent for a diverging ramp · double-click for a dark middle'] },
+       tips: ['straight ramp · double-click to reverse',
+              'tent · double-click for a dark middle'] },
   H: { key: 'hprof', term: 'hprof', lo: 0, hi: 360, ticks: [0, 90, 180, 270, 360], hue: true,
        meas: (P) => P.map(hueOf).map(norm360),
        clamp: norm360,                                       // hue does not, so it wraps
        fit: hprofFit, p1: hprofSweep, p2: hprofSplit, labels: ['sweep', 'split'],
-       tips: ['steady turn from the first hue to the last · double-click to reverse',
-              'two plateaus meeting in the middle · double-click for the long way round'] },
+       tips: ['steady turn · double-click to reverse',
+              'two plateaus · double-click for the long way'] },
 };
 for (const [id, p] of Object.entries(PLOTS)) {
   p.root = document.querySelector(`.pplot[data-plot=${id}]`);
@@ -3158,29 +3158,29 @@ select(S.sel);
  * markup. The marker is the same ? the Metrics rows use.
  */
 const HINTS = {
-  mode: 'A ramp read as a scale, or a set of swatches read as categories.',
-  preset: 'Load a published palette as new control points.',
-  spacesel: 'The space the panels are drawn in and distances measured in.',
-  gamutsel: 'The primaries and white point that bound the reachable colors.',
-  cvd: 'Simulate a color-vision deficiency. Everything follows it.',
-  sev: 'How complete the deficiency is. 1.0 is full dichromacy.',
-  shell: 'Opacity of the gamut solid and the caps that close it.',
+  mode: 'Ramp or swatch set.',
+  preset: 'Load a published palette.',
+  spacesel: 'Space the panels are drawn in.',
+  gamutsel: 'Which colors are reachable.',
+  cvd: 'Simulate a color-vision deficiency.',
+  sev: 'How complete the deficiency is.',
+  shell: 'Opacity of the gamut solid.',
   sliceop: 'Opacity of the three cut planes.',
-  bg: 'Backdrop color. Labels and outlines follow it.',
+  bg: 'Backdrop color.',
   planes3d: 'Draw the cut planes in the 3D view too.',
-  lock: 'Move all three cuts to the node you last touched.',
-  colorfmt: 'Notation for the selected node. LCh and oklch round-trip exactly.',
-  lmin: 'Lightness band the palette is held inside.',
-  cmin: 'Chroma band, measured out from the neutral axis.',
-  huewheel: 'The hue arc the palette may use.',
-  cbg: 'Contrast ground and target ratio. WCAG asks 3:1 for graphics, 4.5:1 for text.',
-  rate: 'Step size, for the per-term buttons and for Adam.',
-  restart: 'On a stall, jolt the free points and run again, keeping the best attempt.',
-  pinends: 'Hold the first and last control points still.',
-  steptotal: 'One step over every enabled term, or run until you stop it.',
-  scenename: 'Names the saved file and the identifier in the exported code.',
-  savescene: 'The whole configuration to a file, and back.',
-  exportfmt: 'What copy and save produce. Ramps resample to 256 by arc length.',
+  lock: 'Cuts follow the node you touch.',
+  colorfmt: 'Notation for the selected node.',
+  lmin: 'Lightness band.',
+  cmin: 'Chroma band.',
+  huewheel: 'Allowed hue arc.',
+  cbg: 'Contrast ground and target ratio.',
+  rate: 'Step size.',
+  restart: 'Jolt and retry on a stall, keeping the best.',
+  pinends: 'Hold the endpoints still.',
+  steptotal: 'Step once, or run continuously.',
+  scenename: 'Name for saved files and exports.',
+  savescene: 'Save or load the whole setup.',
+  exportfmt: 'What copy and save produce.',
 };for (const [k, text] of Object.entries(HINTS)) {
   const el = document.getElementById(k);
   const host = el.closest('label.chk') ?? el.closest('.row')?.querySelector('label.f')
