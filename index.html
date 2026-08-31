@@ -1243,6 +1243,10 @@ function buildPlanes() {
 }
 
 // ─── layout and render loop ──────────────────────────────────────────────────
+// declared above layout(), which reads them: anything that lays out during
+// module evaluation would otherwise hit their temporal dead zone
+const NARROW = matchMedia('(max-width: 860px)');
+const DOCK = matchMedia('(max-width: 1280px), (max-height: 719px)');
 function layout() {
   const w = Math.max(1, main.clientWidth), h = Math.max(1, main.clientHeight);
   renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
@@ -3411,8 +3415,6 @@ loadFromHash();
  * duplicating: one plot canvas with one set of listeners, in whichever place
  * the width can afford.
  */
-const NARROW = matchMedia('(max-width: 860px)');
-const DOCK = matchMedia('(max-width: 1280px), (max-height: 719px)');
 function reflow() {
   // the profiles dock whenever the overlays are cramped; the preview does too,
   // except on a phone, where it has a better home as the fourth cut cell
