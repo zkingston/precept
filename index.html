@@ -5,9 +5,39 @@
 <title>Precept Palette Optimizer</title>
 <!-- the emoji as an SVG document, so there is no file to ship or fetch -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌈</text></svg>">
-<link rel="stylesheet" href="/node_modules/katex/dist/katex.min.css">
-<script defer src="/node_modules/katex/dist/katex.min.js"></script>
-<script defer src="/node_modules/katex/dist/contrib/auto-render.min.js"></script>
+<style>
+  /* Fira, self-hosted, latin plus the one Greek weight the interface needs
+     (the ΔL note). Everything Fira has no glyph for — ↺, ◐, the rotate
+     arrows — falls back per glyph exactly as it did before. */
+  @font-face { font-family:'Fira Sans'; font-style:normal; font-weight:400; font-display:swap;
+    unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    src:url(/node_modules/@fontsource/fira-sans/files/fira-sans-latin-400-normal.woff2) format('woff2'); }
+  @font-face { font-family:'Fira Sans'; font-style:normal; font-weight:600; font-display:swap;
+    unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    src:url(/node_modules/@fontsource/fira-sans/files/fira-sans-latin-600-normal.woff2) format('woff2'); }
+  @font-face { font-family:'Fira Sans'; font-style:normal; font-weight:700; font-display:swap;
+    unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    src:url(/node_modules/@fontsource/fira-sans/files/fira-sans-latin-700-normal.woff2) format('woff2'); }
+  @font-face { font-family:'Fira Sans'; font-style:normal; font-weight:400; font-display:swap;
+    unicode-range:U+0370-0377,U+037A-037F,U+0384-038A,U+038C,U+038E-03A1,U+03A3-03FF;
+    src:url(/node_modules/@fontsource/fira-sans/files/fira-sans-greek-400-normal.woff2) format('woff2'); }
+  @font-face { font-family:'Fira Mono'; font-style:normal; font-weight:400; font-display:swap;
+    unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    src:url(/node_modules/@fontsource/fira-mono/files/fira-mono-latin-400-normal.woff2) format('woff2'); }
+</style>
+<!-- MathJax with the Fira math font, so the formulation is set in the same
+     family as the interface. The combined component carries TeX input and CHTML
+     output; the paths tell it where its own source tree is, since the speech
+     worker and the character maps live under mathjax/ rather than the font. -->
+<script>
+  window.MathJax = {
+    loader: { paths: { mathjax: '/node_modules/mathjax',
+                       'mathjax-fira': '/node_modules/@mathjax/mathjax-fira-font' } },
+    startup: { typeset: false },      // the formulation is the only math, and it renders on demand
+    options: { enableMenu: false },   // right-click belongs to the 3D views
+  };
+</script>
+<script defer src="/node_modules/@mathjax/mathjax-fira-font/tex-mml-chtml-mathjax-fira.js"></script>
 <style>
   :root { --bg:#101012; --panel:#1c1c1f; --line:#32323a; --fg:#e8e8ec; --dim:#8b8b96; --hot:#ff5b5b; --sel:#3d5a6c;
           --hud:#33333a; --ctl:#26262b; --link:#7dd3fc;
@@ -15,7 +45,7 @@
              dark scheme however the panel is themed */
           --hudfg:#e8e8ec; --hudbg:#26262bd9; }
   * { box-sizing:border-box; }
-  body { margin:0; overflow:hidden; background:var(--bg); color:var(--fg); font:13px/1.45 ui-sans-serif,system-ui,sans-serif; }
+  body { margin:0; overflow:hidden; background:var(--bg); color:var(--fg); font:13px/1.45 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
   /* the row must be 1fr, not the implicit auto: a sidebar taller than the
      viewport would otherwise stretch the row and push the canvas off-screen */
   #app { display:grid; grid-template-columns:1fr 330px; grid-template-rows:1fr; height:100vh; }
@@ -26,7 +56,7 @@
   /* one canvas, four scissored viewports; the HUD is plain DOM on top */
   .quad { position:absolute; pointer-events:none; }
   .quad .sl { position:absolute; top:10px; bottom:10px; right:9px; display:flex; flex-direction:column;
-              align-items:center; gap:6px; pointer-events:auto; font:11px ui-monospace,monospace; color:var(--hud); }
+              align-items:center; gap:6px; pointer-events:auto; font:11px 'Fira Mono',ui-monospace,monospace; color:var(--hud); }
   /* vertical range: writing-mode is the supported route now, and direction:rtl
      is what puts the minimum at the bottom rather than the top */
   .quad .sl input { flex:1; min-height:0; width:18px; accent-color:var(--link);
@@ -79,7 +109,7 @@
              box-shadow:0 6px 18px #000a; }
   #ctxmenu[hidden] { display:none; }
   #ctxmenu button { background:none; border:0; color:var(--hudfg); text-align:left; cursor:pointer;
-                    padding:5px 9px; border-radius:4px; font:12px ui-sans-serif,system-ui,sans-serif; }
+                    padding:5px 9px; border-radius:4px; font:12px 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
   #ctxmenu button:hover { background:#3d5a6c; }
   #tool button, #graybtn, #hist button, #aboutbtn { width:34px; height:34px; padding:0; display:grid; place-items:center;
     background:var(--hudbg); border:1px solid #32323a; border-radius:5px; cursor:pointer;
@@ -93,12 +123,12 @@
   /* the controls sit above the plot rather than beside it: inside, they landed
      exactly where the curve ends up once lightness rises to the right */
   .phead { display:flex; align-items:center; gap:6px; height:18px;
-           font:10px ui-sans-serif,system-ui,sans-serif; color:var(--hud); }
+           font:10px 'Fira Sans',ui-sans-serif,system-ui,sans-serif; color:var(--hud); }
   .phead .pbtns { margin-left:auto; display:flex; gap:3px; }
-  .phead button { padding:1px 7px; font:10px ui-monospace,monospace; background:#26262bcc;
+  .phead button { padding:1px 7px; font:10px 'Fira Mono',ui-monospace,monospace; background:#26262bcc;
     color:var(--hudfg); border:1px solid #32323a; border-radius:3px; cursor:pointer; }
   .pcanvas { flex:1; min-height:0; width:100%; display:block; cursor:ns-resize; touch-action:none; }
-  #hex { flex:1; min-width:0; font:12px ui-monospace,monospace; text-transform:lowercase; }
+  #hex { flex:1; min-width:0; font:12px 'Fira Mono',ui-monospace,monospace; text-transform:lowercase; }
   #selcolor { flex:0 0 auto; width:40px; height:26px; }
 
 
@@ -150,29 +180,29 @@
     content:attr(data-h); position:absolute; left:0; right:0; top:calc(100% + 6px); z-index:30;
     padding:6px 8px; text-align:left; white-space:normal;
     background:#111116; border:1px solid #32323a; border-radius:5px; color:var(--hudfg);
-    font:11px/1.45 ui-sans-serif,system-ui,sans-serif; box-shadow:0 5px 16px #000a;
+    font:11px/1.45 'Fira Sans',ui-sans-serif,system-ui,sans-serif; box-shadow:0 5px 16px #000a;
     text-transform:none; letter-spacing:normal;   /* h2 hosts would pass theirs down */
     vertical-align:baseline; pointer-events:none; }
   .q:hover { opacity:1; color:var(--link); }
   #metrics td.w { width:40px; padding-left:4px; }
   #metrics input.w { width:38px; background:var(--ctl); color:var(--fg); border:1px solid var(--line);
-    border-radius:3px; padding:1px 3px; font:11px ui-monospace,monospace; text-align:right;
+    border-radius:3px; padding:1px 3px; font:11px 'Fira Mono',ui-monospace,monospace; text-align:right;
     -moz-appearance:textfield; appearance:textfield; }
   #metrics input.w::-webkit-outer-spin-button, #metrics input.w::-webkit-inner-spin-button {
     -webkit-appearance:none; margin:0; }
   #metrics input.w:disabled { opacity:.3; }
   #metrics td.btns { width:52px; text-align:right; white-space:nowrap; padding-left:6px; }
-  #metrics td.btns button { padding:0 5px; font:11px/1.5 ui-monospace,monospace; margin-left:3px; }
+  #metrics td.btns button { padding:0 5px; font:11px/1.5 'Fira Mono',ui-monospace,monospace; margin-left:3px; }
   .note { color:var(--dim); font-size:11px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
-  h2 #mathbtn { float:right; margin:-3px 0 0; padding:0 6px; font:11px/1.5 ui-sans-serif,system-ui,sans-serif;
+  h2 #mathbtn { float:right; margin:-3px 0 0; padding:0 6px; font:11px/1.5 'Fira Sans',ui-sans-serif,system-ui,sans-serif;
                 background:var(--ctl); color:var(--dim); border:1px solid var(--line); border-radius:3px;
                 cursor:pointer; text-transform:none; letter-spacing:0; }
   h2 #mathbtn:hover { color:var(--fg); }
   #mathdlg { max-width:min(760px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto;
     overscroll-behavior:contain; padding:22px 26px; background:var(--panel); color:var(--fg);
-    border:1px solid var(--line); border-radius:9px; font:13px/1.6 ui-sans-serif,system-ui,sans-serif; }
+    border:1px solid var(--line); border-radius:9px; font:13px/1.6 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
   #mathdlg::backdrop { background:#000a; }
   #mathdlg h3 { margin:0 0 14px; font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
   #mathdlg h4 { margin:19px 0 6px; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
@@ -180,13 +210,15 @@
   #mathdlg dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:3px 12px; align-items:baseline; }
   #mathdlg dt { white-space:nowrap; }
   #mathdlg dd { margin:0; color:var(--dim); }
-  #mathdlg .katex-display { margin:10px 0; overflow-x:auto; overflow-y:hidden; }
+  #mathdlg mjx-container[display="true"] { margin:10px 0; overflow-x:auto; overflow-y:hidden; }
+  /* MathJax sizes math relative to its surroundings; the dialog runs small */
+  #mathdlg mjx-container { font-size:107%; }
   #mathclose { position:absolute; top:12px; right:14px; width:26px; height:26px; padding:0;
     background:none; border:0; color:var(--dim); font-size:19px; line-height:1; cursor:pointer; }
   #mathclose:hover { color:var(--fg); }
   #aboutdlg { max-width:min(560px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto; overscroll-behavior:contain; padding:20px 22px;
     background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:9px;
-    font:13px/1.55 ui-sans-serif,system-ui,sans-serif; }
+    font:13px/1.55 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
   #aboutdlg::backdrop { background:#000a; }
   #aboutdlg h3 { margin:0; font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
   #aboutdlg h4 { margin:17px 0 5px; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
@@ -478,7 +510,7 @@
 
   <h4>2 · Variables</h4>
   <p>The variables are the control points \(P=(p_1,\dots,p_n)\in M^n\). A pinned set
-     \(\mathcal{P}\subseteq\{1,\dots,n\}\) is held fixed. Write \(t_i=\frac{i-1}{n-1}\) for the position
+     \(\mathcal{P}\subseteq\{1,\dots,n\}\) is held fixed. Write \(t_i=(i-1)/(n-1)\) for the position
      of swatch \(i\) along the palette.</p>
   <p>In continuous mode \(\gamma_P:[0,1]\to M\) is the centripetal Catmull–Rom spline through \(P\),
      sampled at \(K\) points \(\gamma_1,\dots,\gamma_K\), with length \(\ell_\gamma=\ell_g(\gamma_P)\).
@@ -495,7 +527,7 @@
     <dt>\(X=\{p: C_-\le C(p)\le C_+\}\)</dt><dd>chroma band</dd>
     <dt>\(H=\{p: C(p)&lt;1 \ \vee\ h(p)\in[h_-,h_+]\}\)</dt><dd>hue arc, mod \(360\)</dd>
     <dt>\(B_j=\{p: d(p,c_j)&lt;r_j\}\)</dt><dd>keep-out balls, radius in perceived units</dd>
-    <dt>\(E_m=\{p: n_m^{\!\top}\sigma(p)\le d_m\}\)</dt><dd>halfplanes, \(\sigma\) the chart\(\to\)space map</dd>
+    <dt>\(E_m=\{p: n_m^{\top}\sigma(p)\le d_m\}\)</dt><dd>halfplanes, \(\sigma\) the chart\(\to\)space map</dd>
   </dl>
   <p>The violation \(c(p)\) measures how far \(p\) lies outside \(\mathcal{F}\). It is zero on
      \(\mathcal{F}\) and differentiable off it. Each \(\phi\) is a squared distance outside its set, so
@@ -544,7 +576,7 @@
      \Delta_L=\frac{L_+-L_-}{n-1} \]
   <p>\(\kappa\) is the WCAG 2 contrast ratio against a ground \(\beta\). Both terms are floors, written
      as hinges, so each stops once its floor is met. \(\Delta_L\) is derived rather than typed: \(n\)
-     swatches can be at most \(\frac{L_+-L_-}{n-1}\) apart in lightness, so a larger floor would push
+     swatches can be at most \((L_+-L_-)/(n-1)\) apart in lightness, so a larger floor would push
      against a wall forever.</p>
 
   <h4>6 · Constraint handling</h4>
@@ -2762,7 +2794,7 @@ function drawPlot(p) {
 
   ctx.clearRect(0, 0, W, H);
   ctx.strokeStyle = hud; ctx.globalAlpha = 0.28; ctx.lineWidth = 1;
-  ctx.font = '9px ui-monospace,monospace'; ctx.fillStyle = hud;
+  ctx.font = "9px 'Fira Mono',ui-monospace,monospace"; ctx.fillStyle = hud;
   for (const v of p.ticks) {
     ctx.beginPath(); ctx.moveTo(LPAD.l, lpy(p, v)); ctx.lineTo(W - LPAD.r, lpy(p, v)); ctx.stroke();
     ctx.globalAlpha = 0.75;
@@ -3104,12 +3136,9 @@ $('aboutbtn').onclick = () => $('aboutdlg').showModal();
  */
 let mathReady = false;
 $('mathbtn').onclick = () => {
-  if (!mathReady && window.renderMathInElement) {
-    renderMathInElement($('mathdlg'), { throwOnError: false, delimiters: [
-      { left: '\\[', right: '\\]', display: true },
-      { left: '\\(', right: '\\)', display: false },
-    ] });
+  if (!mathReady && window.MathJax?.typesetPromise) {
     mathReady = true;
+    MathJax.typesetPromise([$('mathdlg')]);
   }
   $('mathdlg').showModal();
 };
