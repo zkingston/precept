@@ -354,6 +354,12 @@
         <button data-v="plane" title="Halfplanes"><svg viewBox="0 0 24 24">
           <path d="M3 15 L12 10 L21 13 L12 18 Z"/><path d="M12 10 L12 3"/><circle cx="12" cy="3" r="1.9"/></svg></button>
       </div>
+      <div id="tool" class="one">
+        <button id="panelbtn" title="show or hide the cut views"><svg viewBox="0 0 24 24">
+          <rect x="3" y="3.5" width="18" height="11" rx="1"/>
+          <rect x="3" y="17" width="5" height="4" rx="1"/><rect x="9.5" y="17" width="5" height="4" rx="1"/>
+          <rect x="16" y="17" width="5" height="4" rx="1"/></svg></button>
+      </div>
       <div id="hist">
         <button id="undo" title="undo · ctrl+Z">↶</button>
         <button id="redo" title="redo · ctrl+shift+Z">↷</button>
@@ -765,6 +771,7 @@ const S = {
   loop: [],                                      // loop[c]: run c closes back on itself
   marks: [],                                     // ctrl-clicked nodes, for linking
   bg: '#f0ead6', lock: true, planes3d: false,
+  panels: true,                                  // the three cut views, or the 3D one alone
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection color format
   restart: false,                                // kick the solver out of stalls
   cbg: '#ffffff', cmin: 3,                       // contrast: against what, and how much
@@ -1688,6 +1695,9 @@ function layout() {
    *
    * QUADS is ordered with the ortho views first, so index 3 is the big one.
    */
+  // With the cut views hidden there is no split to choose: the 3D view takes
+  // the canvas and the three quads are given no box at all, which is also what
+  // keeps frame() from setting a zero-width scissor on them.
   const A = w / h;
   // Aspect alone cannot choose between the last two. A phone in portrait leaves
   // a canvas near 412x380 and a laptop leaves one near 1060x900, which are the
@@ -1695,7 +1705,9 @@ function layout() {
   // wide and useless at 100. So the column split also needs the width to run it.
   const mode = A >= 1.6 ? 'squares' : (A <= 1.0 || w < 640) ? 'row' : 'columns';
   let RECTS, cell = null, stripH = 0;
-  if (mode === 'squares') {
+  if (!S.panels) {
+    RECTS = [null, null, null, { x: 0, y: 0, w, h }];
+  } else if (mode === 'squares') {
     // A 2x2 beside the 3D view. The column's WIDTH is capped so it cannot take
     // more than half the canvas, but its height is not: below aspect 2 a square
     // grid would leave a band of dead space under it, and a cell slightly
@@ -1764,6 +1776,8 @@ function layout() {
   $('bar').style.top = floating ? `${tip.offsetTop + tip.offsetHeight + 14}px` : '14px';
   QUADS.forEach((q, i) => {
     q.rect = RECTS[i];
+    q.el.hidden = !q.rect;
+    if (!q.rect) return;
     Object.assign(q.el.style, { left: q.rect.x + 'px', top: q.rect.y + 'px', width: q.rect.w + 'px', height: q.rect.h + 'px' });
     const aspect = q.rect.w / q.rect.h;
     if (q.cam.isPerspectiveCamera) { q.cam.aspect = aspect; }
@@ -1786,6 +1800,7 @@ function frame() {
   controls.update();
   const h = canvas.clientHeight;
   for (const q of QUADS) {
+    if (!q.rect) continue;                            // hidden, so nothing to scissor
     const { x, y, w: qw, h: qh } = q.rect;
     renderer.setViewport(x, h - y - qh, qw, qh);      // WebGL counts y from the bottom
     renderer.setScissor(x, h - y - qh, qw, qh);
@@ -4219,6 +4234,10 @@ function paintLoadList() {
       + `<span class="pname">${esc(name)}</span></button>`).join('') + '</div>').join('');
 }
 
+$('panelbtn').onclick = () => {
+  S.panels = !S.panels;
+  layout(); mirror(); sync();
+};
 $('loadbtn').onclick = () => { paintLoadList(); $('loaddlg').showModal(); };
 $('loadclose').onclick = () => $('loaddlg').close();
 $('loaddlg').onclick = (e) => { if (e.target === $('loaddlg')) $('loaddlg').close(); };
@@ -4454,6 +4473,7 @@ function mirror() {
   $('cvd').value = S.cvd; $('sev').value = S.sev;
   $('shell').value = S.shell; $('bg').value = S.bg;
   $('lock').checked = S.lock; $('planes3d').checked = S.planes3d; setPlanes3d();
+  $('panelbtn').ariaPressed = String(S.panels);
   $('sliceop').value = S.sliceOp; $('sliceopv').textContent = unit1(S.sliceOp);
   $('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
   $('restart').checked = S.restart;
