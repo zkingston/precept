@@ -54,6 +54,13 @@
   #tipbtns button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
   #hist { position:absolute; top:190px; right:130px; display:flex; gap:4px; }
   #hist button:disabled { opacity:.3; cursor:default; }
+  #ctxmenu { position:absolute; z-index:40; display:flex; flex-direction:column; min-width:88px;
+             background:#1c1c20f2; border:1px solid var(--line); border-radius:6px; padding:3px;
+             box-shadow:0 6px 18px #000a; }
+  #ctxmenu[hidden] { display:none; }
+  #ctxmenu button { background:none; border:0; color:var(--fg); text-align:left; cursor:pointer;
+                    padding:5px 9px; border-radius:4px; font:12px ui-sans-serif,system-ui,sans-serif; }
+  #ctxmenu button:hover { background:#3d5a6c; }
   #tool button, #graybtn, #hist button, #aboutbtn { width:34px; height:34px; padding:0; display:grid; place-items:center;
     background:#26262bd9; border:1px solid var(--line); border-radius:5px; cursor:pointer;
     color:var(--fg); font-size:15px; line-height:1; }
@@ -232,6 +239,7 @@
       <div id="tipbtns"></div>
     </div>
     <button id="aboutbtn" title="about precept">?</button>
+    <div id="ctxmenu" hidden></div>
     <div id="hist">
       <button id="undo" title="undo · ctrl+Z">↶</button>
       <button id="redo" title="redo · ctrl+shift+Z">↷</button>
@@ -340,8 +348,7 @@
                style="width:52px" title="minimum contrast ratio the palette should reach">
         <span class="note" style="flex:1">:1 floor</span>
         <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
-      <div class="row"><label class="chk"><input type="checkbox" id="pinends">lock endpoints</label>
-        <label class="chk"><input type="checkbox" id="restart">random restarts</label></div>
+      <div class="row"><label class="chk"><input type="checkbox" id="restart">random restarts</label></div>
       <div class="note" id="restartinfo"></div>
       <div class="row"><label class="f">solve</label><button id="steptotal" style="flex:1">step once</button>
         <button id="run" style="flex:1">run Adam</button></div>
@@ -446,7 +453,8 @@ const esc = (x) => x.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g
 
 const S = {
   mode: 'continuous', tool: 'edit', cvd: 'none', sev: 1, gray: false,
-  shell: 0.8, sliceOp: 0.8, rad: 12, rate: 0.3, pinEnds: true,
+  shell: 0.8, sliceOp: 0.8, rad: 12, rate: 0.3,
+  pin: [],                                       // parallel to pts: held still by the solver
   bg: '#f0ead6', lock: true, planes3d: false,
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection color format
   restart: false,                                // kick the solver out of stalls
@@ -548,18 +556,19 @@ const PER_SPAN = 24;                             // spline samples per control i
  */
 function addPoint(p) {
   const d3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-  if (S.mode !== 'continuous' || S.pts.length < 2) return S.pts.push(p) - 1;
+  const at = (i) => { S.pin.splice(i, 0, false); return i; };          // pins move with points
+  if (S.mode !== 'continuous' || S.pts.length < 2) return at(S.pts.push(p) - 1);
 
   const c = curve();
   let best = 0, near = Infinity;
   c.forEach((q, i) => { const d = d3(p, q); if (d < near) { near = d; best = i; } });
   if (near <= 10) {                              // chart units: about a comfortable ΔE
-    const at = Math.min(S.pts.length - 1, Math.floor(best / PER_SPAN) + 1);
-    S.pts.splice(at, 0, p);
-    return at;
+    const k = Math.min(S.pts.length - 1, Math.floor(best / PER_SPAN) + 1);
+    S.pts.splice(k, 0, p);
+    return at(k);
   }
-  if (d3(p, S.pts[0]) < d3(p, S.pts[S.pts.length - 1])) { S.pts.unshift(p); return 0; }
-  return S.pts.push(p) - 1;
+  if (d3(p, S.pts[0]) < d3(p, S.pts[S.pts.length - 1])) { S.pts.unshift(p); return at(0); }
+  return at(S.pts.push(p) - 1);
 }
 
 const PRESETS = {
@@ -1056,6 +1065,7 @@ function buildTube() {
 const ptGroup = new T.Group(), obsGroup = new T.Group(), planeGroup = new T.Group();
 scene.add(ptGroup, obsGroup, planeGroup);
 const DOT = new T.SphereGeometry(2.6, 20, 14), RING = new T.SphereGeometry(3.4, 20, 14);
+const HALO = new T.SphereGeometry(4.6, 20, 14);
 const OBS_DIR = new T.Vector3(0.62, 0.5, 0.6).normalize();   // off-axis on purpose
 
 function buildPoints() {
@@ -1069,6 +1079,11 @@ function buildPoints() {
     dot.material.color.setRGB(...rgb(p));
     ring.renderOrder = 8; dot.renderOrder = 9;
     ring.add(dot);
+    if (S.pin[i]) {                              // held still: an outline behind the ring
+      const halo = new T.Mesh(HALO, overlay({ color: 0xffc14d, side: T.BackSide }));
+      halo.renderOrder = 7;
+      ring.add(halo);
+    }
     ring.position.copy(wpt(p));
     ring.userData = { kind: 'pt', i };
     ptGroup.add(ring);
@@ -1236,11 +1251,10 @@ function sidebar() {
   const ramp = S.mode === 'continuous' && S.pts.length >= 2;
   strip.style.display = ramp ? '' : 'none';
   $('swatches').style.display = ramp ? 'none' : '';
-  // A discrete set has no ramp to profile and no ends to pin — its order is
-  // arbitrary — so both controls go away rather than sitting there inert.
+  // A discrete set has no ramp to profile, so the plots go away rather than
+  // sitting there inert.
   const cont = S.mode === 'continuous';
   lplotEl.style.display = cont ? '' : 'none';
-  $('pinends').closest('.row').style.display = cont ? '' : 'none';
   if (cont) layoutPlot();
   if (ramp) {
     sctx.clearRect(0, 0, W, H);
@@ -1616,6 +1630,7 @@ function loadScene(text) {
 function applyScene(o) {
   params.space = o.space; params.gamut = o.gamut;
   for (const k of Object.keys(S)) if (k in o) S[k] = o[k];
+  if (!('pin' in o)) S.pin = [];                 // a scene written before pins existed
   S.sel = null;
   reframe(); layout(); buildShell(); capKey = null;   // a new chart moves everything
   mirror();
@@ -1885,7 +1900,14 @@ const HELP = {
 
 const hinge = (v) => (v > 0 ? v : 0);
 /** gated on the mode too, so a hidden checkbox cannot quietly hold points still */
-const pinnedAt = (i, n) => S.pinEnds && S.mode === 'continuous' && n > 1 && (i === 0 || i === n - 1);
+const pinnedAt = (i) => !!S.pin[i];
+/**
+ * Pins are parallel to the points, so the two mutate together in addPoint and
+ * removeAt. A length mismatch means something replaced the points wholesale (a
+ * preset, a scene without pins), and pins that no longer refer to anything are
+ * worse than none — so they go with them.
+ */
+const syncPins = () => { if (S.pin.length !== S.pts.length) S.pin = S.pts.map(() => false); };
 /** WCAG 2 relative luminance and contrast ratio, on the sRGB the viewer gets */
 const wcagY = (p) => {
   const [r, g, b] = toLinear(toGamut(p, 'srgb'), 'srgb').map(clamp01);
@@ -2081,7 +2103,7 @@ function gradientOf(terms) {
   const base = S.pts.map((p) => [...p]);
   const h = 0.25;
   // gated on the mode too, so a hidden checkbox cannot quietly hold points still
-  const pinned = (i) => pinnedAt(i, base.length);
+  const pinned = pinnedAt;
   const per = terms.map(() => base.map(() => [0, 0, 0]));
   for (let i = 0; i < base.length; i++) {
     if (pinned(i)) continue;
@@ -2238,7 +2260,7 @@ function better(a, b) {
 /** chart units, so the jolt means the same thing whichever space is on screen */
 function jolt() {
   const n = S.pts.length;
-  S.pts = S.pts.map((p, i) => (pinnedAt(i, n) ? p
+  S.pts = S.pts.map((p, i) => (pinnedAt(i) ? p
     : p.map((v) => v + RESTART.sd * (Math.random() * 2 - 1))));
 }
 
@@ -2618,6 +2640,7 @@ const disturb = () => { if (adam) adam = null; };
 
 /** Rebuild whatever the change touched. Small enough to be blunt about it. */
 function sync({ colors = false, light = false } = {}) {
+  syncPins();
   constrain();
   slices.forEach(paintSlice);
   paintShell();
@@ -2761,7 +2784,7 @@ canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'mouse') {
       const { kind, i } = grabbed.object.userData;
       hold = { x: e.clientX, y: e.clientY,
-        t: setTimeout(() => { hold = null; drag = null; removeAt(kind, i); }, 520) };
+        t: setTimeout(() => { hold = null; drag = null; openMenu(e.clientX, e.clientY, kind, i); }, 520) };
     }
   } else if (q.axis !== undefined) {            // empty space in a slice panel: pan
     drag = { kind: 'pan', q, x: e.clientX, y: e.clientY };
@@ -2795,16 +2818,48 @@ canvas.addEventListener('dblclick', (e) => {
 
 function removeAt(kind, i) {
   ({ pt: S.pts, obs: S.obs, obsr: S.obs, plane: S.planes, planerot: S.planes })[kind].splice(i, 1);
+  if (kind === 'pt') S.pin.splice(i, 1);
   S.sel = null;
   sync();
 }
+
+/**
+ * What the right button and a long press both open. Delete used to happen
+ * outright, which is a lot to hang on a gesture with no undo prompt and left
+ * nowhere to put a second action.
+ */
+let ctxFor = null;
+function openMenu(clientX, clientY, kind, i) {
+  ctxFor = { kind, i };
+  const acts = kind === 'pt' ? [S.pin[i] ? 'unpin' : 'pin', 'delete'] : ['delete'];
+  const m = $('ctxmenu');
+  m.innerHTML = acts.map((a) => `<button data-act="${a}">${a}</button>`).join('');
+  m.hidden = false;
+  const r = main.getBoundingClientRect();
+  m.style.left = `${Math.min(clientX - r.left, main.clientWidth - m.offsetWidth - 6)}px`;
+  m.style.top = `${Math.min(clientY - r.top, main.clientHeight - m.offsetHeight - 6)}px`;
+}
+const closeMenu = () => { $('ctxmenu').hidden = true; ctxFor = null; };
+$('ctxmenu').onclick = (e) => {
+  const act = e.target.dataset?.act;
+  if (!act || !ctxFor) return;
+  const { kind, i } = ctxFor;
+  closeMenu();
+  if (act === 'delete') return removeAt(kind, i);
+  S.pin[i] = !S.pin[i];
+  sync();
+};
+// capture, so a click anywhere else dismisses it before that click does anything
+addEventListener('pointerdown', (e) => {
+  if (!$('ctxmenu').hidden && !$('ctxmenu').contains(e.target)) closeMenu();
+}, true);
 
 canvas.addEventListener('contextmenu', (e) => {
   if (!castFrom(e)) return;
   const hit = hitTest();
   if (!hit) return;
   e.preventDefault();
-  removeAt(hit.object.userData.kind, hit.object.userData.i);
+  openMenu(e.clientX, e.clientY, hit.object.userData.kind, hit.object.userData.i);
 });
 
 // wheel over a slice panel scrolls that cut plane; over 3D it stays OrbitControls'
@@ -2876,7 +2931,7 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Backspace' || e.key === 'Delete') {
     removeAt(S.sel.kind, S.sel.i);
   }
-  if (e.key === 'Escape') { S.sel = null; sync(); }
+  if (e.key === 'Escape') { closeMenu(); S.sel = null; sync(); }
 });
 
 // ─── controls ────────────────────────────────────────────────────────────────
@@ -2942,6 +2997,7 @@ $('preset').onchange = (e) => {
   if (!preset) return;
   S.mode = preset.mode;
   S.pts = preset.hex.map(fromHex);
+  S.pin = [];                                    // a new palette, not the old one renumbered
   S.sel = null;
   lprofLine(); hprofFit();                         // a new ramp gets fresh targets
   for (const b of $('mode').children) b.ariaPressed = b.dataset.v === S.mode;
@@ -2992,7 +3048,6 @@ $('steptotal').onclick = () => stepBy(activeTerms(), 1);
 $('run').onclick = () => (running ? stopSolver() : startSolver());
 $('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; sidebar(); };
 $('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1); };
-$('pinends').onchange = (e) => { S.pinEnds = e.target.checked; };
 $('restart').onchange = (e) => { S.restart = e.target.checked; sidebar(); };
 $('cbg').oninput = (e) => { S.cbg = e.target.value; sidebar(); };
 $('cfloor').oninput = (e) => { S.cmin = Math.max(1, +e.target.value || 1); sidebar(); };
@@ -3174,7 +3229,7 @@ function mirror() {
   $('lock').checked = S.lock; $('planes3d').checked = S.planes3d; setPlanes3d();
   $('sliceop').value = S.sliceOp; $('sliceopv').textContent = S.sliceOp.toFixed(2).slice(1);
   $('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
-  $('pinends').checked = S.pinEnds; $('restart').checked = S.restart;
+  $('restart').checked = S.restart;
   $('cbg').value = S.cbg; $('cfloor').value = S.cmin;
   $('exportfmt').value = S.fmt; $('colorfmt').value = S.cfmt;
   $('hex').placeholder = COLORFMT[S.cfmt].hint;
@@ -3228,7 +3283,6 @@ const HINTS = {
   cbg: 'Contrast ground and target ratio.',
   rate: 'Step size.',
   restart: 'Jolt and retry on a stall, keeping the best.',
-  pinends: 'Hold the endpoints still.',
   steptotal: 'Step once, or run continuously.',
   scenename: 'Name for saved files and exports.',
   savescene: 'Save or load the whole setup.',
