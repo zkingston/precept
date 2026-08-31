@@ -226,11 +226,13 @@
     #mathdlg dl { grid-template-columns:1fr; gap:0; }
     #mathdlg dd { margin:1px 0 7px 14px; }
     /* The dock is one column at this width, so the preview takes the whole of
-       it and its 2:1 canvas came back 180px tall — a third of the panel, for
-       the one thing there that is already legible small. Height over aspect:
-       every test image is drawn from the canvas's own size, so a wider one is
+       it, and at its natural 2.06 that came back 180px tall — a third of the
+       panel for the one thing there that is already legible small.
+       An aspect rather than a height: a fixed height is one shape at 412 and
+       another at 540, and the wide end of this tier is where it looked pulled.
+       Every test image is drawn from the canvas's own size, so a wider box is
        a wider picture rather than a squashed one. */
-    #dock #tipcanvas { height:104px; }
+    #dock #tipcanvas { height:auto; aspect-ratio:2.7; }
   }
   /* Wide formulas scroll sideways on a narrow viewport. The vertical padding is
      not decoration: MathJax's box arithmetic leaves each container overflowing
