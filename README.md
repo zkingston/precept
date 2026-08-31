@@ -75,8 +75,10 @@ path across all of them.
 - **Palettes** — continuous trajectories (centripetal Catmull–Rom through
   control points) or discrete sets. matplotlib colormaps and Tableau/Okabe–Ito/
   ColorBrewer sets load as editable control points.
-- **Color vision** — Brettel 1997, all three dichromacies with severity,
-  applied to the swatches *and* the gamut solid.
+- **Color vision** — Machado, Oliveira & Fernandes 2009, all three deficiencies
+  at any severity, applied to the swatches *and* the gamut solid. Severity is a
+  tabulated matrix per 0.1 step rather than a fade toward dichromacy, because
+  most color vision deficiency is anomalous trichromacy.
 - **Gamuts** — sRGB, Display P3, Adobe RGB, Rec.2020, ProPhoto, ACEScg, NTSC
   1953. Derived from primaries and white point; the selector changes what is
   *reachable*, the screen stays sRGB.

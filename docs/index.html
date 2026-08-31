@@ -658,11 +658,11 @@ const COLOR_GLSL = `
 precision highp float;
 uniform int uSpace, uCvd, uHueAll;
 uniform float uSev, uOpacity;
-uniform vec3 uLo, uHi, uWhite, uIptW, uCvdN, uMid;
+uniform vec3 uLo, uHi, uWhite, uIptW, uMid;
 uniform float uScale;
 uniform vec2 uLB, uCB, uHue;
 uniform mat3 uLmsLab, uXyzLms, uLmsXyz, uLabLms;
-uniform mat3 uIptOppI, uIptLmsI, uGamut, uLinSrgb, uXyzSrgb, uCvd1, uCvd2;
+uniform mat3 uIptOppI, uIptLmsI, uGamut, uLinSrgb, uXyzSrgb, uCvdM;
 
 const float D = 6.0 / 29.0;
 float labfi(float t) { return t > D ? t * t * t : 3.0 * D * D * (t - 4.0 / 29.0); }
@@ -712,10 +712,7 @@ bool inBounds(vec3 lab) {
 /** XYZ, through the selected observer, to something a monitor can show */
 vec3 shown(vec3 xyz) {
   vec3 lin = uLinSrgb * xyz;
-  if (uCvd > 0) {
-    mat3 m = dot(uCvdN, lin) >= 0.0 ? uCvd1 : uCvd2;
-    lin = mix(lin, m * lin, uSev);
-  }
+  if (uCvd > 0) lin = uCvdM * lin;      // severity is already baked into the matrix
   return clamp(vec3(enc(lin.r), enc(lin.g), enc(lin.b)), 0.0, 1.0);
 }
 
@@ -793,14 +790,14 @@ const colorUniforms = () => ({
   uSev: { value: 1 }, uOpacity: { value: 1 }, uScale: { value: 1 },
   uMid: { value: new T.Vector3() },
       uLo: { value: new T.Vector3() }, uHi: { value: new T.Vector3() },
-      uWhite: { value: new T.Vector3() }, uIptW: { value: new T.Vector3() }, uCvdN: { value: new T.Vector3() },
+      uWhite: { value: new T.Vector3() }, uIptW: { value: new T.Vector3() },
       uLB: { value: new T.Vector2() }, uCB: { value: new T.Vector2() }, uHue: { value: new T.Vector2() },
       uLmsLab: { value: new T.Matrix3() }, uXyzLms: { value: new T.Matrix3() },
       uLmsXyz: { value: new T.Matrix3() }, uLabLms: { value: new T.Matrix3() },
       uIptOppI: { value: new T.Matrix3() }, uIptLmsI: { value: new T.Matrix3() },
       uGamut: { value: new T.Matrix3() }, uLinSrgb: { value: new T.Matrix3() },
       uXyzSrgb: { value: new T.Matrix3() },
-  uCvd1: { value: new T.Matrix3() }, uCvd2: { value: new T.Matrix3() },
+  uCvdM: { value: new T.Matrix3() },
 });
 
 /** every constant the shaders need, straight from the model */
@@ -821,8 +818,7 @@ function setColorUniforms(u) {
   u.uHueAll.value = S.hue[0] === 0 && S.hue[1] === 360 ? 1 : 0;
   u.uCvd.value = CVD_ID[S.cvd]; u.uSev.value = S.sev;
   if (S.cvd !== 'none') {
-    const [m1, m2, n] = I.BRETTEL[S.cvd];
-    u.uCvd1.value.set(...m1); u.uCvd2.value.set(...m2); u.uCvdN.value.fromArray(n);
+    u.uCvdM.value.set(...I.cvdMatrix(S.cvd, S.sev));
   }
 }
 
@@ -1610,8 +1606,8 @@ const menu = (id) => [...$(id).children].map((b) => b.dataset.v);
 /**
  * A scene file is untrusted input. A NaN or an unrecognized enum reaching the
  * renderer is fatal with no way back short of a reload — an unknown CVD name
- * indexes BRETTEL to undefined and the next destructure throws inside the
- * frame loop. So check before assigning, not after.
+ * indexes the CVD table to undefined and the next matrix build throws inside
+ * the frame loop. So check before assigning, not after.
  */
 function loadScene(text) {
   const o = JSON.parse(text);

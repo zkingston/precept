@@ -256,7 +256,7 @@ export const internals = {
   LMS_XYZ, LAB_LMS, XYZ_LMS, LMS_LAB,
   get CHART_WHITE() { return CHART_WHITE; },
   get IPT() { return { LMS: IPT_LMS, OPP: IPT_OPP, LMS_I: IPT_LMS_I, OPP_I: IPT_OPP_I, W: IPT_W }; },
-  get BRETTEL() { return BRETTEL; },
+  cvdMatrix,
   rgbFromXYZ: (g = params.gamut) => mats(g).from,
   xyzFromRGB: (g = params.gamut) => mats(g).to,
 };
@@ -501,33 +501,77 @@ export const delta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
  */
 export type CVD = 'protan' | 'deutan' | 'tritan';
 
-const BRETTEL: Record<CVD, [number[], number[], Vec3]> = {
+/**
+ * Machado, Oliveira & Fernandes (2009), Table 1: one 3x3 per deficiency at
+ * severities 0.0 to 1.0 in steps of 0.1, acting on LINEAR sRGB.
+ *
+ * This replaces Brettel/Vienot/Mollon, which is the better model of full
+ * dichromacy but has no principled notion of a partial one — severity there
+ * was a linear fade toward the projection, and most color vision deficiency is
+ * anomalous trichromacy rather than dichromacy. Machado derives each severity
+ * from a shift in the anomalous photopigment, so the table is the nonlinear
+ * part and only the interpolation between its 0.1 steps is linear.
+ *
+ * Every row sums to 1, so white is preserved, and severity 0 is exactly the
+ * identity. sRGB whatever the working gamut is, because that is what the
+ * matrices were derived for -- and the shader already worked there, so the two
+ * paths now agree where they used to differ.
+ */
+const MACHADO: Record<CVD, number[][]> = {
   protan: [
-    [0.1498, 1.19548, -0.34528, 0.10764, 0.84864, 0.04372, 0.00384, -0.0054, 1.00156],
-    [0.1457, 1.16172, -0.30742, 0.10816, 0.85291, 0.03892, 0.00386, -0.00524, 1.00139],
-    [0.00048, 0.00393, -0.00441],
+    [1, 0, -0, 0, 1, 0, -0, -0, 1],
+    [0.856167, 0.182038, -0.038205, 0.029342, 0.955115, 0.015544, -0.00288, -0.001563, 1.00444],
+    [0.734766, 0.334872, -0.069637, 0.05184, 0.919198, 0.028963, -0.004928, -0.004209, 1.00914],
+    [0.630323, 0.465641, -0.095964, 0.069181, 0.890046, 0.040773, -0.006308, -0.007724, 1.01403],
+    [0.539009, 0.579343, -0.118352, 0.082546, 0.866121, 0.051332, -0.007136, -0.011959, 1.0191],
+    [0.458064, 0.679578, -0.137642, 0.092785, 0.846313, 0.060902, -0.007494, -0.016807, 1.0243],
+    [0.38545, 0.769005, -0.154455, 0.100526, 0.829802, 0.069673, -0.007442, -0.02219, 1.02963],
+    [0.319627, 0.849633, -0.169261, 0.106241, 0.815969, 0.07779, -0.007025, -0.028051, 1.03508],
+    [0.259411, 0.923008, -0.18242, 0.110296, 0.80434, 0.085364, -0.006276, -0.034346, 1.04062],
+    [0.203876, 0.990338, -0.194214, 0.112975, 0.794542, 0.092483, -0.005222, -0.041043, 1.04627],
+    [0.152286, 1.05258, -0.204868, 0.114503, 0.786281, 0.099216, -0.003882, -0.048116, 1.052],
   ],
   deutan: [
-    [0.36477, 0.86381, -0.22858, 0.26294, 0.64245, 0.09462, -0.02006, 0.02728, 0.99278],
-    [0.37298, 0.88166, -0.25464, 0.25954, 0.63506, 0.1054, -0.0198, 0.02784, 0.99196],
-    [-0.00281, -0.00611, 0.00892],
+    [1, 0, -0, 0, 1, 0, -0, -0, 1],
+    [0.866435, 0.177704, -0.044139, 0.049567, 0.939063, 0.01137, -0.003453, 0.007233, 0.99622],
+    [0.760729, 0.319078, -0.079807, 0.090568, 0.889315, 0.020117, -0.006027, 0.013325, 0.992702],
+    [0.675425, 0.43385, -0.109275, 0.125303, 0.847755, 0.026942, -0.00795, 0.018572, 0.989378],
+    [0.605511, 0.52856, -0.134071, 0.155318, 0.812366, 0.032316, -0.009376, 0.023176, 0.9862],
+    [0.547494, 0.607765, -0.155259, 0.181692, 0.781742, 0.036566, -0.01041, 0.027275, 0.983136],
+    [0.498864, 0.674741, -0.173604, 0.205199, 0.754872, 0.039929, -0.011131, 0.030969, 0.980162],
+    [0.457771, 0.731899, -0.18967, 0.226409, 0.731012, 0.042579, -0.011595, 0.034333, 0.977261],
+    [0.422823, 0.781057, -0.203881, 0.245752, 0.709602, 0.044646, -0.011843, 0.037423, 0.974421],
+    [0.392952, 0.82361, -0.216562, 0.263559, 0.69021, 0.046232, -0.01191, 0.040281, 0.97163],
+    [0.367322, 0.860646, -0.227968, 0.280085, 0.672501, 0.047413, -0.01182, 0.04294, 0.968881],
   ],
   tritan: [
-    [1.01277, 0.13548, -0.14826, -0.01243, 0.86812, 0.14431, 0.07589, 0.805, 0.11911],
-    [0.93678, 0.18979, -0.12657, 0.06154, 0.81526, 0.1232, -0.37562, 1.12767, 0.24796],
-    [0.03901, -0.02788, -0.01113],
+    [1, 0, -0, 0, 1, 0, -0, -0, 1],
+    [0.92667, 0.092514, -0.019184, 0.021191, 0.964503, 0.014306, 0.008437, 0.054813, 0.93675],
+    [0.89572, 0.13333, -0.02905, 0.029997, 0.9454, 0.024603, 0.013027, 0.104707, 0.882266],
+    [0.905871, 0.127791, -0.033662, 0.026856, 0.941251, 0.031893, 0.01341, 0.148296, 0.838294],
+    [0.948035, 0.08949, -0.037526, 0.014364, 0.946792, 0.038844, 0.010853, 0.193991, 0.795156],
+    [1.01728, 0.027029, -0.044306, -0.006113, 0.958479, 0.047634, 0.006379, 0.248708, 0.744913],
+    [1.105, -0.046633, -0.058363, -0.032137, 0.971635, 0.060503, 0.001336, 0.317922, 0.680742],
+    [1.19321, -0.109812, -0.083402, -0.058496, 0.97941, 0.079086, -0.002346, 0.403492, 0.598854],
+    [1.25773, -0.139648, -0.118081, -0.078003, 0.975409, 0.102594, -0.003316, 0.501214, 0.502102],
+    [1.27886, -0.125333, -0.153531, -0.084748, 0.957674, 0.127074, -0.000989, 0.601151, 0.399838],
+    [1.25553, -0.076749, -0.178779, -0.078411, 0.930809, 0.147602, 0.004733, 0.691367, 0.3039],
   ],
 };
 
-/** severity 0 = normal vision, 1 = dichromacy. Anomalous trichromacy in between. */
+/** severity 0 = normal vision, 1 = dichromacy. Anomalous trichromacy between. */
+export function cvdMatrix(type: CVD, severity = 1): number[] {
+  const t = Math.min(1, Math.max(0, severity)) * 10;
+  const i = Math.min(9, Math.floor(t)), f = t - i;
+  const [a, b] = [MACHADO[type][i], MACHADO[type][i + 1]];
+  return a.map((v, k) => v + f * (b[k] - v));
+}
+
 export function simulate(type: CVD, severity = 1): View {
-  const [m1, m2, n] = BRETTEL[type];
+  const m = cvdMatrix(type, severity);
   return (p) => {
-    const rgb = toLinear(p);
-    const m = n[0] * rgb[0] + n[1] * rgb[1] + n[2] * rgb[2] >= 0 ? m1 : m2;
-    return fromLinear(
-      rgb.map((c, i) => severity * (m[3 * i] * rgb[0] + m[3 * i + 1] * rgb[1] + m[3 * i + 2] * rgb[2]) + (1 - severity) * c) as Vec3,
-    );
+    const c = toLinear(p, 'srgb');
+    return fromLinear([0, 1, 2].map((r) => m[3 * r] * c[0] + m[3 * r + 1] * c[1] + m[3 * r + 2] * c[2]) as Vec3, 'srgb');
   };
 }
 
@@ -664,11 +708,20 @@ function demo() {
   ok(Math.max(...gaps) - Math.min(...gaps) < 1e-6, 'resample is evenly spaced');
   ok(minSeparation([fromHex('#ff0000'), fromHex('#00ff00'), fromHex('#0000ff')]) > 20, 'RGB primaries separate');
 
-  // CVD is a projection: severity 0 is a no-op, and projecting twice changes nothing
+  // Machado is a linear map derived from the shifted photopigment, NOT a
+  // projection, so it is not idempotent the way Brettel's half-plane was —
+  // applying it twice would simulate a doubly deficient observer, which is not
+  // a thing. What it does guarantee is that every row sums to one, so anything
+  // achromatic comes through untouched, at any severity.
   const red = fromHex('#d62728'), green = fromHex('#2ca02c'), blue = fromHex('#1f77b4'), orange = fromHex('#ff7f0e');
   ok(delta(simulate('deutan', 0)(red), red) < 1e-4, 'severity 0 is identity'); // chart round-trip float error
   const deu = simulate('deutan');
-  ok(delta(deu(deu(red)), deu(red)) < 0.5, 'simulation is idempotent');
+  for (const t of ['protan', 'deutan', 'tritan'] as CVD[])
+    for (const sev of [0.3, 0.6, 1]) {
+      const gray = fromHex('#808080');
+      ok(delta(simulate(t, sev)(gray), gray) < 1e-3, `${t} at ${sev} leaves gray alone`);
+    }
+  ok(delta(deu(red), red) > delta(simulate('deutan', 0.4)(red), red), 'severity is monotone');
   ok(delta(deu(red), deu(green)) < 0.4 * delta(red, green), 'red/green collapses for a deutan');
   ok(delta(deu(blue), deu(orange)) > 0.8 * delta(blue, orange), 'blue/orange survives');
   ok(minSeparation([red, green, blue], EUCLIDEAN, ALL_VIEWS) < minSeparation([red, green, blue]), 'CVD views cap the score');
