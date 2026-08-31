@@ -363,6 +363,11 @@
                style="width:52px" title="minimum contrast ratio the palette should reach">
         <span class="note" style="flex:1">:1 floor</span>
         <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
+      <div class="row" id="lseprow"><label class="f">grayscale</label>
+        <input type="number" id="lsep" min="0" max="50" step="1" value="6"
+               style="width:52px" title="least lightness any two swatches should differ by">
+        <span class="note" style="flex:1">ΔL floor</span>
+        <span class="v" id="lnow" style="width:auto" title="closest pair in lightness">–</span></div>
       <div class="row"><label class="f">solve</label><button id="run" style="flex:1">run Adam</button>
         <label class="chk"><input type="checkbox" id="restart">random restarts</label></div>
     </section>
@@ -469,6 +474,7 @@ const S = {
   pin: [],                                       // parallel to pts: held still by the solver
   bg: '#f0ead6', lock: true, planes3d: false,
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection color format
+  lsep: 6,                                       // floor on pairwise lightness, for grayscale
   restart: false,                                // kick the solver out of stalls
   cbg: '#ffffff', cmin: 3,                       // contrast: against what, and how much
   tipKind: 'sineramp',                           // which test image is showing
@@ -1352,6 +1358,17 @@ function sidebar() {
     $('cnow').style.color = lo !== null && lo < S.cmin ? 'var(--hot)' : '';
   }
 
+  // closest pair in lightness alone: what a grayscale print leaves you with
+  $('lseprow').style.display = S.mode === 'discrete' ? '' : 'none';
+  if (S.mode === 'discrete') {
+    let gap = Infinity;
+    for (let i = 0; i < pal.length; i++)
+      for (let j = i + 1; j < pal.length; j++) gap = Math.min(gap, Math.abs(pal[i][0] - pal[j][0]));
+    const ok = Number.isFinite(gap);
+    $('lnow').textContent = ok ? gap.toFixed(1) : '–';
+    $('lnow').style.color = ok && gap < S.lsep ? 'var(--hot)' : '';
+  }
+
   const rows = [];
   if (pal.length >= 2) {
     const worst = minSeparation(pal, M(), criteria());
@@ -2048,6 +2065,7 @@ const HELP = {
   feas:     "Curve outside the feasible set.",
   pair:     "Even spacing over every pair.",
   contr:    "Swatches under the contrast floor.",
+  lsep:     "Pairs closer in lightness than the floor.",
   space:    "Uneven control point spacing.",
 };
 
@@ -2223,12 +2241,38 @@ const OBJ = [
   { key: 'contr', label: 'contrast floor', bad: true,
     f: (x) => { const bg = fromHex(S.cbg);
       return x.probe.reduce((a, p) => a + hinge(S.cmin - contrastRatio(p, bg)) ** 2, 0); } },
+  /**
+   * Lightness spread, for a categorical set.
+   *
+   * `min Δ` is satisfied by swatches that differ in hue alone, and those become
+   * one color the moment the figure is printed, photocopied, or read by anyone
+   * whose vision collapses that hue axis. This asks that every PAIR differ in
+   * lightness by at least a floor, which is what survives all three.
+   *
+   * A floor and not a spread: n swatches can only be span/(n-1) apart at best,
+   * so a term that always pushed for more would fight chroma and the palette's
+   * own repulsion forever. Once every pair clears the floor it stops.
+   *
+   * That bound is also the thing to watch when setting it. n swatches need
+   * (n-1) x floor of lightness range between them, and how much range there is
+   * depends on their chroma: measured over 400 steps, Okabe-Ito reaches 8.6 at
+   * a floor of 8, tab10 reaches 6.3 at 6, and Set2 cannot clear 8 at all
+   * because eight swatches at its chroma only span 51.
+   */
+  { key: 'lsep', label: 'lightness spread', mode: 'discrete', bad: true,
+    f: (x) => {
+      const P = x.pal;
+      let e = 0;
+      for (let i = 0; i < P.length; i++)
+        for (let j = i + 1; j < P.length; j++) e += hinge(S.lsep - Math.abs(P[i][0] - P[j][0])) ** 2;
+      return e;
+    } },
 
 ];
 
 /** Terms included in the combined step. Constraints on, shaping opt-in. */
 // Shaping terms that fight the rest of the palette unless you ask for them.
-const OPT_IN = ['repcvd', 'contr'];
+const OPT_IN = ['repcvd', 'contr', 'lsep'];
 S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
 /** Relative pull of each term in the combined step. */
 S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
@@ -3225,6 +3269,7 @@ $('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = 
 $('restart').onchange = (e) => { S.restart = e.target.checked; sidebar(); };
 $('cbg').oninput = (e) => { S.cbg = e.target.value; sidebar(); };
 $('cfloor').oninput = (e) => { S.cmin = Math.max(1, +e.target.value || 1); sidebar(); };
+$('lsep').oninput = (e) => { S.lsep = Math.max(0, +e.target.value || 0); sidebar(); };
 $('flip').onclick = () => {
   const pl = S.planes[S.sel?.i];
   if (!pl || !S.sel.kind.startsWith('plane')) return;
@@ -3404,7 +3449,7 @@ function mirror() {
   $('sliceop').value = S.sliceOp; $('sliceopv').textContent = S.sliceOp.toFixed(2).slice(1);
   $('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
   $('restart').checked = S.restart;
-  $('cbg').value = S.cbg; $('cfloor').value = S.cmin;
+  $('cbg').value = S.cbg; $('cfloor').value = S.cmin; $('lsep').value = S.lsep;
   $('exportfmt').value = S.fmt; $('colorfmt').value = S.cfmt;
   $('hex').placeholder = COLORFMT[S.cfmt].hint;
   $('sevv').textContent = S.sev.toFixed(1);
@@ -3460,6 +3505,7 @@ const HINTS = {
   cmin: 'Chroma band.',
   huewheel: 'Allowed hue arc.',
   cbg: 'Contrast ground and target ratio.',
+  lsep: 'Least lightness two swatches should differ by. n swatches need (n−1)× that much range.',
   rate: 'Step size.',
   restart: 'Jolt and retry on a stall, keeping the best.',
   run: 'Run Adam over every enabled term until you stop it.',
