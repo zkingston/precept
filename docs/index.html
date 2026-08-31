@@ -266,6 +266,9 @@
   #aboutdlg .lede { color:var(--dim); margin:3px 0 13px; }
   #aboutdlg ul { margin:6px 0 0; padding-left:17px; color:var(--dim); font-size:12px; }
   #aboutdlg li + li { margin-top:5px; }
+  /* the citations are a footnote and read as one; instructions are not */
+  #aboutdlg ul.how { color:inherit; font-size:inherit; margin:0; }
+  #aboutdlg ul.how li + li { margin-top:4px; }
   #aboutdlg a, #mathdlg a { color:var(--link); }
   #aboutdlg .q { opacity:1; vertical-align:baseline; margin:0; font-size:inherit; color:var(--link); }
   #aboutclose { position:absolute; top:12px; right:12px; width:26px; height:26px; padding:0;
@@ -491,8 +494,24 @@
      help design pleasing and scientifically validated palettes.</p>
 
   <h4>Getting around</h4>
-  <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view it
-     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) for a menu to pin a node or delete it; a pinned node is held still by the solver. Ctrl-click nodes to mark them; pin and delete then apply to every marked node rather than to the one under the cursor. With two marked, that menu also offers connect and disconnect: disconnecting splits the ramp into separate runs, and connecting the two ends of one run closes it into a loop. The tools switch between nodes, keep-out spheres and halfplanes: a sphere is placed by double-clicking a cut panel and resized by dragging the small handle beside it, and a halfplane is cut the same way, then slid by its center or turned by its tip. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette. Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.</p>
+  <ul class="how">
+    <li>Double-click empty space to add a node. In a cut panel it lands on that cut; in the 3D view it
+        takes the color you clicked on. Drag a node to move it.</li>
+    <li>Right-click a node, or press and hold on a touchscreen, to pin or delete it. A pinned node is
+        held still by the solver.</li>
+    <li>Ctrl-click nodes to mark them. Pin and delete then apply to every marked node rather than to
+        the one under the cursor.</li>
+    <li>With two marked, that menu also offers connect and disconnect. Disconnecting splits the ramp
+        into separate runs; connecting the two ends of one run closes it into a loop.</li>
+    <li>The tools switch between nodes, keep-out spheres and halfplanes. A sphere is placed by
+        double-clicking a cut panel and resized by dragging the small handle beside it; a halfplane is
+        cut the same way, then slid by its center or turned by its tip.</li>
+    <li>Run Adam to optimize against the enabled terms.</li>
+    <li>Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole
+        palette.</li>
+    <li>Every control and every metric has a <span class="q">?</span> beside it: hover one for what it
+        does.</li>
+  </ul>
 
   <h4>Motivation (personal)</h4>
   <p>Color palettes have been on my mind for quite some time as someone who creates plots, charts,
