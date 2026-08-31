@@ -6,7 +6,7 @@
 <!-- the emoji as an SVG document, so there is no file to ship or fetch -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌈</text></svg>">
 <style>
-  :root { --bg:#101012; --panel:#1c1c1f; --line:#32323a; --fg:#e8e8ec; --dim:#8b8b96; --hot:#ff5b5b;
+  :root { --bg:#101012; --panel:#1c1c1f; --line:#32323a; --fg:#e8e8ec; --dim:#8b8b96; --hot:#ff5b5b; --sel:#3d5a6c;
           --hud:#33333a; --ctl:#26262b; --link:#7dd3fc;
           /* chips sit over the 3D view, not in the panel, so they keep their own
              dark scheme however the panel is themed */
@@ -51,11 +51,11 @@
   /* tools live over the viewport, where the things they make are */
   #tool { position:absolute; top:190px; right:12px; display:flex; gap:4px; }
   #tip { position:absolute; right:14px; top:12px; padding:7px;
-         background:#1c1c20ee; border:1px solid var(--line); border-radius:6px; }
+         background:#1c1c20ee; border:0; border-radius:6px; }
   #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
   #tipbtns { display:flex; gap:4px; margin-top:6px; }
   #tipbtns button { flex:1; font-size:10px; padding:2px 0; }
-  #tipbtns button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
+  #tipbtns button[aria-pressed=true] { background:var(--sel); border-color:var(--link); }
   #hist { position:absolute; top:190px; right:130px; display:flex; gap:4px; }
   #hist button:disabled { opacity:.3; cursor:default; }
   #ctxmenu { position:absolute; z-index:40; display:flex; flex-direction:column; min-width:88px;
@@ -104,7 +104,7 @@
   button { cursor:pointer; } button:hover { background:#32323a; }
   .seg { display:flex; } .seg button { border-radius:0; flex:1; }
   .seg button:first-child { border-radius:4px 0 0 4px; } .seg button:last-child { border-radius:0 4px 4px 0; }
-  .seg button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
+  .seg button[aria-pressed=true] { background:var(--sel); border-color:var(--link); }
 
   /* the output belongs next to the thing it came from, not in a side panel;
      it sits between the preview above and the profile plots below */
@@ -208,7 +208,7 @@
        and narrow is inside compact, so without this the inline left/top that
        layout() writes are ignored and it lays out in flow over the 3D view. */
     #tip { position:absolute; padding:2px; border-radius:4px; display:flex; flex-direction:column; gap:2px;
-           background:#1c1c20ee; border:1px solid var(--line); }
+           background:#1c1c20ee; border:0; }
     #tipcanvas { width:100%; height:auto; flex:1; min-height:0; }
     #tipbtns { margin-top:0; gap:2px; }
     #tipbtns button { font-size:9px; padding:1px 0; }
@@ -2630,6 +2630,9 @@ function applyBg() {
     '--dim': at(38, Math.min(C * 0.25, 4)),
     '--hot': at(34, 32, 28),
     '--link': at(46, 26, C > 3 ? h + 170 : 250),
+    // a pressed toggle: the accent hue, but only far enough from the ground to
+    // read as filled, so the panel text still sits on it
+    '--sel': at(17, 13, C > 3 ? h + 170 : 250),
     '--hud': at(50, Math.min(C * 0.25, 4)),
     '--line': light ? '#0000002e' : '#ffffff26',
     '--ctl': light ? '#00000012' : '#ffffff12',
@@ -3406,8 +3409,7 @@ const HINTS = {
   mode: 'Ramp or swatch set.',
   preset: 'Load a published palette.',
   spacesel: 'Space the panels are drawn in and distances measured in.',
-  gamutsel: 'Which colors are reachable.',
-  iccbtn: 'Load an ICC profile as a gamut. Matrix/TRC RGB profiles only.',
+  gamutsel: 'Which colors are reachable. ICC loads a matrix/TRC RGB profile.',
   cvd: 'Simulate a color-vision deficiency.',
   sev: 'Below 1 is anomalous trichromacy; 1 is dichromacy.',
   shell: 'Opacity of the gamut solid.',
