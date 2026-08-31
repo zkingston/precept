@@ -4545,6 +4545,11 @@ const HINTS = {
   host.insertAdjacentHTML('beforeend', `<span class="q" data-h="${esc(text)}">?</span>`);
 }
 
+// On a phone the three cuts and the 3D view are all small, and the one worth
+// having first is the 3D one. Only the opening default: the button still says
+// which way it is, a resize does not undo a choice, and a scene in the URL sets
+// it from the link rather than from the screen it is opened on.
+S.panels = !NARROW.matches;
 syncProfiles(); lprofFit(); hprofFit(); mirror(); commit();
 loadFromHash();
 /**
