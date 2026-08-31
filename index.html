@@ -1926,16 +1926,14 @@ const TERRAIN = (() => {
   };
 })();
 
+/** what a mode falls back to when the current pick does not belong to it */
+const TIP_DEFAULT = { continuous: 'sineramp', discrete: 'lines' };
+
 const TESTS = {
   sineramp: { mode: 'continuous', label: 'sineramp',
     note: 'Kovesi\u2019s test: a constant-amplitude sine riding a linear ramp, fading out downward. '
         + 'Where the map loses contrast the wave disappears early; where it has a false edge the flat ramp shows a band.',
     f: (x, y) => x + 0.05 * Math.sin(x * 32 * Math.PI) * (1 - y) },
-  geo: { label: 'geo',
-    note: 'A synthetic height field, the same one every time. Elevation is what these maps were drawn '
-        + 'for: a false ridge here is the colormap inventing landscape. In discrete mode it comes out '
-        + 'classified into one band per swatch.',
-    f: (x, y) => TERRAIN(x, y) },
   field: { mode: 'continuous', label: 'field',
     note: 'A smooth scalar field. Any ring, ridge or bright seam you can see is the colormap talking, not the data.',
     f: (x, y) => {
@@ -1946,6 +1944,10 @@ const TESTS = {
     note: 'One series per class, crossing and overlapping, over a light and a dark ground. Line work is thin, so a pair that reads as distinct in a swatch row can still merge here.' },
   scatter: { mode: 'discrete', label: 'scatter',
     note: 'Every class on a light and a dark ground. A swatch that vanishes against either, or that you cannot tell from its neighbor, fails here and not in the metrics.' },
+  geo: { label: 'geo',
+    note: 'A choropleth: one value per region, over synthetic counties on a synthetic coast. Regions '
+        + 'are read against their neighbours rather than against a scale, so a map fails here by '
+        + 'making two adjacent classes look like one. In discrete mode each swatch is a class.' },
 };
 
 /** the palette as bytes, through the active view — CVD and grayscale included */
@@ -1966,7 +1968,7 @@ function drawTest() {
   // cut row on a phone, so the image is drawn at whatever shape it is given
   const W = Math.max(1, Math.round(tipc.clientWidth)), H = Math.max(1, Math.round(tipc.clientHeight));
   if (tipc.width !== W || tipc.height !== H) { tipc.width = W; tipc.height = H; }
-  const kind = fitsMode(TESTS[S.tipKind]) ? S.tipKind : Object.keys(TESTS).find((k) => fitsMode(TESTS[k]));
+  const kind = fitsMode(TESTS[S.tipKind]) ? S.tipKind : TIP_DEFAULT[S.mode];
   // same reason as the metrics table: redrawing at solver rate would replace
   // these between mousedown and mouseup, so only touch what actually changed
   for (const [k, t] of Object.entries(TESTS)) {
@@ -1982,6 +1984,7 @@ function drawTest() {
   const lut = lutOf(256);
   tctx.clearRect(0, 0, W, H);
   if (!lut.length) return;
+  if (kind === 'geo') return drawGeo(W, H, lut);
   if (kind === 'scatter') return drawScatter(W, H, lut);
   if (kind === 'lines') return drawLines(W, H, lut);
 
@@ -2034,6 +2037,71 @@ function drawLines(W, H, lut) {
     }
     tctx.stroke();
   });
+}
+
+/**
+ * Synthetic counties: a Voronoi tessellation of a jittered grid of seeds, over
+ * a coastline taken from the same noise field.
+ *
+ * Real boundaries were not worth the download. What a choropleth tests is
+ * whether neighbouring regions stay distinguishable when nothing separates
+ * them but a hairline, and that needs irregular contiguous polygons carrying
+ * spatially correlated values, which this has. It does not need to be Iowa.
+ *
+ * The assignment only depends on the canvas size, so it is cached: recomputing
+ * a nearest-seed lookup for every pixel on every redraw would cost more than
+ * everything else the panel does put together.
+ */
+let GEO = null;
+function geoCells(W, H) {
+  if (GEO && GEO.W === W && GEO.H === H) return GEO;
+  const COLS = 9, ROWS = Math.max(3, Math.round((COLS * H) / W));
+  const r = rnd(90210);
+  const seeds = [];
+  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++)
+    seeds.push([((i + 0.15 + 0.7 * r()) / COLS) * W, ((j + 0.15 + 0.7 * r()) / ROWS) * H]);
+  const cell = new Int16Array(W * H), land = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let best = 0, near = Infinity;
+    // only the seeds in the neighbouring grid blocks can win, which turns the
+    // scan from every seed per pixel into about nine
+    const ci = Math.floor((x / W) * COLS), cj = Math.floor((y / H) * ROWS);
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const a = ci + di, b = cj + dj;
+      if (a < 0 || b < 0 || a >= COLS || b >= ROWS) continue;
+      const k = b * COLS + a, d = (seeds[k][0] - x) ** 2 + (seeds[k][1] - y) ** 2;
+      if (d < near) { near = d; best = k; }
+    }
+    cell[y * W + x] = best;
+    land[y * W + x] = TERRAIN(x / W, y / H) > 0.42 ? 1 : 0;      // the coast
+  }
+  // one value per region, sampled at its seed, so neighbours correlate the way
+  // anything mapped onto geography does
+  const val = seeds.map(([x, y]) => TERRAIN(x / W, y / H));
+  const lo = Math.min(...val), hi = Math.max(...val);
+  GEO = { W, H, cell, land, val: val.map((v) => (v - lo) / (hi - lo || 1)) };
+  return GEO;
+}
+
+function drawGeo(W, H, lut) {
+  const g = geoCells(W, H), img = tctx.createImageData(W, H);
+  const sea = [0xe9, 0xe9, 0xe9];
+  for (let i = 0; i < W * H; i++) {
+    const c = g.land[i] ? lut[Math.round(g.val[g.cell[i]] * (lut.length - 1))] : sea;
+    img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1]; img.data[i * 4 + 2] = c[2];
+    img.data[i * 4 + 3] = 255;
+  }
+  // hairline borders, found by looking right and down for a change of region.
+  // Without them two neighbours of the same class merge into one shape, and
+  // whether that is legible is the thing being tested.
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    if (!g.land[i]) continue;
+    if (!((x + 1 < W && (g.cell[i + 1] !== g.cell[i] || !g.land[i + 1]))
+       || (y + 1 < H && (g.cell[i + W] !== g.cell[i] || !g.land[i + W])))) continue;
+    for (let k = 0; k < 3; k++) img.data[i * 4 + k] = Math.round(img.data[i * 4 + k] * 0.45);
+  }
+  tctx.putImageData(img, 0, 0);
 }
 
 /**
@@ -2427,7 +2495,7 @@ function linkMarks() {
   setRuns(rs);
   S.marks = [];
   disturb();                                     // the problem changed shape under Adam
-  lprofFit(); hprofFit();
+  syncProfiles(); lprofFit(); hprofFit();
   sync();
 }
 
@@ -2451,7 +2519,7 @@ function unlinkMarks() {
   setRuns(rs);
   S.marks = [];
   disturb();
-  lprofFit(); hprofFit();
+  syncProfiles(); lprofFit(); hprofFit();
   sync();
 }
 
@@ -2526,7 +2594,37 @@ function repulsion(P, views) {
 }
 
 const WARN_EPS = 0.005;    // below this a `bad` term reads 0.00, so do not flag it
-const LK = 9;                                    // knots in the editable profile
+/**
+ * Knots in the editable profile: one per swatch.
+ *
+ * It used to be a fixed nine, and a floor of nine was worse than either the
+ * fixed count or none at all. The objective reads the profile only at the n
+ * positions the swatches sit at, so any knot beyond those is decorative, and
+ * whenever the count did not match the palette the fit and the read
+ * interpolated the same break differently — oleron, at eight points against
+ * nine knots, fitted its own ramp and then scored 114 against it. One knot per
+ * swatch makes knot k the target for swatch k, which makes `fit` a copy and
+ * every count exact.
+ */
+let LK = 9;
+
+/**
+ * Resize the profiles when the palette does, keeping the shape they had.
+ * Called from sync(), so nothing that adds or removes a point has to remember.
+ */
+function syncProfiles() {
+  const want = Math.max(2, S.pts.length);
+  if (want === LK && S.lprof.length === LK && S.hprof.length === LK) return;
+  const at = (a, k, hue) => {
+    if (a.length < 2) return a[0] ?? (hue ? 0 : 50);
+    const x = (k / (want - 1)) * (a.length - 1), i = Math.min(a.length - 2, Math.floor(x)), f = x - i;
+    return hue ? norm360(a[i] + angDiff(a[i + 1], a[i]) * f) : a[i] * (1 - f) + a[i + 1] * f;
+  };
+  const [l, h] = [S.lprof, S.hprof];
+  LK = want;
+  S.lprof = Array.from({ length: LK }, (_, k) => at(l, k, false));
+  S.hprof = Array.from({ length: LK }, (_, k) => at(h, k, true));
+}
 
 /**
  * Hue is a circle, so the profile keeps its knots in [0, 360) and puts the wrap
@@ -2551,15 +2649,40 @@ const angDiff = (a, b) => { let d = (a - b) % 360; if (d > 180) d -= 360; if (d 
 /** total signed turn of a hue run, from steps that are each unambiguous */
 const totalTurn = (hs) => hs.slice(1).reduce((t, h, i) => t + angDiff(h, hs[i]), 0);
 /** target hue at t, taking the short way between adjacent knots */
+/**
+ * Where the runs break, in knot units.
+ *
+ * The profile is read at t = i/(n-1) over the palette index, and the jump lies
+ * between two swatches, so a break after swatch i sits at the midpoint of that
+ * pair rather than on either of them. When
+ * LK is larger than n a knot interval can straddle one of these, and a target
+ * interpolated across a jump is a value the palette never takes. Both the fit
+ * and the read snap to the near side instead.
+ */
+function knotBreaks() {
+  const n = S.mode === 'continuous' ? S.pts.length : 0;
+  if (n < 2) return [];
+  const out = [];
+  for (let i = 0; i < n - 1; i++) if (S.cut[i]) out.push((((i + 0.5) / (n - 1)) * (LK - 1)));
+  return out;
+}
+/** the knot pair around x, or a single knot when a break falls between them */
+function knotSpan(x) {
+  const i = Math.min(LK - 2, Math.floor(x)), f = x - i;
+  for (const b of knotBreaks()) if (b > i + 1e-9 && b < i + 1 - 1e-9) return { i: f < (b - i) ? i : i + 1, f: 0 };
+  return { i, f };
+}
+
 const hprofAt = (t) => {
-  const x = Math.min(1, Math.max(0, t)) * (LK - 1), i = Math.min(LK - 2, Math.floor(x)), f = x - i;
+  const { i, f } = knotSpan(Math.min(1, Math.max(0, t)) * (LK - 1));
+  if (!f) return norm360(S.hprof[i]);
   return norm360(S.hprof[i] + angDiff(S.hprof[i + 1], S.hprof[i]) * f);
 };
 
 /** target lightness at position t along the ramp, piecewise linear between knots */
 const lprofAt = (t) => {
-  const x = Math.min(1, Math.max(0, t)) * (LK - 1), i = Math.min(LK - 2, Math.floor(x)), f = x - i;
-  return S.lprof[i] * (1 - f) + S.lprof[i + 1] * f;
+  const { i, f } = knotSpan(Math.min(1, Math.max(0, t)) * (LK - 1));
+  return f ? S.lprof[i] * (1 - f) + S.lprof[i + 1] * f : S.lprof[i];
 };
 /**
  * The lightness the waypoints actually span — the extremes over ALL of them,
@@ -2594,14 +2717,33 @@ const lprofArch = () => {
 };
 
 /** target ← whatever the ramp is doing right now, as a starting point to edit */
+/**
+ * A palette measurement at position t, on the palette's own parameter.
+ *
+ * Not rampOf: that spaces samples by arc length across every run at once, while
+ * the profile terms read the target at t = i/(n-1) over the palette index. With
+ * one run the two agree; with a break they do not, and `fit` produced a target
+ * the ramp it was fitted to did not sit on. A break is a jump, so t lands on
+ * one side of it or the other rather than between.
+ */
+function palAt(pal, t, meas, hue) {
+  const n = pal.length;
+  if (!n) return hue ? 0 : 50;
+  if (n === 1) return meas(pal[0]);
+  const x = Math.min(1, Math.max(0, t)) * (n - 1), i = Math.min(n - 2, Math.floor(x)), f = x - i;
+  if (S.cut[i]) return meas(pal[f < 0.5 ? i : i + 1]);
+  const [a, b] = [meas(pal[i]), meas(pal[i + 1])];
+  return hue ? norm360(a + angDiff(b, a) * f) : a * (1 - f) + b * f;
+}
+
 const lprofFit = () => {
-  const P = S.pts.length >= 2 ? rampOf(LK) : [];
-  if (P.length === LK) S.lprof = P.map((p) => p[0]);
+  const P = palette();
+  if (P.length >= 2) S.lprof = Array.from({ length: LK }, (_, k) => palAt(P, k / (LK - 1), (p) => p[0], false));
 };
 
 const hprofFit = () => {
-  const P = S.pts.length >= 2 ? rampOf(LK) : [];
-  if (P.length === LK) S.hprof = P.map(hueOf).map(norm360);
+  const P = palette();
+  if (P.length >= 2) S.hprof = Array.from({ length: LK }, (_, k) => palAt(P, k / (LK - 1), (p) => norm360(hueOf(p)), true));
 };
 /**
  * A steady turn. The direction has to come from the whole measured run, not
@@ -3288,8 +3430,22 @@ function drawPlot(p) {
    * instead of being drawn as a full-height plunge across a discontinuity that
    * is not really there.
    */
+  /**
+   * Where the palette breaks, in the plot's own parameter. A run boundary after
+   * swatch i sits at i/(n-1), and a segment straddling one is not drawn: the
+   * profile has no value between two runs, and a line there would claim a ramp
+   * that is not in the palette.
+   */
+  const breaks = (() => {
+    const n = S.mode === 'continuous' ? S.pts.length : 0;
+    if (n < 2) return [];
+    return S.cut.map((c, i) => (c && i < n - 1 ? i / (n - 1) : -1)).filter((t) => t >= 0);
+  })();
+  const spans = (t0, t1) => !breaks.some((b) => t0 <= b + 1e-9 && b <= t1 - 1e-9 && t1 - t0 > 1e-9);
+
   const wrapped = (vals, paint) => {
     for (let i = 1; i < vals.length; i++) {
+      if (!spans((i - 1) / (vals.length - 1), i / (vals.length - 1))) continue;
       const [a, b] = [vals[i - 1], vals[i]];
       const x0 = lpx(p, (i - 1) / (vals.length - 1)), x1 = lpx(p, i / (vals.length - 1));
       const d = p.hue ? angDiff(b, a) : b - a;
@@ -3315,6 +3471,12 @@ function drawPlot(p) {
     ctx.beginPath(); ctx.moveTo(x0, lpy(p, a)); ctx.lineTo(x1, lpy(p, b)); ctx.stroke();
   });
   ctx.setLineDash([]);
+  for (const b of breaks) {
+    const x = lpx(p, b + 0.5 / Math.max(1, S.pts.length - 1));
+    ctx.strokeStyle = hud; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, LPAD.t); ctx.lineTo(x, p.el.clientHeight - LPAD.b); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   prof.forEach((v, i) => {
     ctx.beginPath(); ctx.arc(lpx(p, i / (LK - 1)), lpy(p, v), 3.6, 0, 7);
     ctx.fillStyle = hud; ctx.fill();
@@ -3564,7 +3726,7 @@ const disturb = () => { if (adam) adam = null; };
 
 /** Rebuild whatever the change touched. Small enough to be blunt about it. */
 function sync({ colors = false, light = false } = {}) {
-  syncPins(); syncRuns();
+  syncPins(); syncRuns(); syncProfiles();
   constrain();
   slices.forEach(paintSlice);
   paintShell();
@@ -4025,7 +4187,7 @@ $('loadlist').onclick = (e) => {
   if (preset.cut !== undefined) S.cut[preset.cut] = true;   // where a multi-sequential map steps
   S.loop = [preset.kind === 'cyclic'];           // the cyclic maps load as the loops they are
   S.sel = null;
-  lprofFit(); hprofFit();                          // both targets start as the ramp itself
+  syncProfiles(); lprofFit(); hprofFit();          // sized first, then both start as the ramp
   for (const b of $('mode').children) b.ariaPressed = b.dataset.v === S.mode;
   $('loaddlg').close();
   sync();
@@ -4318,7 +4480,7 @@ const HINTS = {
   host.insertAdjacentHTML('beforeend', `<span class="q" data-h="${esc(text)}">?</span>`);
 }
 
-lprofFit(); hprofFit(); mirror(); commit();
+syncProfiles(); lprofFit(); hprofFit(); mirror(); commit();
 loadFromHash();
 /**
  * The two overlays that are readouts rather than camera furniture move into the
