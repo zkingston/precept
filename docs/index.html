@@ -126,6 +126,10 @@
      does not, so these carry their own. */
   .row, section h2 { position:relative; }
   .row:has(.q[data-h]:hover), section h2:has(.q[data-h]:hover) { z-index:30; }
+  /* a table row is not a reliable containing block, and these markers all sit in
+     the first column anyway, so they anchor to themselves and open rightward */
+  #metrics .q[data-h] { position:relative; }
+  #metrics .q[data-h]:hover::after { left:0; right:auto; width:max-content; max-width:224px; }
   .q[data-h]:hover::after {
     content:attr(data-h); position:absolute; left:0; right:0; top:calc(100% + 6px); z-index:30;
     padding:6px 8px; text-align:left; white-space:normal;
@@ -134,7 +138,6 @@
     text-transform:none; letter-spacing:normal;   /* h2 hosts would pass theirs down */
     vertical-align:baseline; pointer-events:none; }
   .q:hover { opacity:1; color:var(--link); }
-  #termhelp { min-height:2.6em; margin-top:7px; padding-top:6px; border-top:1px solid var(--line); }
   #metrics td.w { width:40px; padding-left:4px; }
   #metrics input.w { width:38px; background:var(--ctl); color:var(--fg); border:1px solid var(--line);
     border-radius:3px; padding:1px 3px; font:11px ui-monospace,monospace; text-align:right;
@@ -345,7 +348,6 @@
     <div id="dock"></div>
 
     <section><h2>Metrics</h2><table id="metrics"></table>
-      <div id="termhelp" class="note"></div>
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
         <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span></div>
       <div class="row"><label class="f">contrast</label>
@@ -356,7 +358,6 @@
         <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
       <div class="row"><label class="f">solve</label><button id="run" style="flex:1">run Adam</button>
         <label class="chk"><input type="checkbox" id="restart">random restarts</label></div>
-      <div class="note" id="restartinfo"></div>
     </section>
     <section><h2>Export</h2>
       <div class="row"><label class="f">name</label>
@@ -395,7 +396,7 @@
   <h4>Motivation (personal)</h4>
   <p>Color palettes have been on my mind for quite some time as someone who creates plots, charts,
      data visualization, etc. for my work (normally, a figure in some paper). I recall very early on
-     having a discussion with a mentor (I believe it was Mark Moll) who mentioned that I should be
+     having a discussion with a mentor (I believe it was <a href="https://moll.ai/" target="_blank" rel="noopener">Mark Moll</a>) who mentioned that I should be
      concerned with red-green colorblindness (protanopia and deuteranopia, more precisely) after
      seeing a plot I had made which had bright red and green as part of a categorical palette.</p>
   <p>At that point in my life I was relatively unaware of the many concerns of graphic design, and
@@ -427,7 +428,7 @@
   </ul>
 
   <h4>Credit</h4>
-  <p>Built by Zachary Kingston. <a href="https://zkingston.com" target="_blank" rel="noopener">zkingston.com</a> /
+  <p>Built by Zachary Kingston, using Claude Opus 5. <a href="https://zkingston.com" target="_blank" rel="noopener">zkingston.com</a> /
      <a href="mailto:zkingston@purdue.edu">zkingston@purdue.edu</a></p>
 </dialog>
 
@@ -646,7 +647,7 @@ reframe();                       // FRAME must exist before anything calls world
 S.slice = [...FRAME.mid];
 
 // ─── the color pipeline, shared by every shader below ─────────────────────
-const SPACE_ID = { oklab: 0, cielab: 1, cieluv: 2, ipt: 3, xyz: 4, srgb: 5, ictcp: 6, hsl: 7, cam02: 8 };
+const SPACE_ID = { oklab: 0, cielab: 1, cieluv: 2, ipt: 3, xyz: 4, srgb: 5, ictcp: 6, cam02: 8 };
 const CVD_ID = { none: 0, protan: 1, deutan: 2, tritan: 3 };
 const m3 = (rows) => new T.Matrix3().set(...rows.flat());   // .set takes row-major
 
@@ -705,16 +706,6 @@ vec3 spaceToXyz(vec3 c) {
       l[i] = pow(max(pv - uPq.z, 0.0) / (uPq2.x - uPq2.y * pv), 1.0 / uPq.x) * 100.0;
     }
     return uIcLmsI * l;
-  }
-  if (uSpace == 7) {                                      // HSL, ordered L S H
-    float L = c.x / 100.0, S = c.y / 100.0;
-    float hp = mod(mod(c.z, 360.0) + 360.0, 360.0) / 60.0;
-    float ch = (1.0 - abs(2.0 * L - 1.0)) * S;
-    float x = ch * (1.0 - abs(mod(hp, 2.0) - 1.0)), m = L - ch / 2.0;
-    vec3 t = hp < 1.0 ? vec3(ch, x, 0.0) : hp < 2.0 ? vec3(x, ch, 0.0) : hp < 3.0 ? vec3(0.0, ch, x)
-           : hp < 4.0 ? vec3(0.0, x, ch) : hp < 5.0 ? vec3(x, 0.0, ch) : vec3(ch, 0.0, x);
-    vec3 g2 = t + m;
-    return uXyzSrgb * vec3(dec(g2.r), dec(g2.g), dec(g2.b));
   }
   if (uSpace == 8) {                                      // CAM02-UCS
     float Jp = c.x, ap = c.y, bp = c.z;
@@ -1428,9 +1419,6 @@ function sidebar() {
 
   paintPlotButtons(); drawPlots(); drawWheel();
   drawTest();
-  $('restartinfo').textContent = !S.restart ? ''
-    : RESTART.n ? `${RESTART.n} restart${RESTART.n > 1 ? 's' : ''} · best ${RESTART.bestScore.toFixed(3)}`
-    : 'jolts the free points when Adam stalls, and keeps the best attempt';
 }
 
 // ─── test image preview ──────────────────────────────────────────────────────
@@ -1989,7 +1977,7 @@ function paintMetrics(rows) {
       // data-help, not title: the OS tooltip makes you wait a second to find out
       // whether hovering does anything, and the sidebar scrolls, which would clip
       // a positioned one. A line under the table is instant and never clipped.
-      const q = help ? `<span class="q" data-help="${esc(help)}">?</span>` : '';
+      const q = help ? `<span class="q" data-h="${esc(help)}">?</span>` : '';
       return `<tr><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}${q}</td>` +
       `<td class="${warn ? 'warn' : ''}">${v}</td>` +
       (obj ? `<td class="w"><input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
@@ -2206,7 +2194,7 @@ const OBJ = [
 
 /** Terms included in the combined step. Constraints on, shaping opt-in. */
 // Shaping terms that fight the rest of the palette unless you ask for them.
-const OPT_IN = ['rep', 'contr'];
+const OPT_IN = ['repcvd', 'contr'];
 S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
 /** Relative pull of each term in the combined step. */
 S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
@@ -2627,16 +2615,24 @@ $('lplot').ondblclick = (e) => {
  */
 function applyBg() {
   renderer.setClearColor(new T.Color(S.bg), 1);
-  const light = fromHex(S.bg)[0] > 55;
+  // Text and accent are derived from the backdrop rather than picked from two
+  // fixed palettes: the same hue, pushed the other way along lightness by a
+  // fixed amount, which is a contrast the chart can actually promise. The
+  // accent takes the opposite hue when the backdrop has one to oppose.
+  const [L, C, h] = toLCh(fromHex(S.bg));
+  const light = L > 55, dir = light ? -1 : 1;
+  const at = (dL, c2, hue = h) =>
+    toHex(toGamut(fromLCh([Math.min(100, Math.max(0, L + dir * dL)), c2, hue])));
   const v = document.documentElement.style;
   for (const [k, val] of Object.entries({
     '--panel': S.bg, '--bg': S.bg,
-    '--fg': light ? '#17171b' : '#e8e8ec',
-    '--dim': light ? '#5d5d66' : '#8b8b96',
-    '--line': light ? '#0000002e' : '#32323a',
-    '--ctl': light ? '#00000012' : '#26262b',
-    '--link': light ? '#0b6ea0' : '#7dd3fc',
-    '--hud': light ? '#3a3a42' : '#c6c6d0',
+    '--fg': at(72, Math.min(C * 0.25, 5)),
+    '--dim': at(38, Math.min(C * 0.25, 4)),
+    '--hot': at(34, 32, 28),
+    '--link': at(46, 26, C > 3 ? h + 170 : 250),
+    '--hud': at(50, Math.min(C * 0.25, 4)),
+    '--line': light ? '#0000002e' : '#ffffff26',
+    '--ctl': light ? '#00000012' : '#ffffff12',
   })) v.setProperty(k, val);
   slices.forEach((s) => s.edge.material.color.set(light ? 0x3a3a42 : 0xc6c6d0));
   drawPlots();
@@ -3177,13 +3173,7 @@ $('metrics').onclick = (e) => {
 const REPULSIONS = ['rep', 'repcvd'];
 /** Groups where running two members at once is incoherent, not just redundant. */
 const EXCLUSIVE = [REPULSIONS];
-const HELP_IDLE = 'hover a ? for what the term measures';
-$('termhelp').textContent = HELP_IDLE;
-$('metrics').onmouseover = (e) => {
-  const h = e.target.dataset?.help;
-  if (h) $('termhelp').textContent = h;
-};
-$('metrics').onmouseout = (e) => { if (e.target.dataset?.help) $('termhelp').textContent = HELP_IDLE; };
+
 $('metrics').oninput = (e) => {
   const k = e.target.dataset?.w;
   if (k) S.w[k] = Math.max(0, +e.target.value || 0);

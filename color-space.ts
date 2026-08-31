@@ -531,37 +531,6 @@ export const SPACES: Record<string, Space> = {
   },
 
   /**
-   * HSL over the sRGB cube, ordered L S H so that axis 0 is lightness like
-   * every other space here. Not perceptual, and H is cyclic AND undefined on
-   * the neutral axis, so it has no usable metric: spaceMetric falls back to the
-   * chart for it. Somewhere to look and to place things, not to measure with.
-   */
-  hsl: {
-    name: 'HSL (sRGB)', axes: ['L', 'S', 'H'],
-    from: (xyz) => {
-      const [r, g, b] = rgb01(xyz);
-      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, l = (mx + mn) / 2;
-      // black and white put the saturation denominator at zero, and white is not
-      // exactly (1,1,1) after a round trip, so d is float noise rather than 0 and
-      // the unguarded formula divides it by nothing. Both ends are achromatic.
-      const den = 1 - Math.abs(2 * l - 1);
-      const grey = d < 1e-9 || den < 1e-9;
-      const h = grey ? 0
-        : mx === r ? 60 * (((g - b) / d) % 6)
-        : mx === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
-      return [l * 100, grey ? 0 : (d / den) * 100, (h + 360) % 360];
-    },
-    to: ([l, s, h]) => {
-      const S2 = s / 100, L2 = l / 100;
-      const c = (1 - Math.abs(2 * L2 - 1)) * S2, hp = (((h % 360) + 360) % 360) / 60;
-      const x = c * (1 - Math.abs((hp % 2) - 1)), m = L2 - c / 2;
-      const t: Vec3 = hp < 1 ? [c, x, 0] : hp < 2 ? [x, c, 0] : hp < 3 ? [0, c, x]
-        : hp < 4 ? [0, x, c] : hp < 5 ? [x, 0, c] : [c, 0, x];
-      return unrgb01(t.map((v) => v + m) as Vec3);
-    },
-  },
-
-  /**
    * CAM02-UCS (Luo, Cui & Li 2006) over CIECAM02, average surround, adapting
    * luminance 64/pi/5 and a 20% background — the conditions the UCS was fitted
    * under. J' a' b' rather than J C h, because the UCS is the form where a
@@ -683,10 +652,7 @@ function neutralScale(k: string): number {
 }
 
 export function spaceMetric(k = params.space): Metric {
-  // oklab IS the chart. HSL has no metric to pull back: its hue is undefined on
-  // the neutral axis and jumps by 180 degrees across it, so the Jacobian there
-  // is unbounded and no calibration rescues it. Measure both in the chart.
-  if (k === 'oklab' || k === 'hsl') return EUCLIDEAN;
+  if (k === 'oklab') return EUCLIDEAN;                 // the chart is its own space
   const w = neutralScale(k) ** 2, h = 0.05;
   return (p) => {
     const col: Vec3[] = [];
