@@ -358,8 +358,19 @@ export const SPACES: Record<string, Space> = {
 };
 
 /** chart ↔ the active working space */
-export const toSpace = (p: Vec3, k = params.space): Vec3 => SPACES[k].from(toXYZ(p));
-export const fromSpace = (c: Vec3, k = params.space): Vec3 => fromXYZ(SPACES[k].to(c));
+/**
+ * Chart <-> working space. A space defined AS the chart round-trips through
+ * XYZ to arrive back where it started: two matrix products and a cube each
+ * way, provably the identity. Oklab is that space and it is the default, and
+ * the trajectory optimizer runs this over every curve sample of every
+ * perturbation, so the round trip was most of a gradient step. Detect it by
+ * the conversion being the chart's own and copy instead; the copy rather than
+ * the argument itself so a caller can still treat the result as its own.
+ */
+export const toSpace = (p: Vec3, k = params.space): Vec3 =>
+  (SPACES[k].from === fromXYZ ? [p[0], p[1], p[2]] : SPACES[k].from(toXYZ(p))) as Vec3;
+export const fromSpace = (c: Vec3, k = params.space): Vec3 =>
+  (SPACES[k].to === toXYZ ? [c[0], c[1], c[2]] : fromXYZ(SPACES[k].to(c))) as Vec3;
 
 /**
  * The box a gamut occupies in a space's coordinates. Sampling the RGB cube's
