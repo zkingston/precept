@@ -1475,7 +1475,7 @@ function sidebar() {
   $('flip').closest('.row').style.display = s?.kind === 'plane' || s?.kind === 'planerot' ? '' : 'none';
   if (s?.kind === 'pt' && S.pts[s.i]) {
     const [L, C, h] = toLCh(S.pts[s.i]);
-    $('selinfo').innerHTML = `<code>${toHex(S.pts[s.i])}</code> · L ${L.toFixed(1)} C ${C.toFixed(1)} h ${((h + 360) % 360).toFixed(0)}°`;
+    $('selinfo').innerHTML = `L ${L.toFixed(1)} C ${C.toFixed(1)} h ${((h + 360) % 360).toFixed(0)}°`;
   } else if ((s?.kind === 'plane' || s?.kind === 'planerot') && S.planes[s.i]) {
     const pl = S.planes[s.i], ax = SPACES[params.space].axes;
     const terms = pl.n.map((c, j) => (Math.abs(c) < 0.01 ? '' : `${c > 0 ? '+' : '−'}${Math.abs(c).toFixed(2)}·${ax[j]}`))
@@ -1483,7 +1483,7 @@ function sidebar() {
     $('selinfo').innerHTML = `plane ${s.i} · keep <code>${terms} ≤ ${pl.d.toFixed(1)}</code>`;
   } else if ((s?.kind === 'obs' || s?.kind === 'obsr') && S.obs[s.i]) {
     const o = S.obs[s.i];
-    $('selinfo').innerHTML = `<code>${toHex(o.c)}</code> · r ${o.r.toFixed(1)} perceived, ${unperceive(o.r).toFixed(1)} in chart units`;
+    $('selinfo').innerHTML = `r ${o.r.toFixed(1)} perceived, ${unperceive(o.r).toFixed(1)} in chart units`;
   }
 
   paintPlotButtons(); drawPlots(); drawWheel();
