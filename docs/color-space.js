@@ -651,9 +651,60 @@ function neutralScale(k        )         {
   return NEUTRAL_SCALE[k];
 }
 
+/**
+ * ∂(XYZ)/∂(chart), the half of every Jacobian that does not depend on which
+ * space is selected. toXYZ is XYZ_LMS · (LMS_LAB · p/100)³, so the derivative
+ * is the same product with the cube replaced by 3l² down the diagonal.
+ */
+function dXyzDChart(p      )     {
+  const l = apply(LMS_LAB, [p[0] / 100, p[1] / 100, p[2] / 100]);
+  const d = l.map((v) => (3 * v * v) / 100);
+  return mm(XYZ_LMS.map((r) => [r[0] * d[0], r[1] * d[1], r[2] * d[2]]), LMS_LAB);
+}
+
+const dLabf = (t        ) => (t > D ** 3 ? 1 / (3 * Math.cbrt(t) ** 2) : 1 / (3 * D * D));
+const dEnc = (c        ) => (c <= 0.0031308 ? 12.92 : (1.055 / 2.4) * c ** (1 / 2.4 - 1));
+
+/**
+ * ∂(space)/∂(XYZ), for the spaces whose forward map differentiates by hand
+ * without turning into CIECAM02. A space without an entry keeps the central
+ * differences below, which cost six full conversions per point.
+ */
+const D_SPACE                                    = {
+  xyz: () => [[100, 0, 0], [0, 100, 0], [0, 0, 100]],
+
+  srgb: (xyz) => {
+    const m = mats('srgb').from, lin = apply(m, xyz), e = lin.map(dEnc);
+    return m.map((r, i) => [100 * e[i] * r[0], 100 * e[i] * r[1], 100 * e[i] * r[2]]);
+  },
+
+  cielab: (xyz) => {
+    // f' of each ratio, with the 1/Wn from the ratio itself folded in
+    const [fx, fy, fz] = [0, 1, 2].map((i) => dLabf(xyz[i] / CHART_WHITE[i]) / CHART_WHITE[i]);
+    return [[0, 116 * fy, 0], [500 * fx, -500 * fy, 0], [0, 200 * fy, -200 * fz]];
+  },
+
+  ipt: (xyz) => {
+    const lms = apply(IPT_LMS, xyz);
+    // spow(v, 0.43) has derivative 0.43|v|^-0.57 on both sides of zero and none
+    // at it; the floor is the same one the gamut's own epsilon uses
+    const d = lms.map((v, i) => (0.43 * Math.max(Math.abs(v / IPT_W[i]), 1e-9) ** (0.43 - 1)) / IPT_W[i]);
+    return mm(IPT_OPP.map((r) => [100 * r[0] * d[0], 100 * r[1] * d[1], 100 * r[2] * d[2]]), IPT_LMS);
+  },
+};
+
 export function spaceMetric(k = params.space)         {
   if (k === 'oklab') return EUCLIDEAN;                 // the chart is its own space
   const w = neutralScale(k) ** 2, h = 0.05;
+  const gram = (col        ) => [0, 1, 2].map((i) => [0, 1, 2].map((j) =>
+    w * (col[i][0] * col[j][0] + col[i][1] * col[j][1] + col[i][2] * col[j][2])))        ;
+
+  const dSpace = D_SPACE[k];
+  if (dSpace) return (p) => {
+    const J = mm(dSpace(toXYZ(p)), dXyzDChart(p));     // rows: space, columns: chart
+    return gram([0, 1, 2].map((i) => [J[0][i], J[1][i], J[2][i]]        ));
+  };
+
   return (p) => {
     const col         = [];
     for (let i = 0; i < 3; i++) {                      // central differences: J's columns
@@ -662,8 +713,7 @@ export function spaceMetric(k = params.space)         {
       const [sa, sb] = [toSpace(a, k), toSpace(b, k)];
       col.push(sb.map((v, j) => (v - sa[j]) / (2 * h))        );
     }
-    return [0, 1, 2].map((i) => [0, 1, 2].map((j) =>
-      w * (col[i][0] * col[j][0] + col[i][1] * col[j][1] + col[i][2] * col[j][2])))        ;
+    return gram(col);
   };
 }
 
@@ -993,6 +1043,29 @@ function demo() {
     ok(quad(m, [1, 2, -3]) > 0 && close(m[0][1], m[1][0], 1e-9), `${k} metric is symmetric positive`);
   }
   ok(spaceMetric('oklab') === EUCLIDEAN, 'the chart is its own space');
+  // The analytic Jacobians have to agree with the central differences they
+  // replace. Away from black they do, to five digits; at black they disagree
+  // completely and the analytic one is right, because chart→XYZ cubes its
+  // input and the true derivative there is zero, which no finite h can see.
+  for (const k of Object.keys(D_SPACE)) {
+    const ga = spaceMetric(k), h = 0.05, w = neutralScale(k) ** 2;
+    for (const p of [[50, 0, 0], [72, -18, 40], [30, 25, -30], [88, 6, 12]]          ) {
+      const col         = [];
+      for (let i = 0; i < 3; i++) {
+        const a = [...p]        , b = [...p]        ;
+        a[i] -= h; b[i] += h;
+        const [sa, sb] = [toSpace(a, k), toSpace(b, k)];
+        col.push(sb.map((v, j) => (v - sa[j]) / (2 * h))        );
+      }
+      const A = ga(p);
+      let num = 0, den = 0;
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+        const f = w * (col[i][0] * col[j][0] + col[i][1] * col[j][1] + col[i][2] * col[j][2]);
+        num += (A[i][j] - f) ** 2; den += f * f;
+      }
+      ok(Math.sqrt(num / den) < 1e-4, `${k} analytic jacobian matches central differences at ${p}`);
+    }
+  }
   params.space = 'oklab';
 
   console.log('ok — white→black arc length', arcLength([fromHex('#000000'), fromHex('#ffffff')]).toFixed(1),
