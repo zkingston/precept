@@ -300,7 +300,9 @@
     <section>
       <h2>View</h2>
       <div class="row"><label class="f">space</label><select id="spacesel" style="flex:1"></select></div>
-      <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select></div>
+      <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select>
+        <button id="iccbtn" style="padding:4px 7px">ICC…</button>
+        <input type="file" id="iccfile" accept=".icc,.icm,application/vnd.iccprofile" hidden></div>
       <div class="row"><label class="f">vision</label>
         <select id="cvd" style="flex:1">
           <option value="none">normal</option><option value="protan">protan · red</option>
@@ -440,7 +442,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty,
-  minSeparation, obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, internals,
+  minSeparation, obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, gamutFromICC, internals,
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
 } from './color-space.ts';
 
@@ -1664,8 +1666,12 @@ for (const [k, f] of Object.entries(FORMATS)) {
  * something in. The selection is deliberately dropped — it is an index into
  * arrays the file also carries, and restoring it buys nothing.
  */
-const sceneJSON = () =>
-  JSON.stringify({ precept: 1, space: params.space, gamut: params.gamut, ...S, sel: undefined }, null, 1);
+const sceneJSON = () => JSON.stringify({
+  precept: 1, space: params.space, gamut: params.gamut,
+  // a profile is not one of the built-ins, so it has to travel with the scene
+  icc: params.gamut.startsWith('icc-') ? GAMUTS[params.gamut] : undefined,
+  ...S, sel: undefined,
+}, null, 1);
 
 const vec3 = (a) => Array.isArray(a) && a.length === 3 && a.every(Number.isFinite);
 // null counts as bad: JSON has no Infinity or NaN, so stringify emits null for
@@ -1686,6 +1692,7 @@ const menu = (id) => [...$(id).children].map((b) => b.dataset.v);
 function loadScene(text) {
   const o = JSON.parse(text);
   if (o.precept !== 1) throw new Error('not a precept scene file');
+  if (o.icc?.p?.length === 3 && o.icc.w) { GAMUTS[o.gamut] = o.icc; paintGamutList(); }
   if (!SPACES[o.space] || !GAMUTS[o.gamut]) throw new Error('unknown space or gamut');
   if (!Array.isArray(o.pts) || !o.pts.every(vec3)) throw new Error('bad control points');
   if (!o.obs?.every((x) => vec3(x.c) && Number.isFinite(x.r))) throw new Error('bad obstacles');
@@ -1738,6 +1745,29 @@ async function loadFromHash() {
     return true;
   } catch (err) { console.warn('ignoring unreadable scene in the URL:', err.message); return false; }
 }
+
+/**
+ * A profile becomes a gamut like any other. The key is fresh each time because
+ * the RGB<->XYZ matrices are memoized by it, so reusing one would serve the
+ * previous profile's matrix for the new profile's primaries.
+ */
+let iccN = 0;
+$('iccbtn').onclick = () => $('iccfile').click();
+$('iccfile').onchange = async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  try {
+    const g = gamutFromICC(await f.arrayBuffer(), f.name.replace(/\.[^.]+$/, ''));
+    const key = `icc-${++iccN}`;
+    GAMUTS[key] = g;
+    params.gamut = key;
+    paintGamutList();
+    reframe(); layout(); buildShell(); capKey = null;
+    S.slice = [...FRAME.mid];
+    sync({ colors: true });
+  } catch (err) { alert(`could not read that profile: ${err.message}`); }
+};
 
 $('sharelink').onclick = async (e) => {
   const url = await packLink();
@@ -3357,8 +3387,7 @@ function mirror() {
 mirror();
 $('spacesel').innerHTML = Object.entries(SPACES)
   .map(([k, sp]) => `<option value="${k}"${k === params.space ? ' selected' : ''}>${sp.name}</option>`).join('');
-$('gamutsel').innerHTML = Object.entries(GAMUTS)
-  .map(([k, g]) => `<option value="${k}"${k === params.gamut ? ' selected' : ''}>${g.name}</option>`).join('');
+paintGamutList();
 $('exportfmt').innerHTML = Object.keys(FORMATS).map((k) => `<option value="${k}">${k}</option>`).join('');
 $('colorfmt').innerHTML = Object.entries(COLORFMT)
   .map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('');
@@ -3377,16 +3406,23 @@ select(S.sel);
  * next to its markup is a control whose explanation goes stale next to its
  * markup. The marker is the same ? the Metrics rows use.
  */
+// a declaration, not a const: the boot block fills the list before this point
+function paintGamutList() {
+  $('gamutsel').innerHTML = Object.entries(GAMUTS)
+    .map(([k, g]) => `<option value="${k}"${k === params.gamut ? ' selected' : ''}>${g.name}</option>`).join('');
+}
+
 const HINTS = {
   mode: 'Ramp or swatch set.',
   preset: 'Load a published palette.',
-  spacesel: 'Space the panels are drawn in.',
+  spacesel: 'Space the panels are drawn in and distances measured in.',
   gamutsel: 'Which colors are reachable.',
+  iccbtn: 'Load an ICC profile as a gamut. Matrix/TRC RGB profiles only.',
   cvd: 'Simulate a color-vision deficiency.',
   sev: 'Below 1 is anomalous trichromacy; 1 is dichromacy.',
   shell: 'Opacity of the gamut solid.',
   sliceop: 'Opacity of the three cut planes.',
-  bg: 'Backdrop color.',
+  bg: 'Backdrop color. The panel follows it.',
   planes3d: 'Draw the cut planes in the 3D view too.',
   lock: 'Cuts follow the node you touch.',
   colorfmt: 'Notation for the selected node.',

@@ -129,6 +129,76 @@ export const toXYZ = (p: Vec3): Vec3 =>
  */
 export type Gamut = { name: string; p: [number, number][]; w: [number, number] };
 
+/**
+ * A gamut from an ICC profile.
+ *
+ * Only matrix/TRC RGB profiles reduce to primaries: the rXYZ, gXYZ and bXYZ
+ * colorant tags ARE the primaries, already adapted to the PCS illuminant, so
+ * the chromaticities fall straight out and build() adapts from there. A
+ * LUT-based profile (most printer and CMYK profiles) has no such matrix and is
+ * refused rather than approximated.
+ *
+ * Everything is big-endian; XYZ numbers are s15Fixed16.
+ */
+export function gamutFromICC(buf: ArrayBuffer, fallback = 'ICC profile'): Gamut {
+  const d = new DataView(buf);
+  const str = (o: number, n: number) =>
+    Array.from({ length: n }, (_, i) => String.fromCharCode(d.getUint8(o + i))).join('');
+  if (buf.byteLength < 132 || str(36, 4) !== 'acsp') throw new Error('not an ICC profile');
+  if (str(16, 4) !== 'RGB ') throw new Error(`profile is ${str(16, 4).trim()}, not RGB`);
+
+  const tags: Record<string, number> = {};
+  const n = d.getUint32(128);
+  if (132 + 12 * n > buf.byteLength) throw new Error('tag table runs past the end of the file');
+  for (let i = 0; i < n; i++) tags[str(132 + 12 * i, 4)] = d.getUint32(132 + 12 * i + 4);
+
+  const xyz = (t: string): Vec3 => {
+    const off = tags[t];
+    if (off === undefined) throw new Error(`no ${t} tag: not a matrix/TRC profile`);
+    if (str(off, 4) !== 'XYZ ') throw new Error(`${t} is not an XYZType`);
+    return [0, 1, 2].map((i) => d.getInt32(off + 8 + 4 * i) / 65536) as Vec3;
+  };
+  const xy = (v: Vec3): [number, number] => {
+    const sum = v[0] + v[1] + v[2];
+    if (!(Math.abs(sum) > 1e-9)) throw new Error('degenerate colorant in the profile');
+    return [v[0] / sum, v[1] / sum];
+  };
+
+  /**
+   * The colorants are stored adapted to the PCS illuminant, which is D50, and
+   * the matrix that got them there is the `chad` tag. Reading them as-is
+   * describes a gamut under the wrong white: against the built-in primaries
+   * that was 10 to 16 chart units out at the cube corners, which is many JNDs.
+   * Undo it, and the profile's own white is where D50 came from.
+   */
+  const chad = tags.chad;
+  let un = (v: Vec3) => v;
+  let white = xyz('wtpt');
+  if (chad !== undefined && str(chad, 4) === 'sf32') {
+    const m = [0, 1, 2].map((r) => [0, 1, 2].map((c) => d.getInt32(chad + 8 + 4 * (3 * r + c)) / 65536)) as M3;
+    const mi = inv3(m);
+    un = (v: Vec3) => apply(mi, v);
+    white = un([0.9642, 1.0, 0.8249]);           // PCS D50, back through the adaptation
+  }
+
+  // 'desc' is a textDescriptionType in v2 and an mluc in v4; both start with a
+  // count, and neither is worth a full parser just to title a menu entry
+  let name = fallback;
+  const dsc = tags.desc;
+  if (dsc !== undefined) {
+    if (str(dsc, 4) === 'desc') name = str(dsc + 12, Math.max(0, d.getUint32(dsc + 8) - 1)) || fallback;
+    else if (str(dsc, 4) === 'mluc') {
+      const len = d.getUint32(dsc + 20), off = d.getUint32(dsc + 24);
+      name = Array.from({ length: len / 2 }, (_, i) => String.fromCharCode(d.getUint16(dsc + off + 2 * i))).join('');
+    }
+  }
+  return {
+    name: name.replace(/\0+$/, '').trim() || fallback,
+    p: [xy(un(xyz('rXYZ'))), xy(un(xyz('gXYZ'))), xy(un(xyz('bXYZ')))],
+    w: xy(white),
+  };
+}
+
 export const GAMUTS: Record<string, Gamut> = {
   srgb: { name: 'sRGB / Rec.709', p: [[0.64, 0.33], [0.3, 0.6], [0.15, 0.06]], w: [0.3127, 0.329] },
   'display-p3': { name: 'Display P3', p: [[0.68, 0.32], [0.265, 0.69], [0.15, 0.06]], w: [0.3127, 0.329] },
