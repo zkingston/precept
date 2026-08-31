@@ -210,7 +210,13 @@
   #mathdlg dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:3px 12px; align-items:baseline; }
   #mathdlg dt { white-space:nowrap; }
   #mathdlg dd { margin:0; color:var(--dim); }
-  #mathdlg mjx-container[display="true"] { margin:10px 0; overflow-x:auto; overflow-y:hidden; }
+  /* Wide formulas scroll sideways on a narrow viewport. The vertical padding is
+     not decoration: MathJax's box arithmetic leaves each container overflowing
+     its own height by a pixel or six, which with overflow-y hidden clips a
+     descender and with overflow-y auto raises a scrollbar on a formula that
+     fits. Six pixels of slack absorbs it. */
+  #mathdlg mjx-container[display="true"] { margin:0; padding:10px 0;
+                                           overflow-x:auto; overflow-y:hidden; }
   /* MathJax sizes math relative to its surroundings; the dialog runs small */
   #mathdlg mjx-container { font-size:107%; }
   #mathclose { position:absolute; top:12px; right:14px; width:26px; height:26px; padding:0;
@@ -3131,17 +3137,28 @@ const paintHist = () => {
 };
 $('aboutbtn').onclick = () => $('aboutdlg').showModal();
 /**
- * The formulation renders once, on first open: auto-render walks the whole
- * subtree and there is no reason to pay for that until someone asks.
+ * The formulation is typeset at startup, laid out off-screen while it happens.
+ *
+ * Typesetting on the click was wrong twice over. It is what pulls the math
+ * webfonts down, about 700 kB across a dozen faces, so the first look at the
+ * dialog was a page of fallback letters on MathJax's metrics: L drawn as I,
+ * fences that never grew, descenders cut off. And typesetting a CLOSED dialog
+ * does not fix it on its own — the element is display:none, nothing paints,
+ * and the browser has no reason to fetch a face for a glyph it never draws.
+ * Laying it out off-screen for the duration fetches exactly the faces this
+ * formulation uses, and gives CHTML a real width to measure while it is at it.
  */
-let mathReady = false;
-$('mathbtn').onclick = () => {
-  if (!mathReady && window.MathJax?.typesetPromise) {
-    mathReady = true;
-    MathJax.typesetPromise([$('mathdlg')]);
+window.MathJax?.startup?.promise.then(async () => {
+  const dlg = $('mathdlg');
+  Object.assign(dlg.style, { display: 'block', visibility: 'hidden', position: 'fixed', left: '-9999px' });
+  try {
+    await MathJax.typesetPromise([dlg]);
+    await document.fonts.ready;
+  } finally {
+    dlg.removeAttribute('style');
   }
-  $('mathdlg').showModal();
-};
+});
+$('mathbtn').onclick = () => $('mathdlg').showModal();
 $('mathclose').onclick = () => $('mathdlg').close();
 $('mathdlg').onclick = (e) => { if (e.target === $('mathdlg')) $('mathdlg').close(); };
 $('aboutclose').onclick = () => $('aboutdlg').close();
