@@ -232,7 +232,7 @@
   #aboutdlg .lede { color:var(--dim); margin:3px 0 13px; }
   #aboutdlg ul { margin:6px 0 0; padding-left:17px; color:var(--dim); font-size:12px; }
   #aboutdlg li + li { margin-top:5px; }
-  #aboutdlg a { color:var(--link); }
+  #aboutdlg a, #mathdlg a { color:var(--link); }
   #aboutdlg .q { opacity:1; vertical-align:baseline; margin:0; font-size:inherit; color:var(--link); }
   #aboutclose { position:absolute; top:12px; right:12px; width:26px; height:26px; padding:0;
     background:none; border:0; color:var(--dim); font-size:19px; line-height:1; cursor:pointer; }
@@ -504,15 +504,23 @@
   <h3>Formulation</h3>
 
   <h4>1 · Space</h4>
-  <p>The chart is \(M\), Oklab scaled by 100. A color is \(p=(L,a,b)\in M\) with lightness
-     \(L\in[0,100]\), chroma \(C(p)=\sqrt{a^2+b^2}\), and hue \(h(p)=\operatorname{atan2}(b,a)\).
-     Local structure is a Riemannian metric \(g\), pulled back from the active working space.
-     Global structure is a concave saturation \(f\).</p>
-  \[ f(s)=s_0\ln\left(1+\frac{s}{s_0}\right),\qquad s_0=\frac{100}{5.34}\approx 18.7,\qquad f'(0)=1 \]
-  <p>Write \(\ell_g(p,q)\) for the \(g\)-arc length between two colors. Perceived difference is
-     \(d(p,q)=f\bigl(\ell_g(p,q)\bigr)\). Concavity of \(f\) makes \(d\) subadditive:
-     \(d(p,r)\le d(p,q)+d(q,r)\), strictly in general. Integrate with \(\ell_g\); compare with \(d\).
-     Taking \(g=I\) gives the chart's own metric, written \(\ell_I\) and \(d_I\).</p>
+  <p>Colors are the points of \(M=\mathbb{R}^3\), <a href="https://en.wikipedia.org/wiki/Oklab_color_space" target="_blank" rel="noopener">Oklab</a>
+     coordinates scaled by 100. A color is \(p=(L,a,b)\) with lightness \(L\in[0,100]\), chroma
+     \(C(p)=\sqrt{a^2+b^2}\), and hue \(h(p)=\operatorname{atan2}(b,a)\). Distance in \(M\) is
+     neither Euclidean nor additive, and the two departures are separate.</p>
+  <p>Each point carries a symmetric positive definite \(g(p)\in\mathbb{R}^{3\times3}\), which
+     measures short steps. Segment lengths use the midpoint rule and a path is the sum of its
+     segments:</p>
+  \[ \ell_g(p,q)=\sqrt{(q-p)^{\top}g\!\left(\tfrac{p+q}{2}\right)(q-p)},\qquad
+     \ell_g(\gamma)=\sum_{k}\ell_g(\gamma_k,\gamma_{k+1}) \]
+  <p>\(g=J^{\top}J\), where \(J\) is the Jacobian at \(p\) of the map from \(M\) to the working
+     space selected in the panel, scaled so the gray axis measures 100 in every space. Choosing Oklab
+     gives \(g=I\) and the ordinary Euclidean length, written \(\ell_I\).</p>
+  <p>Lengths do not add up to differences. Perceived difference is a concave function of length:</p>
+  \[ d(p,q)=f\bigl(\ell_g(p,q)\bigr),\qquad f(s)=s_0\ln\left(1+\frac{s}{s_0}\right),\qquad
+     s_0=\frac{100}{5.34}\approx 18.7,\qquad f'(0)=1 \]
+  <p>Concavity of \(f\) makes \(d\) subadditive: \(d(p,r)\le d(p,q)+d(q,r)\), strictly in general.
+     Integrate with \(\ell_g\); compare with \(d\). Write \(d_I\) for \(d\) taken with \(g=I\).</p>
 
   <h4>2 · Variables</h4>
   <p>The variables are the control points \(P=(p_1,\dots,p_n)\in M^n\). A pinned set
@@ -532,22 +540,22 @@
     <dt>\(\Lambda=\{p: L_-\le L\le L_+\}\)</dt><dd>lightness band</dd>
     <dt>\(X=\{p: C_-\le C(p)\le C_+\}\)</dt><dd>chroma band</dd>
     <dt>\(H=\{p: C(p)&lt;1 \ \vee\ h(p)\in[h_-,h_+]\}\)</dt><dd>hue arc, mod \(360\)</dd>
-    <dt>\(B_j=\{p: d(p,c_j)&lt;r_j\}\)</dt><dd>keep-out balls, radius in perceived units</dd>
-    <dt>\(E_m=\{p: n_m^{\top}\sigma(p)\le d_m\}\)</dt><dd>halfplanes, \(\sigma\) the chart\(\to\)space map</dd>
+    <dt>\(B_j=\{p: d(p,c_j)&lt;r_j\}\)</dt><dd>excluded balls, radius in perceived units</dd>
+    <dt>\(E_m=\{p: n_m^{\top}\sigma(p)\le d_m\}\)</dt><dd>halfplanes, \(\sigma\) the map to the working space</dd>
   </dl>
   <p>The violation \(c(p)\) measures how far \(p\) lies outside \(\mathcal{F}\). It is zero on
      \(\mathcal{F}\) and differentiable off it. Each \(\phi\) is a squared distance outside its set, so
-     each root is a length in chart units, and \(\Delta h\) is the angle to the nearest edge of the hue
-     arc. With \([x]_+=\max(x,0)\),</p>
+     each root is a length in units of \(M\), and \(\Delta h\) is the angle to the nearest edge of
+     the hue arc. With \([x]_+=\max(x,0)\),</p>
   \[ c(p)=\sqrt{\phi_G(p)}+[L_--L]_++[L-L_+]_++[C_--C]_++[C-C_+]_+
         +\frac{\pi}{180}\,C\,\Delta h(p)+\sqrt{\phi_B(p)}+\sqrt{\phi_E(p)} \]
 
   <h4>4 · Program</h4>
   \[ \min_{P}\ \sum_k w_k F_k(P)\qquad\text{s.t.}\qquad p_i\in\mathcal{F}\ \ \forall i,
      \qquad \gamma_P(t)\in\mathcal{F}\ \ \forall t\in[0,1] \]
-  <p>We enforce the node constraints exactly, by projection. The path constraint cannot be enforced the
-     same way, because the curve samples are functions of \(P\) rather than variables. It enters as an
-     augmented Lagrangian instead.</p>
+  <p>We enforce the constraint on the control points exactly, by projection. The constraint along the
+     curve cannot be enforced the same way, because the curve samples are functions of \(P\) rather
+     than variables. It enters as an augmented Lagrangian instead.</p>
 
   <h4>5 · Objectives</h4>
   <p>Each term is written for the palette \(\Pi(P)\). The observer set \(V\) is the identity alone, or
@@ -561,36 +569,36 @@
   \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
      \delta\bigl(h_i,\ \widehat h(t_i)\bigr)\right)^2 \]
   <p>\(\widehat L\) and \(\widehat h\) are the profiles drawn in the plots, and \(\delta\) is the signed shortest
-     angle, so the seam at \(0^\circ\) costs nothing. Chroma weights the angle because a \(40^\circ\)
+     angle, so the wrap at \(0^\circ\) costs nothing. Chroma weights the angle because a \(40^\circ\)
      error matters at chroma 20 and not at chroma 2. Swatches below chroma 1 have no usable hue and are
      skipped.</p>
   \[ F_{\text{sp}}=\sum_{i=1}^{m}\frac{\bar\ell}{\ell_i}-m,\qquad
      \ell_i=\max\left(\tfrac{1}{20},\ \ell_g(p_i,p_{i+1})\right),\qquad
      \bar\ell=\frac1m\sum_i\ell_i,\qquad m=n-1 \]
-  <p>\(F_{\text{sp}}\) is the AM–HM ratio of the segment lengths. It is zero exactly when the \(\ell_i\)
-     are equal, and grows without bound as any one closes. It is also scale invariant, so a uniform
-     collapse leaves it at zero; the scale comes from the pinned nodes, or from leaving
-     \(F_{\text{arc}}\) off.</p>
+  <p>\(F_{\text{sp}}\) is the ratio of the arithmetic mean of the \(\ell_i\) to their harmonic mean,
+     less one. It is zero exactly when the \(\ell_i\) are equal, and grows without bound as any one
+     closes. It is also scale invariant, so shrinking every segment by the same factor leaves it at
+     zero; the scale comes from the pinned control points, or from leaving \(F_{\text{arc}}\) off.</p>
   \[ F_{\text{pair}}=\binom{n}{2}^{-1}\sum_{i&lt;j}\bigl(d_I(\pi_i,\pi_j)-\tau_{ij}\bigr)^2,\qquad
      \tau_{ij}=f\left(\frac{j-i}{n-1}\,\ell_I\right) \]
   <p>\(\tau_{ij}\) is the difference a uniform traversal of the curve would produce between swatches
      \(i\) and \(j\). It is \(f\) of the arc covered, not a multiple of \(j-i\). A multiple is what
-     additivity would give, and \(f\) is not additive. Both distances use the chart metric, where \(f\)
-     is calibrated.</p>
+     additivity would give, and \(f\) is not additive. Both distances are taken with \(g=I\), which is
+     where \(f\) is calibrated.</p>
   \[ F_{\text{con}}=\sum_{q\in Q}\bigl[\kappa_{\min}-\kappa(q,\beta)\bigr]_+^2,\qquad
      F_{\text{lsep}}=\sum_{i&lt;j}\bigl[\Delta_L-|L_i-L_j|\bigr]_+^2,\qquad
      \Delta_L=\frac{L_+-L_-}{n-1} \]
-  <p>\(\kappa\) is the WCAG 2 contrast ratio against a ground \(\beta\). Both terms are floors, written
-     as hinges, so each stops once its floor is met. \(\Delta_L\) is derived rather than typed: \(n\)
-     swatches can be at most \((L_+-L_-)/(n-1)\) apart in lightness, so a larger floor would push
-     against a wall forever.</p>
+  <p>\(\kappa\) is the WCAG 2 contrast ratio against a background \(\beta\). Both terms are floors,
+     written as hinges, so each stops once its floor is met. \(\Delta_L\) is derived rather than
+     typed: \(n\) swatches spread over the lightness band are at best \((L_+-L_-)/(n-1)\) apart, so
+     a larger floor could never be met.</p>
 
   <h4>6 · Constraint handling</h4>
-  <p>Nodes are projected, \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\), by alternating projection onto
-     \(G,\Lambda,X,H,E,B\). The loop stops once the violation is below \(10^{-4}\), or after twelve
-     rounds. This is not the metric projection: \(G\) is concave in places and \(B^{\,c}\) is never
-     convex, so the nearest feasible point is not available. The loop returns a feasible point near the
-     input, which is what a projected step needs.</p>
+  <p>Control points are projected, \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\), by projecting onto
+     \(G,\Lambda,X,H,E,B\) in turn and repeating. The loop stops once the violation is below
+     \(10^{-4}\), or after twelve rounds. It does not return the nearest point of \(\mathcal{F}\):
+     \(\mathcal{F}\) is not convex, since \(G\) is nonconvex in places and the complement of a ball
+     never is. It returns a feasible point near the input, which is all a projected step uses.</p>
   <p>Curve samples are not variables, so they cannot be projected. With \(c_k=c(\gamma_k)\) and
      multipliers \(\lambda\in\mathbb{R}_{\ge0}^{K}\),</p>
   \[ F_{\text{feas}}=\sum_k\left(\lambda_k c_k+\tfrac12 c_k^2\right),\qquad
@@ -606,11 +614,14 @@
   <p>Gradients are central differences with \(h=\tfrac14\) over the \(3n\) coordinates, skipping
      \(i\in\mathcal{P}\). Each term is normalized to unit max before it is weighted.</p>
   \[ \widehat G_k=\frac{\nabla F_k}{\lVert\nabla F_k\rVert_\infty},\qquad
-     D=\sum_k w_k\,\rho^{\,[k=\text{feas}]}\,\widehat G_k \]
+     D=\sum_k u_k\,\widehat G_k,\qquad
+     u_k=\begin{cases}\rho\,w_k & k=\text{feas}\\ w_k & \text{otherwise}\end{cases} \]
   <p>Adam runs on \(D\) with \(\beta_1=0.9\), \(\beta_2=0.999\), \(\varepsilon=10^{-8}\), and step
      \(\eta=1.2\,r\). The terms span four orders of magnitude, so an unnormalized sum would be the
      largest term's gradient plus rounding noise. Normalizing first makes each \(w_k\) a relative pull:
-     weight 2 against weight 1 is twice the pull, whatever the two terms measure.</p>
+     weight 2 against weight 1 moves the step twice as far, whatever the two terms measure. The
+     feasibility term carries \(\rho\) here rather than in \(F_{\text{feas}}\), because the
+     normalization would otherwise divide it back out.</p>
   <p>The cost is that \(D\ne\nabla\Phi\) for any fixed \(\Phi\), because the normalizer depends on
      \(P\). We claim no descent guarantee.</p>
   <p>Restarts are optional. On a stall, meaning no improvement of \(5\times10^{-4}\) for \(8T=200\)
