@@ -492,7 +492,7 @@
 
   <h4>Getting around</h4>
   <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view it
-     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) for a menu to pin a node or delete it; a pinned node is held still by the solver. Ctrl-click two nodes to mark them, then connect or disconnect them from that same menu: disconnecting splits the ramp into separate runs, and connecting the two ends of one run closes it into a loop. The tools switch between nodes, keep-out spheres and halfplanes: a sphere is placed by double-clicking a cut panel and resized by dragging the small handle beside it, and a halfplane is cut the same way, then slid by its center or turned by its tip. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette. Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.</p>
+     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) for a menu to pin a node or delete it; a pinned node is held still by the solver. Ctrl-click nodes to mark them; pin and delete then apply to every marked node rather than to the one under the cursor. With two marked, that menu also offers connect and disconnect: disconnecting splits the ramp into separate runs, and connecting the two ends of one run closes it into a loop. The tools switch between nodes, keep-out spheres and halfplanes: a sphere is placed by double-clicking a cut panel and resized by dragging the small handle beside it, and a halfplane is cut the same way, then slid by its center or turned by its tip. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette. Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.</p>
 
   <h4>Motivation (personal)</h4>
   <p>Color palettes have been on my mind for quite some time as someone who creates plots, charts,
@@ -3944,15 +3944,19 @@ canvas.addEventListener('dblclick', (e) => {
   sync();
 });
 
-function removeAt(kind, i) {
+function dropOne(kind, i) {
   ({ pt: S.pts, obs: S.obs, obsr: S.obs, plane: S.planes, planerot: S.planes })[kind].splice(i, 1);
-  if (kind === 'pt') {
-    S.pin.splice(i, 1);
-    // the node's two edges collapse into one, and it is a break if either was
-    if (i > 0 && S.cut[i]) S.cut[i - 1] = true;
-    S.cut.splice(i, 1);
-    S.marks = S.marks.filter((m) => m !== i).map((m) => (m > i ? m - 1 : m));
-  }
+  if (kind !== 'pt') return;
+  S.pin.splice(i, 1);
+  // the node's two edges collapse into one, and it is a break if either was
+  if (i > 0 && S.cut[i]) S.cut[i - 1] = true;
+  S.cut.splice(i, 1);
+  S.marks = S.marks.filter((m) => m !== i).map((m) => (m > i ? m - 1 : m));
+}
+
+function removeAt(kind, i) {
+  // descending, so each splice leaves the indices still to come where they were
+  for (const k of targetsFor(kind, i).sort((a, b) => b - a)) dropOne(kind, k);
   S.sel = null;
   sync();
 }
@@ -3963,10 +3967,27 @@ function removeAt(kind, i) {
  * nowhere to put a second action.
  */
 let ctxFor = null;
+
+/**
+ * What pin and delete act on: the marked set if the node under the cursor is
+ * one of them, otherwise just that node.
+ *
+ * The same rule a file manager uses, and the reason marking is worth doing at
+ * all — right-clicking inside a selection acts on the selection, right-clicking
+ * outside it acts on what you clicked and leaves the marks alone, so a mark
+ * made for a connect is not lost to an unrelated delete.
+ */
+const targetsFor = (kind, i) =>
+  (kind === 'pt' && S.marks.length && S.marks.includes(i) ? [...S.marks] : [i]);
+
 function openMenu(clientX, clientY, kind, i) {
   ctxFor = { kind, i };
+  const many = targetsFor(kind, i);
+  const n = many.length > 1 ? ` ${many.length}` : '';
   const acts = kind === 'pt'
-    ? [...linkActs(), S.pin[i] ? 'unpin' : 'pin', 'delete']
+    // one state for the whole set rather than a toggle each: pin unless every
+    // one of them already is
+    ? [...linkActs(), (many.every((k) => S.pin[k]) ? 'unpin' : 'pin') + n, `delete${n}`]
     : ['delete'];
   const m = $('ctxmenu');
   m.innerHTML = acts.map((a) => `<button data-act="${a}">${a}</button>`).join('');
@@ -3984,8 +4005,10 @@ $('ctxmenu').onclick = (e) => {
   if (act === 'connect') return linkMarks();
   if (act === 'disconnect') return unlinkMarks();
   if (act === 'clear marks') { S.marks = []; return sync(); }
-  if (act === 'delete') return removeAt(kind, i);
-  S.pin[i] = !S.pin[i];
+  const verb = act.split(' ')[0];
+  if (verb === 'delete') return removeAt(kind, i);
+  const on = verb === 'pin';
+  for (const k of targetsFor(kind, i)) S.pin[k] = on;
   sync();
 };
 // capture, so a click anywhere else dismisses it before that click does anything
