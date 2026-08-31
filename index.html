@@ -300,8 +300,8 @@
       <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select></div>
       <div class="row"><label class="f">vision</label>
         <select id="cvd" style="flex:1">
-          <option value="none">normal</option><option value="protan">protanopia</option>
-          <option value="deutan">deuteranopia</option><option value="tritan">tritanopia</option></select></div>
+          <option value="none">normal</option><option value="protan">protan · red</option>
+          <option value="deutan">deutan · green</option><option value="tritan">tritan · blue</option></select></div>
       <div class="row"><label class="f">severity</label>
         <input type="range" id="sev" min="0" max="1" step="0.05" value="1"><span class="v" id="sevv">1.0</span></div>
       <div class="row"><label class="f">solid</label>
@@ -3343,7 +3343,7 @@ const HINTS = {
   spacesel: 'Space the panels are drawn in.',
   gamutsel: 'Which colors are reachable.',
   cvd: 'Simulate a color-vision deficiency.',
-  sev: 'How complete the deficiency is.',
+  sev: 'Below 1 is anomalous trichromacy; 1 is dichromacy.',
   shell: 'Opacity of the gamut solid.',
   sliceop: 'Opacity of the three cut planes.',
   bg: 'Backdrop color.',
