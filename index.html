@@ -2781,20 +2781,56 @@ function restartTick() {
   jolt(); adamReset();
 }
 
-let running = false, tick = 0;
+let running = false, tick = 0, frames = 0;
+
+/**
+ * One step: the gradient move, the projection back into the feasible set, and
+ * the outer iteration on its own cadence. The projection belongs here and not
+ * in sync(), because a projected gradient method projects after every step,
+ * not after every drawn frame.
+ */
+function step() {
+  const moved = adamStep();
+  if (moved === false) return false;
+  constrain();
+  if (tick % AL_EVERY === AL_EVERY - 1) { alStep(); if (S.restart) restartTick(); }
+  tick++;
+  return true;
+}
+
+/**
+ * Steps are batched into a frame rather than run one per frame.
+ *
+ * sync() rebuilds the tube and the point meshes from scratch, which measures
+ * 3.6ms against a 4.2ms gradient at nine points in Oklab. Running it once per
+ * STEP spent nearly half the solver's budget on geometry nobody saw: only the
+ * last rebuild of a frame is ever displayed. So take steps until the budget is
+ * gone, then draw once.
+ *
+ * The budget leaves most of a 60Hz frame to everything else, and the loop runs
+ * at least once, so a step that is already over budget on its own — CIELAB at
+ * nine points measures 23ms — behaves exactly as it did before.
+ *
+ * STEP_CAP is not a tuning knob, it is the exit that does not depend on a
+ * clock. A headless browser driven with --virtual-time-budget freezes
+ * performance.now() until a timer fires, so a budget alone is an infinite loop
+ * there, and any test that starts the solver hangs instead of failing.
+ */
+const STEP_BUDGET = 10, STEP_CAP = 32;
 function solve() {
   if (!running) return;
-  const moved = adamStep();
-  if (tick % AL_EVERY === AL_EVERY - 1) { alStep(); if (S.restart) restartTick(); }
+  let alive = true, n = 0;
+  const until = performance.now() + STEP_BUDGET;
+  do { alive = step(); } while (alive && ++n < STEP_CAP && performance.now() < until);
   // the sidebar rebuilds its whole table and re-evaluates every term, which is
-  // far too much to do at solver rate; the views stay live, the numbers lag
-  sync({ light: ++tick % 8 !== 0 });
-  if (moved === false) return stopSolver();
+  // far too much to do at frame rate; the views stay live, the numbers lag
+  sync({ light: ++frames % 8 !== 0 });
+  if (!alive) return stopSolver();
   requestAnimationFrame(solve);
 }
 function startSolver() {
   if (running) return;
-  running = true; tick = 0; adamReset();
+  running = true; tick = 0; frames = 0; adamReset();
   Object.assign(RESTART, { n: 0, best: null, bestScore: 0, scale: {}, flat: 0, prev: Infinity });
   $('run').textContent = 'stop'; $('run').style.background = '#6c3030';
   requestAnimationFrame(solve);
