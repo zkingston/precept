@@ -492,7 +492,7 @@
 
   <h4>Getting around</h4>
   <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view it
-     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) for a menu to pin a node or delete it; a pinned node is held still by the solver. Ctrl-click two nodes to mark them, then connect or disconnect them from that same menu: disconnecting splits the ramp into separate runs, and connecting the two ends of one run closes it into a loop, which is how a cyclic map that sweeps the whole hue circle is built. The tools switch between nodes, keep-out spheres and halfplanes: a sphere is placed by double-clicking a cut panel and resized by dragging the small handle beside it, and a halfplane is cut the same way, then slid by its center or turned by its tip. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette. Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.</p>
+     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) for a menu to pin a node or delete it; a pinned node is held still by the solver. Ctrl-click two nodes to mark them, then connect or disconnect them from that same menu: disconnecting splits the ramp into separate runs, and connecting the two ends of one run closes it into a loop. The tools switch between nodes, keep-out spheres and halfplanes: a sphere is placed by double-clicking a cut panel and resized by dragging the small handle beside it, and a halfplane is cut the same way, then slid by its center or turned by its tip. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette. Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.</p>
 
   <h4>Motivation (personal)</h4>
   <p>Color palettes have been on my mind for quite some time as someone who creates plots, charts,
@@ -883,9 +883,11 @@ function addPoint(p) {
  * it to equal perceived steps on purpose, so the two are parameterized
  * differently even where they trace exactly the same colors.
  *
- * The three multi-sequential maps — bukavu, fes, oleron — are not here. They
- * are built from two sequential halves meeting at a step, and one smooth
- * spline cannot hold that break: the best fit still misses by 5.5.
+ * The multi-sequential maps carry a `cut`: the index after which the ramp
+ * breaks. All three of them step at exactly the midpoint of their published
+ * table, by a jump some fifty times the median between neighbouring entries,
+ * which is the seam between the two halves they are built from. Fitted as two
+ * runs they land within 0.85; one spline across the break missed by 5.5.
  *
  * `kind` groups the picker and is derived from each ramp rather than assumed:
  * cyclic if the ends meet, then by how many times lightness turns. Turbo is
@@ -900,6 +902,17 @@ const PRESETS = {
   plasma:       { mode: 'continuous', kind: 'sequential', hex: ['#0d0887', '#4c02a1', '#7e03a8', '#aa2395', '#cc4778', '#e56b5d', '#f89441', '#fdc328', '#f0f921'] },
   cividis:      { mode: 'continuous', kind: 'sequential', hex: ['#00224e', '#1a386f', '#434e6c', '#61656f', '#7d7c78', '#9a9376', '#bbad6d', '#ddc858', '#fee838'] },
   turbo:        { mode: 'continuous', kind: 'sequential', hex: ['#30123b', '#466be3', '#28bceb', '#32f298', '#a4fc3c', '#ecd13a', '#fb8122', '#d23105', '#7a0403'] },
+  jet:          { mode: 'continuous', kind: 'sequential', hex: ['#000080', '#0000bb', '#0000fa', '#0020ff', '#0058ff', '#008dff', '#00c5ff', '#0ff9e7', '#39ffbe', '#66ff90', '#90ff66', '#beff39', '#e7ff0f', '#ffd700', '#ffa300', '#ff7300', '#ff3f00', '#fa0f00', '#bb0000', '#800000'] },
+  bukavu:      { mode: 'continuous', kind: 'multi', cut: 4, hex: ['#1a3333', '#235786', '#3f92c8', '#78c5cc', '#e4fee5', '#014026', '#326513', '#7f7733', '#b68f60', '#d6c8b4', '#ededfc'] },
+  fes:         { mode: 'continuous', kind: 'multi', cut: 2, hex: ['#0d0d0d', '#777777', '#f1f1f1', '#024026', '#425621', '#75642a', '#ab773e', '#c6a47c', '#dacfc1', '#ededfc'] },
+  oleron:      { mode: 'continuous', kind: 'multi', cut: 3, hex: ['#1a2659', '#5d699c', '#aab7e8', '#e6f2ff', '#1a4c00', '#7a711f', '#d9b581', '#fdfde6'] },
+  accent:      { mode: 'discrete', kind: 'categorical', hex: ['#7fc97f', '#beaed4', '#fdc086', '#ffff99', '#386cb0', '#f0027f', '#bf5b17', '#666666'] },
+  dark2:       { mode: 'discrete', kind: 'categorical', hex: ['#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666'] },
+  paired:      { mode: 'discrete', kind: 'categorical', hex: ['#a6cee3', '#1f78b4', '#b2df8a', '#33a02c', '#fb9a99', '#e31a1c', '#fdbf6f', '#ff7f00'] },
+  pastel1:     { mode: 'discrete', kind: 'categorical', hex: ['#fbb4ae', '#b3cde3', '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec'] },
+  pastel2:     { mode: 'discrete', kind: 'categorical', hex: ['#b3e2cd', '#fdcdac', '#cbd5e8', '#f4cae4', '#e6f5c9', '#fff2ae', '#f1e2cc', '#cccccc'] },
+  set1:        { mode: 'discrete', kind: 'categorical', hex: ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf'] },
+  set3:        { mode: 'discrete', kind: 'categorical', hex: ['#8dd3c7', '#ffffb3', '#bebada', '#fb8072', '#80b1d3', '#fdb462', '#b3de69', '#fccde5'] },
   bilbao:       { mode: 'continuous', kind: 'sequential', hex: ['#4c0001', '#85353c', '#a06257', '#a9825e', '#b5a772', '#c8c5b9', '#ffffff'] },
   imola:        { mode: 'continuous', kind: 'sequential', hex: ['#1a33b3', '#2950a4', '#396b94', '#54867f', '#7bae74', '#acdb69', '#ffff66'] },
   vik:          { mode: 'continuous', kind: 'diverging', hex: ['#001261', '#06568c', '#71a8c4', '#ece5e0', '#d39774', '#a94512', '#590008'] },
@@ -1880,12 +1893,49 @@ function sidebar() {
 // page, so the color-vision and grayscale settings apply to the test too.
 const tipc = $('tipcanvas'), tctx = tipc.getContext('2d');
 const rnd = (seed) => () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+/** a test belongs to one mode, or, with no mode of its own, to both */
+const fitsMode = (t) => !!t && (!t.mode || t.mode === S.mode);
+
+/**
+ * A height field with coastlines: five octaves of value noise on a fixed seed,
+ * so it is the same terrain every time and two colormaps can be compared on it.
+ *
+ * Elevation is the case these maps were drawn for and the one where a bad ramp
+ * invents landscape — a false ridge where the map has an edge, a plateau where
+ * it flattens. In discrete mode the same field comes out classified into one
+ * band per swatch, which is the other half of how geographic data gets drawn.
+ */
+const TERRAIN = (() => {
+  const smooth = (t) => t * t * (3 - 2 * t);
+  const oct = [2, 4, 8, 16, 32].map((g, o) => {
+    const r = rnd(1237 + o * 977);
+    return { g, h: Array.from({ length: (g + 1) * (g + 1) }, () => r()) };
+  });
+  return (x, y) => {
+    let v = 0, amp = 1, norm = 0;
+    for (const { g, h } of oct) {
+      const gx = x * g, gy = y * g;
+      const i = Math.min(g - 1, Math.floor(gx)), j = Math.min(g - 1, Math.floor(gy));
+      const fx = smooth(gx - i), fy = smooth(gy - j), at = (a, b) => h[b * (g + 1) + a];
+      v += amp * ((at(i, j) * (1 - fx) + at(i + 1, j) * fx) * (1 - fy)
+                + (at(i, j + 1) * (1 - fx) + at(i + 1, j + 1) * fx) * fy);
+      norm += amp;
+      amp *= 0.55;
+    }
+    return v / norm;
+  };
+})();
 
 const TESTS = {
   sineramp: { mode: 'continuous', label: 'sineramp',
     note: 'Kovesi\u2019s test: a constant-amplitude sine riding a linear ramp, fading out downward. '
         + 'Where the map loses contrast the wave disappears early; where it has a false edge the flat ramp shows a band.',
     f: (x, y) => x + 0.05 * Math.sin(x * 32 * Math.PI) * (1 - y) },
+  geo: { label: 'geo',
+    note: 'A synthetic height field, the same one every time. Elevation is what these maps were drawn '
+        + 'for: a false ridge here is the colormap inventing landscape. In discrete mode it comes out '
+        + 'classified into one band per swatch.',
+    f: (x, y) => TERRAIN(x, y) },
   field: { mode: 'continuous', label: 'field',
     note: 'A smooth scalar field. Any ring, ridge or bright seam you can see is the colormap talking, not the data.',
     f: (x, y) => {
@@ -1916,13 +1966,12 @@ function drawTest() {
   // cut row on a phone, so the image is drawn at whatever shape it is given
   const W = Math.max(1, Math.round(tipc.clientWidth)), H = Math.max(1, Math.round(tipc.clientHeight));
   if (tipc.width !== W || tipc.height !== H) { tipc.width = W; tipc.height = H; }
-  const kind = TESTS[S.tipKind]?.mode === S.mode ? S.tipKind
-             : Object.keys(TESTS).find((k) => TESTS[k].mode === S.mode);
+  const kind = fitsMode(TESTS[S.tipKind]) ? S.tipKind : Object.keys(TESTS).find((k) => fitsMode(TESTS[k]));
   // same reason as the metrics table: redrawing at solver rate would replace
   // these between mousedown and mouseup, so only touch what actually changed
   for (const [k, t] of Object.entries(TESTS)) {
     let b = $('tipbtns').querySelector(`[data-tip="${k}"]`);
-    const want = t.mode === S.mode;
+    const want = fitsMode(t);
     if (want && !b) {
       $('tipbtns').insertAdjacentHTML('beforeend',
         `<button data-tip="${k}" title="${t.note}">${t.label}</button>`);
@@ -2346,6 +2395,7 @@ function markedEdge() {
 
 /** what the menu can offer for the marks as they stand */
 function linkActs() {
+  if (S.mode === 'discrete') return [];          // no curve, so no edges to make or break
   if (S.marks.length !== 2) return S.marks.length ? ['clear marks'] : [];
   if (markedEdge()) return ['disconnect', 'clear marks'];
   const [a, b] = S.marks;
@@ -3672,7 +3722,8 @@ canvas.addEventListener('pointerdown', (e) => {
   controls.enabled = q.axis === undefined;      // a drag in a slice panel must not orbit 3D
   const grabbed = hitTest();
 
-  if (grabbed && (e.ctrlKey || e.metaKey) && grabbed.object.userData.kind === 'pt') {
+  if (grabbed && (e.ctrlKey || e.metaKey) && grabbed.object.userData.kind === 'pt'
+      && S.mode === 'continuous') {
     // marking, not grabbing: no drag, no orbit, and the selection is left alone
     const { i } = grabbed.object.userData;
     const at = S.marks.indexOf(i);
@@ -3935,12 +3986,21 @@ function rampCss(preset) {
     return `linear-gradient(90deg, ${pts.map((p, i) =>
       `${paint(p)} ${(i * w).toFixed(3)}% ${((i + 1) * w).toFixed(3)}%`).join(', ')})`;
   }
-  const lut = resample(spline(pts.map((p) => toSpace(p)), PER_SPAN).map((c) => fromSpace(c)), 32, M());
-  return `linear-gradient(90deg, ${lut.map((p, i) =>
-    `${paint(p)} ${((i * 100) / (lut.length - 1)).toFixed(2)}%`).join(', ')})`;
+  const g = M();
+  const parts = preset.cut === undefined ? [pts] : [pts.slice(0, preset.cut + 1), pts.slice(preset.cut + 1)];
+  const cs = parts.map((q) => spline(q.map((p) => toSpace(p)), PER_SPAN, preset.kind === 'cyclic').map((c) => fromSpace(c)));
+  const len = cs.map((c) => arcLength(c, g)), total = len.reduce((a, b) => a + b, 0) || 1;
+  const stops = [];
+  let at = 0;
+  cs.forEach((c, k) => {
+    const w = (100 * len[k]) / total, n = Math.max(2, Math.round(32 * len[k] / total));
+    resample(c, n, g).forEach((p, i) => stops.push(`${paint(p)} ${(at + (w * i) / (n - 1)).toFixed(2)}%`));
+    at += w;                                     // the next run starts where this one ended: a hard step
+  });
+  return `linear-gradient(90deg, ${stops.join(', ')})`;
 }
 
-const KIND_ORDER = ['sequential', 'diverging', 'cyclic', 'categorical'];
+const KIND_ORDER = ['sequential', 'diverging', 'multi', 'cyclic', 'categorical'];
 function paintLoadList() {
   const byKind = {};
   for (const [name, p] of Object.entries(PRESETS)) (byKind[p.kind] ??= []).push([name, p]);
@@ -3962,9 +4022,10 @@ $('loadlist').onclick = (e) => {
   S.pts = preset.hex.map(fromHex);
   S.pin = [];                                    // a new palette, not the old one renumbered
   S.cut = []; S.marks = [];
+  if (preset.cut !== undefined) S.cut[preset.cut] = true;   // where a multi-sequential map steps
   S.loop = [preset.kind === 'cyclic'];           // the cyclic maps load as the loops they are
   S.sel = null;
-  lprofLine(); hprofFit();                         // a new ramp gets fresh targets
+  lprofFit(); hprofFit();                          // both targets start as the ramp itself
   for (const b of $('mode').children) b.ariaPressed = b.dataset.v === S.mode;
   $('loaddlg').close();
   sync();
@@ -4257,7 +4318,7 @@ const HINTS = {
   host.insertAdjacentHTML('beforeend', `<span class="q" data-h="${esc(text)}">?</span>`);
 }
 
-lprofLine(); hprofFit(); mirror(); commit();
+lprofFit(); hprofFit(); mirror(); commit();
 loadFromHash();
 /**
  * The two overlays that are readouts rather than camera furniture move into the
