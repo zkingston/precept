@@ -120,9 +120,10 @@
   .seg button:first-child { border-radius:4px 0 0 4px; } .seg button:last-child { border-radius:0 4px 4px 0; }
   .seg button[aria-pressed=true] { background:var(--sel); border-color:var(--link); }
 
-  /* the output belongs next to the thing it came from, not in a side panel;
-     it sits between the preview above and the profile plots below */
-  #bar { position:absolute; right:14px; top:270px; bottom:154px; width:38px; min-height:130px;
+  /* the output belongs next to the thing it came from, not in a side panel.
+     layout() sets top and bottom, since what is above it depends on where the
+     preview ended up and what is below it on which split is in play. */
+  #bar { position:absolute; right:14px; top:14px; bottom:154px; width:38px; min-height:130px;
          display:flex; flex-direction:column; align-items:center; gap:6px; }
   #strip { width:100%; flex:1; min-height:0; display:block; border-radius:5px; border:1px solid #0004; }
   #swatches { display:flex; flex-direction:column-reverse; gap:3px; width:100%; flex:1; min-height:0; }
@@ -203,7 +204,7 @@
     #lplot { height:auto; flex-direction:column; gap:9px; }
     .pplot { flex:none; height:84px; }          /* flex:1 would beat the height */
     #hud { top:12px; }
-    #bar { top:56px; bottom:14px; }
+    #bar { bottom:14px; }
   }
 
   @media (max-width: 860px) {
@@ -219,7 +220,7 @@
        and narrow is inside compact, so without this the inline left/top that
        layout() writes are ignored and it lays out in flow over the 3D view. */
     #lplot { position:static; height:auto; flex-direction:column; gap:8px; }
-    #bar { top:52px; right:10px; min-height:80px; }
+    #bar { right:10px; min-height:80px; }
     /* a 125px cut panel cannot spare 30px for a slider, and there is no wheel
        to scroll one with. The axis letter and its value stay as a label; the
        cuts move by touching a node, which is what lock-to-node is for. */
@@ -1324,6 +1325,10 @@ function layout() {
     tip.removeAttribute('style');
     $('bar').style.bottom = '';
   }
+  // the bar takes everything the tools used to occupy; only a FLOATING preview
+  // is still above it, and only in the column split is the preview floating
+  const floating = tip.parentElement === main && !cell;
+  $('bar').style.top = floating ? `${tip.offsetTop + tip.offsetHeight + 14}px` : '14px';
   QUADS.forEach((q, i) => {
     q.rect = RECTS[i];
     Object.assign(q.el.style, { left: q.rect.x + 'px', top: q.rect.y + 'px', width: q.rect.w + 'px', height: q.rect.h + 'px' });
