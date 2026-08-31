@@ -86,6 +86,11 @@ path across all of them.
 - **Gamuts** — sRGB, Display P3, Adobe RGB, Rec.2020, ProPhoto, ACEScg, NTSC
   1953. Derived from primaries and white point; the selector changes what is
   *reachable*, the screen stays sRGB.
+- **Palettes** — matplotlib, Okabe-Ito, four from seaborn, and Fabio Crameri's
+  [Scientific colour maps](https://www.fabiocrameri.ch/colourmaps/) v8 (MIT),
+  grouped as sequential, diverging, cyclic and categorical. Each is stored as
+  control points, fitted so the rendered ramp stays within one perceived unit
+  of every color in the published table.
 - **Spaces** — Oklab, CIELAB, CIELUV, IPT, ICtCp, CAM02-UCS, XYZ, sRGB. A
   change of chart: points live in the chart, so switching view never moves a
   palette.

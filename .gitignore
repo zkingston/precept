@@ -3,3 +3,8 @@ node_modules/
 # The two Bujack papers this is built on are publisher copyright (PNAS, Wiley).
 # They stay local; the citations in color-space.ts are the shareable part.
 *.pdf
+
+# Crameri's Scientific Colour Maps, downloaded to fit the presets in index.html.
+# 67 MB of per-format exports for 40 maps, of which this repo keeps only the
+# control points. Get it again from https://www.fabiocrameri.ch/colourmaps/
+ScientificColourMaps*.zip
