@@ -53,13 +53,16 @@
               width:34px; height:34px; padding:0; border-radius:50%; font-size:15px; line-height:1;
               display:grid; place-items:center; }
   /* tools live over the viewport, where the things they make are */
-  #tool { position:absolute; top:190px; right:12px; display:flex; gap:4px; }
+  /* one HUD column down the 3D view's left edge; layout() supplies the left */
+  #hud { position:absolute; top:12px; display:flex; flex-direction:column; gap:5px; align-items:flex-start; }
+  #hudtop { display:flex; align-items:center; gap:9px; }
+  #tool { display:flex; flex-direction:column; gap:4px; }
   #tip { position:absolute; right:14px; top:12px; }
   #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
   #tipbtns { display:flex; gap:4px; margin-top:6px; }
   #tipbtns button { flex:1; font-size:10px; padding:2px 0; }
   #tipbtns button[aria-pressed=true] { background:var(--sel); border-color:var(--link); }
-  #hist { position:absolute; top:190px; right:130px; display:flex; gap:4px; }
+  #hist { display:flex; flex-direction:column; gap:4px; }
   #hist button:disabled { opacity:.3; cursor:default; }
   #ctxmenu { position:absolute; z-index:40; display:flex; flex-direction:column; min-width:88px;
              background:#1c1c20f2; border:1px solid #32323a; border-radius:6px; padding:3px;
@@ -85,7 +88,7 @@
   .phead button { padding:1px 7px; font:10px ui-monospace,monospace; background:#26262bcc;
     color:var(--hudfg); border:1px solid #32323a; border-radius:3px; cursor:pointer; }
   .pcanvas { flex:1; min-height:0; width:100%; display:block; cursor:ns-resize; touch-action:none; }
-  #toolnote { position:absolute; top:230px; right:12px; white-space:nowrap; text-align:right;
+  #toolnote { white-space:nowrap; text-align:left;
     font:11px/1.4 ui-sans-serif,system-ui,sans-serif; color:var(--hud); pointer-events:none; }
   #hex { flex:1; min-width:0; font:12px ui-monospace,monospace; text-transform:lowercase; }
   #selswatch { flex:0 0 auto; width:40px; height:26px; border-radius:4px; border:1px solid var(--line); }
@@ -156,7 +159,7 @@
   code { color:#9fd; }
   .note { color:var(--dim); font-size:11px; }
 
-  #aboutbtn { position:absolute; top:190px; right:210px; font-size:17px; }
+  #aboutbtn { font-size:17px; flex:0 0 auto; }
   #aboutdlg { max-width:min(560px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto; overscroll-behavior:contain; padding:20px 22px;
     background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:9px;
     font:13px/1.55 ui-sans-serif,system-ui,sans-serif; }
@@ -196,8 +199,7 @@
     #tipcanvas { width:100%; height:auto; }
     #lplot { height:auto; flex-direction:column; gap:9px; }
     .pplot { flex:none; height:84px; }          /* flex:1 would beat the height */
-    #tool, #hist, #aboutbtn { top:12px; }
-    #toolnote { top:52px; white-space:normal; max-width:min(340px,60%); }
+    #hud { top:12px; }
     #bar { top:56px; bottom:14px; }
   }
 
@@ -230,9 +232,7 @@
     .pplot { flex:none; height:76px; }
 
     /* nothing above the tools any more, and the bar stops at the cut row */
-    #tool { top:10px; right:10px; }
-    #hist { top:10px; right:128px; }
-    #toolnote { top:52px; left:10px; right:56px; white-space:normal; }   /* clear of the bar */
+    #hud { top:10px; }
   }
   /* A phone on its side is 390px tall: stacking there leaves a canvas too
      short to orbit in. Side by side is the shape that fits, with the panel
@@ -250,11 +250,25 @@
       <canvas id="tipcanvas" width="264" height="128"></canvas>
       <div id="tipbtns"></div>
     </div>
-    <button id="aboutbtn" title="about precept">?</button>
     <div id="ctxmenu" hidden></div>
-    <div id="hist">
-      <button id="undo" title="undo · ctrl+Z">↶</button>
-      <button id="redo" title="redo · ctrl+shift+Z">↷</button>
+    <div id="hud">
+      <div id="hudtop">
+        <button id="aboutbtn" title="about precept">?</button>
+        <div id="toolnote"></div>
+      </div>
+      <div id="tool">
+        <button data-v="edit" title="Points"><svg viewBox="0 0 24 24">
+          <polyline points="4,18 10,8 16,14 20,5"/><circle cx="4" cy="18" r="2.1"/>
+          <circle cx="10" cy="8" r="2.1"/><circle cx="16" cy="14" r="2.1"/><circle cx="20" cy="5" r="2.1"/></svg></button>
+        <button data-v="obstacle" title="Keep-out spheres"><svg viewBox="0 0 24 24">
+          <circle cx="11" cy="13" r="7"/><path d="M11 13 L16 8"/><circle cx="16.6" cy="7.4" r="2.1"/></svg></button>
+        <button data-v="plane" title="Halfplanes"><svg viewBox="0 0 24 24">
+          <path d="M3 15 L12 10 L21 13 L12 18 Z"/><path d="M12 10 L12 3"/><circle cx="12" cy="3" r="1.9"/></svg></button>
+      </div>
+      <div id="hist">
+        <button id="undo" title="undo · ctrl+Z">↶</button>
+        <button id="redo" title="redo · ctrl+shift+Z">↷</button>
+      </div>
     </div>
     <div class="quad" id="q1">
       <div class="sl"><i id="nL">L</i><input type="range" id="sL" min="0" max="100" step="0.5" value="55"><b id="vL">55</b></div></div>
@@ -263,16 +277,6 @@
     <div class="quad" id="q3">
       <div class="sl"><i id="nB">b</i><input type="range" id="sB" min="-36" max="36" step="0.5" value="0"><b id="vB">0</b></div></div>
     <div class="quad" id="q0"></div>
-    <div id="tool">
-      <button data-v="edit" title="Points"><svg viewBox="0 0 24 24">
-        <polyline points="4,18 10,8 16,14 20,5"/><circle cx="4" cy="18" r="2.1"/>
-        <circle cx="10" cy="8" r="2.1"/><circle cx="16" cy="14" r="2.1"/><circle cx="20" cy="5" r="2.1"/></svg></button>
-      <button data-v="obstacle" title="Keep-out spheres"><svg viewBox="0 0 24 24">
-        <circle cx="11" cy="13" r="7"/><path d="M11 13 L16 8"/><circle cx="16.6" cy="7.4" r="2.1"/></svg></button>
-      <button data-v="plane" title="Halfplanes"><svg viewBox="0 0 24 24">
-        <path d="M3 15 L12 10 L21 13 L12 18 Z"/><path d="M12 10 L12 3"/><circle cx="12" cy="3" r="1.9"/></svg></button>
-    </div>
-    <div id="toolnote"></div>
     <div id="lplot">
       <div class="pplot" data-plot="L">
         <div class="phead">
@@ -1298,6 +1302,7 @@ function layout() {
     }
     q.cam.updateProjectionMatrix();
   });
+  $('hud').style.left = `${RECTS[3].x + 12}px`;
   // only while it is an overlay; docked in the panel it is laid out by flow
   if (!NARROW.matches) {
     if (!DOCK.matches) lplotEl.style.left = RECTS[3].x + 14 + 'px';
@@ -1444,7 +1449,7 @@ function sidebar() {
     const o = S.obs[s.i];
     $('selinfo').innerHTML = `sphere ${s.i} · r ${o.r.toFixed(1)} perceived, ${unperceive(o.r).toFixed(1)} in chart units`;
   }
-  $('toolnote').textContent = { edit: 'double-click to add · drag to move · right-click to delete',
+  $('toolnote').textContent = { edit: 'double-click to add · drag to move · right-click to pin or delete',
     obstacle: 'double-click a slice to place · drag the handle to resize',
     plane: 'double-click a slice to cut · drag the center or the tip' }[S.tool];
 
