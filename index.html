@@ -326,6 +326,19 @@
     /* nothing above the tools any more, and the bar stops at the cut row */
     #hud { top:10px; }
   }
+  /* The panel is below the canvas here and as wide as the window, so at 640 the
+     two profiles and the preview stacked to five hundred pixels of scrolling
+     for three things that each want about two hundred. Side by side instead.
+     Bounded below because three columns of a phone's width are 125px each, and
+     by aspect because a window wider than it is tall puts the panel back into a
+     narrow side column, where stacking is right again. */
+  @media (min-width: 560px) and (max-width: 860px) and (max-aspect-ratio: 99/100) {
+    #dock { flex-direction:row; align-items:flex-start; gap:12px; }
+    #lplot { flex:2 1 0; flex-direction:row; gap:12px; }
+    #lplot .pplot { flex:1 1 0; min-width:0; }
+    #tip { flex:1 1 0; min-width:0; }
+  }
+
   /* A phone on its side is 390px tall: stacking there leaves a canvas too
      short to orbit in. Side by side is the shape that fits, with the panel
      narrow — the dock inside it is already a column either way. */
