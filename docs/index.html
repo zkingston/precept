@@ -4202,7 +4202,7 @@ function paintLoadList() {
   const byKind = {};
   for (const [name, p] of Object.entries(PRESETS)) (byKind[p.kind] ??= []).push([name, p]);
   $('loadlist').innerHTML = KIND_ORDER.filter((k) => byKind[k]).map((k) =>
-    `<h4>${k} · ${byKind[k].length}</h4><div class="pgrid">` + byKind[k].map(([name, p]) =>
+    `<h4>${k}</h4><div class="pgrid">` + byKind[k].map(([name, p]) =>
       `<button class="pcard" data-preset="${esc(name)}" title="${esc(name)}, ${p.hex.length} control points">`
       + `<span class="pramp" style="background:${rampCss(p)}"></span>`
       + `<span class="pname">${esc(name)}</span></button>`).join('') + '</div>').join('');
