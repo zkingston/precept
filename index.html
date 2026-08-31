@@ -792,6 +792,7 @@ const S = {
   loop: [],                                      // loop[c]: run c closes back on itself
   marks: [],                                     // ctrl-clicked nodes, for linking
   bg: '#f0ead6', lock: true, planes3d: false,
+  seed: 20260831,                                // the restart jitter, so a run repeats
   panels: true,                                  // the three cut views, or the 3D one alone
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection color format
   restart: false,                                // kick the solver out of stalls
@@ -3321,11 +3322,23 @@ function better(a, b) {
   return sa < sb;
 }
 
+/**
+ * The solver's only source of randomness, and the reason it has a seed.
+ *
+ * A restart jolts the free points and tries again, so a run with restarts on
+ * was not reproducible: the same scene optimized twice gave two palettes, and a
+ * shared link did not reproduce the one that made it. For a tool whose output
+ * ends up in a figure that is a correctness problem rather than a nicety. The
+ * stream is reset at the start of every run, so pressing run twice from the
+ * same state gives the same answer, and the seed rides along in the scene.
+ */
+let jitter = rnd(S.seed);
+
 /** chart units, so the jolt means the same thing whichever space is on screen */
 function jolt() {
   const n = S.pts.length;
   S.pts = S.pts.map((p, i) => (pinnedAt(i) ? p
-    : p.map((v) => v + RESTART.sd * (Math.random() * 2 - 1))));
+    : p.map((v) => v + RESTART.sd * (jitter() * 2 - 1))));
 }
 
 /**
@@ -3398,6 +3411,7 @@ function solve() {
 function startSolver() {
   if (running) return;
   running = true; tick = 0; frames = 0; adamReset();
+  jitter = rnd(S.seed);                          // the same run twice is the same run
   Object.assign(RESTART, { n: 0, best: null, bestScore: 0, scale: {}, flat: 0, prev: Infinity });
   $('run').textContent = 'stop'; $('run').style.background = '#6c3030';
   requestAnimationFrame(solve);
