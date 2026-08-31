@@ -197,8 +197,8 @@
   #metrics input.w::-webkit-outer-spin-button, #metrics input.w::-webkit-inner-spin-button {
     -webkit-appearance:none; margin:0; }
   #metrics input.w:disabled { opacity:.3; }
-  #metrics td.btns { width:52px; text-align:right; white-space:nowrap; padding-left:6px; }
-  #metrics td.btns button { padding:0 5px; font:11px/1.5 'Fira Mono',ui-monospace,monospace; margin-left:3px; }
+  #metrics thead td { padding:0 0 2px; color:var(--dim); font-size:10px; letter-spacing:.08em; }
+  #metrics thead td.w { text-align:center; padding-left:0; }
   .note { color:var(--dim); font-size:11px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
@@ -2810,7 +2810,10 @@ function paintMetrics(rows) {
   const shape = rows.map(([k, , , obj]) => `${k}|${obj ?? ''}`).join(';');
   if (shape !== metricsShape) {
     metricsShape = shape;
-    tbl.innerHTML = rows.map(([k, v, warn, obj, help]) => {
+    // a header only for the weight, which is the one column whose number does
+    // not say what it is: the others are a name and a measurement
+    tbl.innerHTML = '<thead><tr><td></td><td></td><td class="w">&times;</td></tr></thead><tbody>'
+      + rows.map(([k, v, warn, obj, help]) => {
       // data-help, not title: the OS tooltip makes you wait a second to find out
       // whether hovering does anything, and the sidebar scrolls, which would clip
       // a positioned one. A line under the table is instant and never clipped.
@@ -2819,14 +2822,12 @@ function paintMetrics(rows) {
       `<td class="${warn ? 'warn' : ''}">${v}</td>` +
       (obj ? `<td class="w"><input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
            + ` value="${S.w[obj]}"${S.on[obj] ? '' : ' disabled'} title="relative pull in the combined step"></td>`
-           + `<td class="btns"><button data-obj="${obj}" data-dir="1" title="descend">−</button>`
-           + `<button data-obj="${obj}" data-dir="-1" title="ascend">+</button></td>`
-           : '<td class="w"></td><td class="btns"></td>') + '</tr>';
-    }).join('');
+           : '<td class="w"></td>') + '</tr>';
+      }).join('') + '</tbody>';
     return;
   }
   rows.forEach(([, v, warn, obj], i) => {
-    const tr = tbl.rows[i], cell = tr.cells[1];
+    const tr = tbl.tBodies[0].rows[i], cell = tr.cells[1];
     if (cell.textContent !== String(v)) cell.textContent = v;
     const cls = warn ? 'warn' : '';
     if (cell.className !== cls) cell.className = cls;
@@ -3107,7 +3108,6 @@ S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
 /** Relative pull of each term in the combined step. */
 S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
 
-const STEP_MAX = 4;        // chart units moved by the largest component at rate 1
 
 /**
  * Central differences over the 3n control coordinates, for several terms at
@@ -3152,18 +3152,6 @@ function gradientOf(terms) {
 }
 
 /** dir +1 descends, -1 ascends. */
-function stepBy(terms, dir) {
-  if (!terms.length || !S.pts.length) return;
-  const { base, total } = gradientOf(terms);
-  const mx = Math.max(...total.flat().map(Math.abs));
-  if (!Number.isFinite(mx) || mx === 0) return;              // nothing to do
-  const scale = (dir * S.rate * STEP_MAX) / mx;
-  S.pts = base.map((p, i) => p.map((v, k) => v - scale * total[i][k]));
-  if (S.lock && S.pts[S.sel?.i]) setSlices(S.pts[S.sel.i]);
-  sync();
-}
-
-const stepAlong = (obj, dir) => stepBy([obj], dir);
 
 /**
  * Adam over the control points. `gradientOf` already returns the weighted sum
@@ -4249,8 +4237,7 @@ function setSelColor(p) {
 $('hex').oninput = (e) => setSelColor(COLORFMT[S.cfmt].from(e.target.value));
 $('selcolor').oninput = (e) => setSelColor(fromHex(e.target.value));
 $('metrics').onclick = (e) => {
-  const { obj, on } = e.target.dataset ?? {};
-  if (obj) stepAlong(OBJ.find((o) => o.key === obj), +e.target.dataset.dir);
+  const { on } = e.target.dataset ?? {};
   if (on) {
     S.on[on] = e.target.checked;
     // The two repulsions overlap rather than complement: 'all' already includes
