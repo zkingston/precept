@@ -390,9 +390,9 @@
       <div class="row"><label class="f">severity</label>
         <input type="range" id="sev" min="0" max="1" step="0.05" value="1"><span class="v" id="sevv">1.0</span></div>
       <div class="row"><label class="f">solid</label>
-        <input type="range" id="shell" min="0" max="1" step="0.02" value="0.8"><span class="v" id="shellv">.8</span></div>
+        <input type="range" id="shell" min="0" max="1" step="0.02" value="0.8"><span class="v" id="shellv">0.8</span></div>
       <div class="row"><label class="f">slices</label>
-        <input type="range" id="sliceop" min="0.1" max="1" step="0.05" value="0.8"><span class="v" id="sliceopv">.8</span></div>
+        <input type="range" id="sliceop" min="0.1" max="1" step="0.05" value="0.8"><span class="v" id="sliceopv">0.8</span></div>
       <div class="row"><label class="f">backdrop</label><input type="color" id="bg" value="#f0ead6"></div>
       <div class="row"><label class="chk"><input type="checkbox" id="planes3d">slice planes in 3D</label></div>
       <div class="row"><label class="chk"><input type="checkbox" id="lock">lock slices to node</label></div>
@@ -695,17 +695,14 @@ T.ColorManagement.enabled = false;
 const $ = (id) => document.getElementById(id);
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 /**
- * Opacity to one decimal, without the leading zero: .8 rather than 0.80.
- *
- * Round first, then decide. Formatting straight through .toFixed(1).slice(1)
- * reads 1 as ".0", because the slice assumes the digit it drops is a zero, and
- * at either end it is not. The two sliders also step differently, 0.02 and
- * 0.05, so the value that rounds up to 1 is not the same on both.
+ * Severity and the two opacities all run 0 to 1 and all read to one decimal,
+ * so they are three characters wide whatever they hold: 0.0, 0.8, 1.0. The
+ * panel's other sliders strip the leading zero, which cannot hold a width —
+ * .8 is two characters and 1.0 is three — and reading 1 through the same
+ * .slice(1) gives ".0", since the digit it drops is only a zero in the middle
+ * of the range.
  */
-const opacity1 = (v) => {
-  const r = Math.round(v * 10) / 10;
-  return r >= 1 ? '1' : r <= 0 ? '0' : r.toFixed(1).slice(1);
-};
+const unit1 = (v) => v.toFixed(1);
 const esc = (x) => x.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 const S = {
@@ -3523,14 +3520,14 @@ $('sA').oninput = (e) => setSlice(1, e.target.value);
 $('sB').oninput = (e) => setSlice(2, e.target.value);
 
 $('shell').oninput = (e) => {
-  S.shell = +e.target.value; $('shellv').textContent = opacity1(S.shell);
+  S.shell = +e.target.value; $('shellv').textContent = unit1(S.shell);
   shell.material.uniforms.uOpacity.value = S.shell; shell.visible = S.shell > 0;
   capGroup.visible = S.shell > 0;
   paintCaps();
 };
 $('bg').oninput = (e) => { S.bg = e.target.value; applyBg(); };
 $('sliceop').oninput = (e) => {
-  S.sliceOp = +e.target.value; $('sliceopv').textContent = opacity1(S.sliceOp);
+  S.sliceOp = +e.target.value; $('sliceopv').textContent = unit1(S.sliceOp);
   // the alpha is uOpacity in the fragment shader, and only paintSlice writes it.
   // Setting material.opacity and material.alphaTest did nothing: a raw
   // ShaderMaterial reads neither unless its shader asks for them, and this one
@@ -3747,7 +3744,7 @@ const boundsChanged = () => {
 $('lock').onchange = (e) => { S.lock = e.target.checked; };
 $('planes3d').onchange = (e) => { S.planes3d = e.target.checked; setPlanes3d(); };
 const setPlanes3d = () => (S.planes3d ? cam3.layers.enable(3) : cam3.layers.disable(3));
-$('sev').oninput = (e) => { S.sev = +e.target.value; $('sevv').textContent = S.sev.toFixed(1); setView(); };
+$('sev').oninput = (e) => { S.sev = +e.target.value; $('sevv').textContent = unit1(S.sev); setView(); };
 $('cvd').onchange = (e) => { S.cvd = e.target.value; setView(); };
 $('swatches').onclick = (e) => {
   const i = e.target.dataset?.i;
@@ -3779,14 +3776,14 @@ function mirror() {
   $('cvd').value = S.cvd; $('sev').value = S.sev;
   $('shell').value = S.shell; $('bg').value = S.bg;
   $('lock').checked = S.lock; $('planes3d').checked = S.planes3d; setPlanes3d();
-  $('sliceop').value = S.sliceOp; $('sliceopv').textContent = opacity1(S.sliceOp);
+  $('sliceop').value = S.sliceOp; $('sliceopv').textContent = unit1(S.sliceOp);
   $('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
   $('restart').checked = S.restart;
   $('cbg').value = S.cbg; $('cfloor').value = S.cmin;
   $('exportfmt').value = S.fmt; $('colorfmt').value = S.cfmt;
   $('hex').placeholder = COLORFMT[S.cfmt].hint;
-  $('sevv').textContent = S.sev.toFixed(1);
-  $('shellv').textContent = opacity1(S.shell);
+  $('sevv').textContent = unit1(S.sev);
+  $('shellv').textContent = unit1(S.shell);
   $('spacesel').value = params.space; $('gamutsel').value = params.gamut;
   ['sL', 'sA', 'sB'].forEach((id, k) => ($(id).value = S.slice[k]));
   for (const id of ['mode', 'tool'])
