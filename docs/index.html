@@ -47,7 +47,11 @@
   /* inline-flex, not flex: as a block it claimed the whole table cell and
      pushed the ? marker onto a line of its own */
   label.chk { display:inline-flex; align-items:center; gap:7px; cursor:pointer; vertical-align:middle; }
-  #huewheel { cursor:crosshair; touch-action:none; }
+  #huewheel { cursor:crosshair; touch-action:none; display:block; }
+  .wheelwrap { position:relative; display:inline-block; }
+  #huereset { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+              width:34px; height:34px; padding:0; border-radius:50%; font-size:15px; line-height:1;
+              display:grid; place-items:center; }
   /* tools live over the viewport, where the things they make are */
   #tool { position:absolute; top:190px; right:12px; display:flex; gap:4px; }
   #tip { position:absolute; right:14px; top:12px; padding:7px;
@@ -342,7 +346,8 @@
           <input type="range" id="cmax" min="0" max="40" step="0.5" value="40"></span>
         <span class="v" style="width:56px" id="cboundv">0–40</span></div>
       <div class="row" style="align-items:flex-start"><label class="f" style="padding-top:44px">hue</label>
-        <canvas id="huewheel" width="112" height="112" title="drag an edge of the arc · double-click for any hue"></canvas>
+        <span class="wheelwrap"><canvas id="huewheel" width="112" height="112" title="drag an edge of the arc"></canvas>
+          <button id="huereset" title="allow every hue">↺</button></span>
         <span class="v" style="width:56px;padding-top:44px" id="hboundv">any</span></div>
     </section>
     <div id="dock"></div>
@@ -1757,22 +1762,42 @@ $('iccfile').onchange = async (e) => {
   } catch (err) { alert(`could not read that profile: ${err.message}`); }
 };
 
+$('huereset').onclick = () => { S.hue = [0, 360]; boundsChanged(); };
+
 $('sharelink').onclick = async (e) => {
   const url = await packLink();
-  await navigator.clipboard.writeText(url);
-  e.target.textContent = `copied · ${url.length} chars`;
-  setTimeout(() => (e.target.textContent = 'copy link to this palette'), 1400);
+  await copyText(e.target, url, 'copy link to this palette');
 };
 
 $('savepy').onclick = () => {
   const f = FORMATS[S.fmt];
   download(`${f.ext === 'py' ? ident() : stem()}.${f.ext}`, f.gen() + '\n', f.mime);
 };
-$('copypy').onclick = async (e) => {
-  await navigator.clipboard.writeText(FORMATS[S.fmt].gen());
-  e.target.textContent = 'copied';
-  setTimeout(() => (e.target.textContent = 'copy'), 900);
-};
+/**
+ * Clipboard writes reject for reasons the page cannot see coming — an insecure
+ * origin, a window that lost focus, a permission the browser declines — and an
+ * async handler swallows that, so the button did nothing and said nothing.
+ * Try the API, fall back to the old selection trick, and if both fail say so
+ * on the button rather than leaving it looking like it worked.
+ */
+async function copyText(btn, text, label) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch { /* fall through */ }
+  if (!ok) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+  }
+  btn.textContent = ok ? 'copied' : 'copy failed';
+  setTimeout(() => (btn.textContent = label), ok ? 900 : 1800);
+  return ok;
+}
+
+$('copypy').onclick = (e) => copyText(e.target, FORMATS[S.fmt].gen(), 'copy');
 $('exportfmt').onchange = (e) => { S.fmt = e.target.value; };
 
 // ─── the selection, in whichever notation you think in ───────────────────────
@@ -3120,7 +3145,11 @@ $('shell').oninput = (e) => {
 $('bg').oninput = (e) => { S.bg = e.target.value; applyBg(); };
 $('sliceop').oninput = (e) => {
   S.sliceOp = +e.target.value; $('sliceopv').textContent = S.sliceOp.toFixed(2).slice(1);
-  slices.forEach((s) => Object.assign(s.mesh.material, { opacity: S.sliceOp, alphaTest: S.sliceOp / 2 }));
+  // the alpha is uOpacity in the fragment shader, and only paintSlice writes it.
+  // Setting material.opacity and material.alphaTest did nothing: a raw
+  // ShaderMaterial reads neither unless its shader asks for them, and this one
+  // does not — it has no alphatest chunk and no opacity uniform of three's.
+  slices.forEach(paintSlice);
 };
 $('gamutsel').onchange = (e) => {
   params.gamut = e.target.value;      // changes what is REACHABLE; the screen stays sRGB
@@ -3308,7 +3337,7 @@ function paintBounds() {
   [['ldual', 'lmin', 'lmax', 'lboundv', 0], ['cdual', 'cmin', 'cmax', 'cboundv', 1]]
     .forEach(([wrap, lo, hi, out, k]) => {
       $(lo).value = S.lo[k]; $(hi).value = S.hi[k];
-      $(out).textContent = `${S.lo[k]}–${S.hi[k]}`;
+      $(out).textContent = `${Math.round(S.lo[k])}–${Math.round(S.hi[k])}`;
       $(wrap).querySelector('.fill').style.background =
         fillCss([[S.lo[k] / BOUND_MAX[k], S.hi[k] / BOUND_MAX[k]]]);
     });
