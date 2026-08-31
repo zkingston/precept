@@ -565,6 +565,11 @@
      the hue arc. With \([x]_+=\max(x,0)\),</p>
   \[ c(p)=\sqrt{\phi_G(p)}+[L_--L]_++[L-L_+]_++[C_--C]_++[C-C_+]_+
         +\frac{\pi}{180}\,C\,\Delta h(p)+\sqrt{\phi_B(p)}+\sqrt{\phi_E(p)} \]
+  <p>A control point is put back into \(\mathcal{F}\) by projection,
+     \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\), onto \(G,\Lambda,X,H,E,B\) in turn, repeating until
+     \(c(p_i)\) falls below \(10^{-4}\) or twelve rounds pass. This is not the nearest point of
+     \(\mathcal{F}\): the set is not convex, since \(G\) is nonconvex in places and the complement
+     of a ball never is. It is a feasible point near the input, which is all a projected step uses.</p>
 
   <h4>Program</h4>
   \[ \min_{P}\ \sum_k w_k F_k(P)\qquad\text{s.t.}\qquad p_i\in\mathcal{F}\ \ \forall i,
@@ -635,22 +640,16 @@
          \((L_+-L_-)/(n-1)\) apart, so a larger floor could never be met.</p></li>
   </ul>
 
-  <h4>Constraint handling</h4>
-  <p>Control points are projected, \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\), by projecting onto
-     \(G,\Lambda,X,H,E,B\) in turn and repeating. The loop stops once the violation is below
-     \(10^{-4}\), or after twelve rounds. It does not return the nearest point of \(\mathcal{F}\):
-     \(\mathcal{F}\) is not convex, since \(G\) is nonconvex in places and the complement of a ball
-     never is. It returns a feasible point near the input, which is all a projected step uses.</p>
-  <p>With \(c_k=c(\gamma_k)\) and multipliers \(\lambda\in\mathbb{R}_{\ge0}^{K}\),</p>
+  <h4>Descent</h4>
+  <p>The curve enters the objective as one more term. With \(c_k=c(\gamma_k)\) and multipliers
+     \(\lambda\in\mathbb{R}_{\ge0}^{K}\),</p>
   \[ F_{\text{feas}}=\sum_k\left(\lambda_k c_k+\tfrac12 c_k^2\right),\qquad
      \lambda_k\leftarrow\min(\lambda_{\max},\ \lambda_k+\rho\,c_k) \]
   <p>The multipliers update every \(T=25\) inner iterations. \(\rho\) doubles whenever
      \(\max_k c_k\) fails to fall below \(\tfrac34\) of its previous value. Both are capped. The
-     multipliers absorb the violation that persists at a given \(\rho\), so a finite \(\rho\) suffices for feasibility. A plain penalty has only
-     \(\rho\) to escalate. A \(\rho\) large enough to enforce the constraint also flattens every
-     other term.</p>
-
-  <h4>Descent</h4>
+     multipliers absorb the violation that persists at a given \(\rho\), so a finite \(\rho\)
+     suffices for feasibility. A plain penalty has only \(\rho\) to escalate. A \(\rho\) large
+     enough to enforce the constraint also flattens every other term.</p>
   <p>Gradients are central differences over the \(3n\) coordinates, skipping the pinned ones. Each
      term is normalized to unit max before it is weighted.</p>
   \[ \widehat G_k=\frac{\nabla F_k}{\lVert\nabla F_k\rVert_\infty},\qquad
