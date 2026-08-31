@@ -216,6 +216,10 @@
   #mathdlg dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:3px 12px; align-items:baseline; }
   #mathdlg dt { white-space:nowrap; }
   #mathdlg dd { margin:0; color:var(--dim); }
+  #mathdlg .terms { margin:0; padding:0; list-style:none; }
+  #mathdlg .terms > li { margin:0 0 14px; }
+  #mathdlg .terms > li > p { margin:0; }
+  #mathdlg .terms .d { color:var(--dim); }
   /* two columns need room for the widest set definition; below that the label
      column squeezes the gloss into a three-word ribbon, so stack them */
   @media (max-width: 560px) {
@@ -515,27 +519,27 @@
   <button id="mathclose" title="close">&times;</button>
   <h3>Formulation</h3>
 
-  <h4>1 · Space</h4>
+  <h4>Space</h4>
   <p>Colors are the points of \(M=\mathbb{R}^3\), <a href="https://en.wikipedia.org/wiki/Oklab_color_space" target="_blank" rel="noopener">Oklab</a>
      coordinates scaled by 100. A color is \(p=(L,a,b)\) with lightness \(L\in[0,100]\), chroma
      \(C(p)=\sqrt{a^2+b^2}\), and hue \(h(p)=\operatorname{atan2}(b,a)\).</p>
   <p>A symmetric positive definite \(g(p)\in\mathbb{R}^{3\times3}\) sets the cost of a short step at
-     \(p\). Segment lengths use the midpoint rule, and a path is the sum of its segments:</p>
+     \(p\). Segment lengths use the midpoint rule. Path length is the sum over segments:</p>
   \[ \ell_g(p,q)=\sqrt{(q-p)^{\top}g\!\left(\tfrac{p+q}{2}\right)(q-p)},\qquad
      \ell_g(\gamma)=\sum_{k}\ell_g(\gamma_k,\gamma_{k+1}) \]
   <p>\(g=J^{\top}J\), where \(J\) is the Jacobian at \(p\) of the map from \(M\) to the working
      space selected in the panel, scaled so the gray axis measures 100 in every space. Choosing Oklab
      gives \(g=I\) and the ordinary Euclidean length, written \(\ell_I\).</p>
-  <p>Lengths do not add up to differences. Perceived difference is a concave function of length:</p>
+  <p>Lengths add; perceived differences do not. Perceived difference is a concave function of length:</p>
   \[ d(p,q)=f\bigl(\ell_g(p,q)\bigr),\qquad f(s)=s_0\ln\left(1+\frac{s}{s_0}\right),\qquad
      s_0=\frac{100}{5.34}\approx 18.7,\qquad f'(0)=1 \]
   <p>Concavity of \(f\) makes \(d\) <a href="https://en.wikipedia.org/wiki/Subadditivity" target="_blank" rel="noopener">subadditive</a>:
      \(d(p,r)\le d(p,q)+d(q,r)\), strictly in general.
-     Integrate with \(\ell_g\); compare with \(d\). Write \(d_I\) for \(d\) taken with \(g=I\).</p>
+     Accumulate along a path with \(\ell_g\); compare two colors with \(d\). Write \(d_I\) for \(d\) taken with \(g=I\).</p>
 
-  <h4>2 · Variables</h4>
-  <p>The variables are the control points \(P=(p_1,\dots,p_n)\in M^n\). A pinned set
-     \(\mathcal{P}\subseteq\{1,\dots,n\}\) is held fixed. Write \(t_i=(i-1)/(n-1)\) for the position
+  <h4>Variables</h4>
+  <p>The variables are the control points \(P=(p_1,\dots,p_n)\in M^n\). The points indexed by
+     \(\mathcal{P}\subseteq\{1,\dots,n\}\) are held fixed. Write \(t_i=(i-1)/(n-1)\) for the position
      of swatch \(i\) along the palette.</p>
   <p>In continuous mode \(\gamma_P:[0,1]\to M\) is the <a href="https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline" target="_blank" rel="noopener">centripetal
      Catmull–Rom spline</a> through \(P\),
@@ -545,7 +549,7 @@
   <p>The probe set \(Q\) is where constraints and contrast are evaluated: the curve samples in
      continuous mode, the palette in discrete mode.</p>
 
-  <h4>3 · Feasible set</h4>
+  <h4>Feasible set</h4>
   \[ \mathcal{F}=G\cap\Lambda\cap X\cap H\cap\textstyle\bigcap_j B_j^{\,c}\cap\bigcap_m E_m \]
   <dl>
     <dt>\(G=\{p:\operatorname{rgb}_\Gamma(p)\in[0,1]^3\}\)</dt><dd><a href="https://en.wikipedia.org/wiki/Gamut" target="_blank" rel="noopener">gamut</a> of primaries \(\Gamma\)</dd>
@@ -557,12 +561,12 @@
   </dl>
   <p>The violation \(c(p)\) measures how far \(p\) lies outside \(\mathcal{F}\). It is zero on
      \(\mathcal{F}\) and differentiable off it. Each \(\phi\) is a squared distance outside its set, so
-     each root is a length in units of \(M\), and \(\Delta h\) is the angle to the nearest edge of
+     each root is a length in units of \(M\). \(\Delta h\) is the angle to the nearest edge of
      the hue arc. With \([x]_+=\max(x,0)\),</p>
   \[ c(p)=\sqrt{\phi_G(p)}+[L_--L]_++[L-L_+]_++[C_--C]_++[C-C_+]_+
         +\frac{\pi}{180}\,C\,\Delta h(p)+\sqrt{\phi_B(p)}+\sqrt{\phi_E(p)} \]
 
-  <h4>4 · Program</h4>
+  <h4>Program</h4>
   \[ \min_{P}\ \sum_k w_k F_k(P)\qquad\text{s.t.}\qquad p_i\in\mathcal{F}\ \ \forall i,
      \qquad \gamma_P(t)\in\mathcal{F}\ \ \forall t\in[0,1] \]
   <p>We enforce the constraint on the control points exactly, by projection. The constraint along the
@@ -571,79 +575,102 @@
      <a href="https://en.wikipedia.org/wiki/Augmented_Lagrangian_method" target="_blank" rel="noopener">augmented Lagrangian</a>
      instead.</p>
 
-  <h4>5 · Objectives</h4>
-  <p>Each term is written for the palette \(\Pi(P)\). The observer set \(V\) is the identity alone, or
-     the identity together with the three <a href="https://en.wikipedia.org/wiki/Color_blindness" target="_blank" rel="noopener">color
+  <h4>Objectives</h4>
+  <p>Each term is written for the palette \(\Pi(P)\). Each is a row in the panel behind this
+     dialog, under the name given here. The observer set \(V\) is the identity alone, or the identity
+     together with the three <a href="https://en.wikipedia.org/wiki/Color_blindness" target="_blank" rel="noopener">color
      vision deficiencies</a>; every \(v\in V\) acts on \(M\).</p>
-  \[ F_{\text{rep}}=\sum_{v\in V}\ \sum_{i&lt;j}\ \frac{1}{\max\left(\tfrac12,\ d(v\pi_i,\,v\pi_j)\right)} \]
-  <p>The floor of \(\tfrac12\) keeps coincident colors finite. Since \(d\) saturates, far pairs
-     contribute almost nothing and the step separates the confusable ones.</p>
-  \[ F_{\text{arc}}=\ell_\gamma \qquad
-     F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \]
-  \[ F_{\text{chr}}=\frac1n\sum_i\left(C(\pi_i)-\frac{C_-+C_+}{2}\right)^2 \qquad
-     F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
-     \delta\bigl(h_i,\ \widehat h(t_i)\bigr)\right)^2 \]
-  <p>\(\widehat L\) and \(\widehat h\) are the profiles drawn in the plots, and \(\delta\) is the signed shortest
-     angle, so the wrap at \(0^\circ\) costs nothing. Chroma weights the angle because a \(40^\circ\)
-     error matters at chroma 20 and not at chroma 2. Swatches below chroma 1 have no usable hue and are
-     skipped.</p>
-  \[ F_{\text{sp}}=\sum_{i=1}^{m}\frac{\bar\ell}{\ell_i}-m,\qquad
-     \ell_i=\max\left(\tfrac{1}{20},\ \ell_g(p_i,p_{i+1})\right),\qquad
-     \bar\ell=\frac1m\sum_i\ell_i,\qquad m=n-1 \]
-  <p>\(F_{\text{sp}}\) is the ratio of the arithmetic mean of the \(\ell_i\) to their harmonic mean,
-     less one. It is zero exactly when the \(\ell_i\) are equal, and grows without bound as any one
-     closes. It is also scale invariant, so shrinking every segment by the same factor leaves it at
-     zero; the scale comes from the pinned control points, or from leaving \(F_{\text{arc}}\) off.</p>
-  \[ F_{\text{pair}}=\binom{n}{2}^{-1}\sum_{i&lt;j}\bigl(d_I(\pi_i,\pi_j)-\tau_{ij}\bigr)^2,\qquad
-     \tau_{ij}=f\left(\frac{j-i}{n-1}\,\ell_I\right) \]
-  <p>\(\tau_{ij}\) is the difference a uniform traversal of the curve produces between swatches
-     \(i\) and \(j\): \(f\) applied to the arc covered. In an additive space the target would be
-     proportional to \(j-i\) instead. Both distances are taken with \(g=I\), where \(f\) is
-     calibrated.</p>
-  \[ F_{\text{con}}=\sum_{q\in Q}\bigl[\kappa_{\min}-\kappa(q,\beta)\bigr]_+^2,\qquad
-     F_{\text{lsep}}=\sum_{i&lt;j}\bigl[\Delta_L-|L_i-L_j|\bigr]_+^2,\qquad
-     \Delta_L=\frac{L_+-L_-}{n-1} \]
-  <p>\(\kappa\) is the <a href="https://en.wikipedia.org/wiki/Web_Content_Accessibility_Guidelines" target="_blank" rel="noopener">WCAG 2</a>
-     contrast ratio against a background \(\beta\). Both terms are floors,
-     written as hinges, so each stops once its floor is met. \(\Delta_L\) is derived rather than
-     typed: \(n\) swatches spread over the lightness band are at best \((L_+-L_-)/(n-1)\) apart, so
-     a larger floor could never be met.</p>
+  <ul class="terms">
+    <li><b>repulsion</b> <span class="d">separates every pair, hardest where they are confusable</span>
+      \[ F_{\text{rep}}=\sum_{v\in V}\ \sum_{i&lt;j}\ \frac{1}{\max\left(\tfrac12,\ d(v\pi_i,\,v\pi_j)\right)} \]
+      <p>The floor of \(\tfrac12\) keeps the sum finite when two colors coincide. Since \(d\) saturates, far pairs
+         contribute almost nothing and the near pairs drive the step. The panel lists it
+         twice: once for the observer on screen, once for all four observers together.</p></li>
 
-  <h4>6 · Constraint handling</h4>
+    <li><b>arc length</b> <span class="d">the curve's total length</span>
+      \[ F_{\text{arc}}=\ell_\gamma \]</li>
+
+    <li><b>lightness profile</b> <span class="d">distance from the curve drawn in the plot</span>
+      \[ F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \]</li>
+
+    <li><b>chroma target</b> <span class="d">aims at the middle of the chroma band</span>
+      \[ F_{\text{chr}}=\frac1n\sum_i\left(C(\pi_i)-\frac{C_-+C_+}{2}\right)^2 \]</li>
+
+    <li><b>hue profile</b> <span class="d">distance from the hue curve drawn in the plot</span>
+      \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
+         \delta\bigl(h_i,\ \widehat h(t_i)\bigr)\right)^2 \]
+      <p>\(\widehat L\) and \(\widehat h\) are the profiles drawn in the plots. \(\delta\) is
+         the signed shortest angle, so the wrap at \(0^\circ\) costs nothing. Chroma weights the
+         angle because a \(40^\circ\) error matters at chroma 20 and not at chroma 2. Swatches below
+         chroma 1 have no usable hue and are skipped.</p></li>
+
+    <li><b>control point spacing</b> <span class="d">keeps consecutive control points evenly spaced</span>
+      \[ F_{\text{sp}}=\sum_{i=1}^{m}\frac{\bar\ell}{\ell_i}-m,\qquad
+         \ell_i=\max\left(\tfrac{1}{20},\ \ell_g(p_i,p_{i+1})\right),\qquad
+         \bar\ell=\frac1m\sum_i\ell_i,\qquad m=n-1 \]
+      <p>The spacing term is the ratio of the arithmetic mean of the \(\ell_i\) to their harmonic mean, less one.
+         It is zero exactly when the \(\ell_i\) are equal, and grows without bound as any one of them shrinks toward zero.
+         It is also scale invariant, so shrinking every segment by the same factor leaves it at zero.
+         The scale comes from the pinned control points, or from leaving <b>arc length</b> off.</p></li>
+
+    <li><b>pairwise uniformity</b> <span class="d">equal perceived steps, corrected for saturation</span>
+      \[ F_{\text{pair}}=\binom{n}{2}^{-1}\sum_{i&lt;j}\bigl(d_I(\pi_i,\pi_j)-\tau_{ij}\bigr)^2,\qquad
+         \tau_{ij}=f\left(\frac{j-i}{n-1}\,\ell_I\right) \]
+      <p>\(\tau_{ij}\) is the difference a uniform traversal of the curve produces between swatches
+         \(i\) and \(j\): \(f\) applied to the arc covered. In an additive space the target would be
+         proportional to \(j-i\) instead. Both distances are taken with \(g=I\), where \(f\) is
+         calibrated.</p></li>
+
+    <li><b>contrast floor</b> <span class="d">nothing unreadable against a chosen background</span>
+      \[ F_{\text{con}}=\sum_{q\in Q}\bigl[\kappa_{\min}-\kappa(q,\beta)\bigr]_+^2 \]
+      <p>\(\kappa\) is the <a href="https://en.wikipedia.org/wiki/Web_Content_Accessibility_Guidelines" target="_blank" rel="noopener">WCAG 2</a>
+         contrast ratio against a background \(\beta\). A hinge, so the term stops once the floor
+         is met rather than trading against the rest of the palette.</p></li>
+
+    <li><b>lightness spread</b> <span class="d">every pair separable in grayscale</span>
+      \[ F_{\text{lsep}}=\sum_{i&lt;j}\bigl[\Delta_L-|L_i-L_j|\bigr]_+^2,\qquad
+         \Delta_L=\frac{L_+-L_-}{n-1} \]
+      <p>A hinge again. \(\Delta_L\) is derived
+         rather than set by hand: \(n\) swatches spread over the lightness band are at best
+         \((L_+-L_-)/(n-1)\) apart, so a larger floor could never be met.</p></li>
+  </ul>
+
+  <h4>Constraint handling</h4>
   <p>Control points are projected, \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\), by projecting onto
      \(G,\Lambda,X,H,E,B\) in turn and repeating. The loop stops once the violation is below
      \(10^{-4}\), or after twelve rounds. It does not return the nearest point of \(\mathcal{F}\):
      \(\mathcal{F}\) is not convex, since \(G\) is nonconvex in places and the complement of a ball
      never is. It returns a feasible point near the input, which is all a projected step uses.</p>
-  <p>Curve samples are not variables, so they cannot be projected. With \(c_k=c(\gamma_k)\) and
-     multipliers \(\lambda\in\mathbb{R}_{\ge0}^{K}\),</p>
+  <p>With \(c_k=c(\gamma_k)\) and multipliers \(\lambda\in\mathbb{R}_{\ge0}^{K}\),</p>
   \[ F_{\text{feas}}=\sum_k\left(\lambda_k c_k+\tfrac12 c_k^2\right),\qquad
      \lambda_k\leftarrow\min(\lambda_{\max},\ \lambda_k+\rho\,c_k) \]
-  <p>The multipliers update every \(T=25\) inner iterations, and \(\rho\) doubles whenever
+  <p>The multipliers update every \(T=25\) inner iterations. \(\rho\) doubles whenever
      \(\max_k c_k\) fails to fall below \(\tfrac34\) of its previous value. Both are capped. The
-     multipliers absorb the violation that persists at
-     a given \(\rho\), which is how a finite \(\rho\) reaches feasibility. A plain penalty has only
-     \(\rho\) to escalate, and a \(\rho\) large enough to enforce the constraint also flattens every
+     multipliers absorb the violation that persists at a given \(\rho\), so a finite \(\rho\) suffices for feasibility. A plain penalty has only
+     \(\rho\) to escalate. A \(\rho\) large enough to enforce the constraint also flattens every
      other term.</p>
 
-  <h4>7 · Descent</h4>
+  <h4>Descent</h4>
   <p>Gradients are central differences over the \(3n\) coordinates, skipping the pinned ones. Each
      term is normalized to unit max before it is weighted.</p>
   \[ \widehat G_k=\frac{\nabla F_k}{\lVert\nabla F_k\rVert_\infty},\qquad
      D=\sum_k u_k\,\widehat G_k,\qquad
      u_k=\begin{cases}\rho\,w_k & k=\text{feas}\\ w_k & \text{otherwise}\end{cases} \]
-  <p><a href="https://en.wikipedia.org/wiki/Stochastic_gradient_descent#Adam" target="_blank" rel="noopener">Adam</a>
-     runs on \(D\) with \(\beta_1=0.9\), \(\beta_2=0.999\), and step \(\eta=1.2\,r\). The terms span four orders of magnitude, so an unnormalized sum would be the
-     largest term's gradient plus rounding noise. Normalizing first makes each \(w_k\) a relative pull:
-     weight 2 against weight 1 moves the step twice as far, whatever the two terms measure. The
-     feasibility term carries \(\rho\) here rather than in \(F_{\text{feas}}\), because the
+  <p>The terms span four orders of magnitude, so an unnormalized sum would be the largest term's
+     gradient plus rounding noise. Normalizing first makes each \(w_k\) a relative pull: weight 2
+     against weight 1 moves the step twice as far, whatever the two terms measure. The feasibility
+     term is multiplied by \(\rho\) here rather than inside \(F_{\text{feas}}\), because the
      normalization would otherwise divide it back out.</p>
+  <p><a href="https://en.wikipedia.org/wiki/Stochastic_gradient_descent#Adam" target="_blank" rel="noopener">Adam</a>
+     then runs on \(D\) with \(\beta_1=0.9\), \(\beta_2=0.999\), and step \(\eta=1.2\,r\), where
+     \(r\) is the rate slider.</p>
   <p>The normalizer depends on \(P\), so \(D\) is not the gradient of any fixed function. There is no
      descent guarantee.</p>
-  <p>Restarts are optional. On a stall, meaning no improvement of \(5\times10^{-4}\) for \(8T=200\)
-     iterations, every free coordinate takes uniform noise on \([-5,5]\) and the run continues. The best
-     iterate is kept under the lexicographic order \(\bigl(\max_k c_k,\ \sum_k w_k F_k\bigr)\), so a
-     feasible palette always beats an infeasible one.</p>
+  <p>Restarts are optional. A stall is no improvement of \(5\times10^{-4}\) for \(8T=200\)
+     iterations. On a stall, every free coordinate takes uniform noise on \([-5,5]\) and the run
+     continues. The best iterate is kept under the lexicographic order
+     \(\bigl(\max_k c_k,\ \sum_k w_k F_k\bigr)\), so a feasible palette always beats an
+     infeasible one.</p>
 </dialog>
 
 <script type="importmap">
@@ -2446,7 +2473,7 @@ const OBJ = [
    * endpoints, or simply not descending arc length. It stops relative bunching,
    * which is the failure this term exists for, and nothing more.
    */
-  { key: 'space', label: 'waypoint spacing', mode: 'continuous',
+  { key: 'space', label: 'control point spacing', mode: 'continuous',
     f: (x) => {
       const P = x.pts, n = P.length - 1;
       if (n < 2) return 0;
