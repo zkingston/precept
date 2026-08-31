@@ -33,8 +33,14 @@
   window.MathJax = {
     loader: { paths: { mathjax: '/node_modules/mathjax',
                        'mathjax-fira': '/node_modules/@mathjax/mathjax-fira-font' } },
-    startup: { typeset: false },      // the formulation is the only math, and it renders on demand
-    options: { enableMenu: false },   // right-click belongs to the 3D views
+    startup: { typeset: false },      // the formulation is the only math, and it renders at startup
+    // The explorer puts a focusable info badge on every expression and pulls in
+    // a speech worker to fill it. Assistive MathML stays on, which is what a
+    // screen reader actually reads, and costs neither the badge nor the worker.
+    output: { displayOverflow: 'linebreak' },   // wrap wide formulas rather than scroll them
+    options: { enableMenu: false,               // right-click belongs to the 3D views
+               enableExplorer: false,           // and the badge it adds to every expression
+               enableSpeech: false, enableBraille: false },
   };
 </script>
 <script defer src="/node_modules/@mathjax/mathjax-fira-font/tex-mml-chtml-mathjax-fira.js"></script>
@@ -210,6 +216,12 @@
   #mathdlg dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:3px 12px; align-items:baseline; }
   #mathdlg dt { white-space:nowrap; }
   #mathdlg dd { margin:0; color:var(--dim); }
+  /* two columns need room for the widest set definition; below that the label
+     column squeezes the gloss into a three-word ribbon, so stack them */
+  @media (max-width: 560px) {
+    #mathdlg dl { grid-template-columns:1fr; gap:0; }
+    #mathdlg dd { margin:1px 0 7px 14px; }
+  }
   /* Wide formulas scroll sideways on a narrow viewport. The vertical padding is
      not decoration: MathJax's box arithmetic leaves each container overflowing
      its own height by a pixel or six, which with overflow-y hidden clips a
@@ -506,11 +518,9 @@
   <h4>1 · Space</h4>
   <p>Colors are the points of \(M=\mathbb{R}^3\), <a href="https://en.wikipedia.org/wiki/Oklab_color_space" target="_blank" rel="noopener">Oklab</a>
      coordinates scaled by 100. A color is \(p=(L,a,b)\) with lightness \(L\in[0,100]\), chroma
-     \(C(p)=\sqrt{a^2+b^2}\), and hue \(h(p)=\operatorname{atan2}(b,a)\). Distance in \(M\) is
-     neither Euclidean nor additive, and the two departures are separate.</p>
-  <p>Each point carries a symmetric positive definite \(g(p)\in\mathbb{R}^{3\times3}\), which
-     measures short steps. Segment lengths use the midpoint rule and a path is the sum of its
-     segments:</p>
+     \(C(p)=\sqrt{a^2+b^2}\), and hue \(h(p)=\operatorname{atan2}(b,a)\).</p>
+  <p>A symmetric positive definite \(g(p)\in\mathbb{R}^{3\times3}\) sets the cost of a short step at
+     \(p\). Segment lengths use the midpoint rule, and a path is the sum of its segments:</p>
   \[ \ell_g(p,q)=\sqrt{(q-p)^{\top}g\!\left(\tfrac{p+q}{2}\right)(q-p)},\qquad
      \ell_g(\gamma)=\sum_{k}\ell_g(\gamma_k,\gamma_{k+1}) \]
   <p>\(g=J^{\top}J\), where \(J\) is the Jacobian at \(p\) of the map from \(M\) to the working
@@ -519,14 +529,16 @@
   <p>Lengths do not add up to differences. Perceived difference is a concave function of length:</p>
   \[ d(p,q)=f\bigl(\ell_g(p,q)\bigr),\qquad f(s)=s_0\ln\left(1+\frac{s}{s_0}\right),\qquad
      s_0=\frac{100}{5.34}\approx 18.7,\qquad f'(0)=1 \]
-  <p>Concavity of \(f\) makes \(d\) subadditive: \(d(p,r)\le d(p,q)+d(q,r)\), strictly in general.
+  <p>Concavity of \(f\) makes \(d\) <a href="https://en.wikipedia.org/wiki/Subadditivity" target="_blank" rel="noopener">subadditive</a>:
+     \(d(p,r)\le d(p,q)+d(q,r)\), strictly in general.
      Integrate with \(\ell_g\); compare with \(d\). Write \(d_I\) for \(d\) taken with \(g=I\).</p>
 
   <h4>2 · Variables</h4>
   <p>The variables are the control points \(P=(p_1,\dots,p_n)\in M^n\). A pinned set
      \(\mathcal{P}\subseteq\{1,\dots,n\}\) is held fixed. Write \(t_i=(i-1)/(n-1)\) for the position
      of swatch \(i\) along the palette.</p>
-  <p>In continuous mode \(\gamma_P:[0,1]\to M\) is the centripetal Catmull–Rom spline through \(P\),
+  <p>In continuous mode \(\gamma_P:[0,1]\to M\) is the <a href="https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline" target="_blank" rel="noopener">centripetal
+     Catmull–Rom spline</a> through \(P\),
      sampled at \(K\) points \(\gamma_1,\dots,\gamma_K\), with length \(\ell_\gamma=\ell_g(\gamma_P)\).
      The palette \(\Pi(P)=(\pi_1,\dots,\pi_n)\) is \(\gamma_P\) resampled at equal \(g\)-arc length. In
      discrete mode \(\Pi(P)=P\) and there is no curve.</p>
@@ -536,7 +548,7 @@
   <h4>3 · Feasible set</h4>
   \[ \mathcal{F}=G\cap\Lambda\cap X\cap H\cap\textstyle\bigcap_j B_j^{\,c}\cap\bigcap_m E_m \]
   <dl>
-    <dt>\(G=\{p:\operatorname{rgb}_\Gamma(p)\in[0,1]^3\}\)</dt><dd>gamut of primaries \(\Gamma\)</dd>
+    <dt>\(G=\{p:\operatorname{rgb}_\Gamma(p)\in[0,1]^3\}\)</dt><dd><a href="https://en.wikipedia.org/wiki/Gamut" target="_blank" rel="noopener">gamut</a> of primaries \(\Gamma\)</dd>
     <dt>\(\Lambda=\{p: L_-\le L\le L_+\}\)</dt><dd>lightness band</dd>
     <dt>\(X=\{p: C_-\le C(p)\le C_+\}\)</dt><dd>chroma band</dd>
     <dt>\(H=\{p: C(p)&lt;1 \ \vee\ h(p)\in[h_-,h_+]\}\)</dt><dd>hue arc, mod \(360\)</dd>
@@ -555,18 +567,21 @@
      \qquad \gamma_P(t)\in\mathcal{F}\ \ \forall t\in[0,1] \]
   <p>We enforce the constraint on the control points exactly, by projection. The constraint along the
      curve cannot be enforced the same way, because the curve samples are functions of \(P\) rather
-     than variables. It enters as an augmented Lagrangian instead.</p>
+     than variables. It enters as an
+     <a href="https://en.wikipedia.org/wiki/Augmented_Lagrangian_method" target="_blank" rel="noopener">augmented Lagrangian</a>
+     instead.</p>
 
   <h4>5 · Objectives</h4>
   <p>Each term is written for the palette \(\Pi(P)\). The observer set \(V\) is the identity alone, or
-     the identity together with the three deficiencies; every \(v\in V\) acts on \(M\).</p>
+     the identity together with the three <a href="https://en.wikipedia.org/wiki/Color_blindness" target="_blank" rel="noopener">color
+     vision deficiencies</a>; every \(v\in V\) acts on \(M\).</p>
   \[ F_{\text{rep}}=\sum_{v\in V}\ \sum_{i&lt;j}\ \frac{1}{\max\left(\tfrac12,\ d(v\pi_i,\,v\pi_j)\right)} \]
   <p>The floor of \(\tfrac12\) keeps coincident colors finite. Since \(d\) saturates, far pairs
      contribute almost nothing and the step separates the confusable ones.</p>
   \[ F_{\text{arc}}=\ell_\gamma \qquad
-     F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \qquad
-     F_{\text{chr}}=\frac1n\sum_i\left(C(\pi_i)-\frac{C_-+C_+}{2}\right)^2 \]
-  \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
+     F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \]
+  \[ F_{\text{chr}}=\frac1n\sum_i\left(C(\pi_i)-\frac{C_-+C_+}{2}\right)^2 \qquad
+     F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
      \delta\bigl(h_i,\ \widehat h(t_i)\bigr)\right)^2 \]
   <p>\(\widehat L\) and \(\widehat h\) are the profiles drawn in the plots, and \(\delta\) is the signed shortest
      angle, so the wrap at \(0^\circ\) costs nothing. Chroma weights the angle because a \(40^\circ\)
@@ -581,14 +596,15 @@
      zero; the scale comes from the pinned control points, or from leaving \(F_{\text{arc}}\) off.</p>
   \[ F_{\text{pair}}=\binom{n}{2}^{-1}\sum_{i&lt;j}\bigl(d_I(\pi_i,\pi_j)-\tau_{ij}\bigr)^2,\qquad
      \tau_{ij}=f\left(\frac{j-i}{n-1}\,\ell_I\right) \]
-  <p>\(\tau_{ij}\) is the difference a uniform traversal of the curve would produce between swatches
-     \(i\) and \(j\). It is \(f\) of the arc covered, not a multiple of \(j-i\). A multiple is what
-     additivity would give, and \(f\) is not additive. Both distances are taken with \(g=I\), which is
-     where \(f\) is calibrated.</p>
+  <p>\(\tau_{ij}\) is the difference a uniform traversal of the curve produces between swatches
+     \(i\) and \(j\): \(f\) applied to the arc covered. In an additive space the target would be
+     proportional to \(j-i\) instead. Both distances are taken with \(g=I\), where \(f\) is
+     calibrated.</p>
   \[ F_{\text{con}}=\sum_{q\in Q}\bigl[\kappa_{\min}-\kappa(q,\beta)\bigr]_+^2,\qquad
      F_{\text{lsep}}=\sum_{i&lt;j}\bigl[\Delta_L-|L_i-L_j|\bigr]_+^2,\qquad
      \Delta_L=\frac{L_+-L_-}{n-1} \]
-  <p>\(\kappa\) is the WCAG 2 contrast ratio against a background \(\beta\). Both terms are floors,
+  <p>\(\kappa\) is the <a href="https://en.wikipedia.org/wiki/Web_Content_Accessibility_Guidelines" target="_blank" rel="noopener">WCAG 2</a>
+     contrast ratio against a background \(\beta\). Both terms are floors,
      written as hinges, so each stops once its floor is met. \(\Delta_L\) is derived rather than
      typed: \(n\) swatches spread over the lightness band are at best \((L_+-L_-)/(n-1)\) apart, so
      a larger floor could never be met.</p>
@@ -604,26 +620,26 @@
   \[ F_{\text{feas}}=\sum_k\left(\lambda_k c_k+\tfrac12 c_k^2\right),\qquad
      \lambda_k\leftarrow\min(\lambda_{\max},\ \lambda_k+\rho\,c_k) \]
   <p>The multipliers update every \(T=25\) inner iterations, and \(\rho\) doubles whenever
-     \(\max_k c_k\) fails to fall below \(\tfrac34\) of its previous value. The bounds are
-     \(\lambda_{\max}=10^4\) and \(\rho\le4096\). The multipliers absorb the violation that persists at
+     \(\max_k c_k\) fails to fall below \(\tfrac34\) of its previous value. Both are capped. The
+     multipliers absorb the violation that persists at
      a given \(\rho\), which is how a finite \(\rho\) reaches feasibility. A plain penalty has only
      \(\rho\) to escalate, and a \(\rho\) large enough to enforce the constraint also flattens every
      other term.</p>
 
   <h4>7 · Descent</h4>
-  <p>Gradients are central differences with \(h=\tfrac14\) over the \(3n\) coordinates, skipping
-     \(i\in\mathcal{P}\). Each term is normalized to unit max before it is weighted.</p>
+  <p>Gradients are central differences over the \(3n\) coordinates, skipping the pinned ones. Each
+     term is normalized to unit max before it is weighted.</p>
   \[ \widehat G_k=\frac{\nabla F_k}{\lVert\nabla F_k\rVert_\infty},\qquad
      D=\sum_k u_k\,\widehat G_k,\qquad
      u_k=\begin{cases}\rho\,w_k & k=\text{feas}\\ w_k & \text{otherwise}\end{cases} \]
-  <p>Adam runs on \(D\) with \(\beta_1=0.9\), \(\beta_2=0.999\), \(\varepsilon=10^{-8}\), and step
-     \(\eta=1.2\,r\). The terms span four orders of magnitude, so an unnormalized sum would be the
+  <p><a href="https://en.wikipedia.org/wiki/Stochastic_gradient_descent#Adam" target="_blank" rel="noopener">Adam</a>
+     runs on \(D\) with \(\beta_1=0.9\), \(\beta_2=0.999\), and step \(\eta=1.2\,r\). The terms span four orders of magnitude, so an unnormalized sum would be the
      largest term's gradient plus rounding noise. Normalizing first makes each \(w_k\) a relative pull:
      weight 2 against weight 1 moves the step twice as far, whatever the two terms measure. The
      feasibility term carries \(\rho\) here rather than in \(F_{\text{feas}}\), because the
      normalization would otherwise divide it back out.</p>
-  <p>The cost is that \(D\ne\nabla\Phi\) for any fixed \(\Phi\), because the normalizer depends on
-     \(P\). We claim no descent guarantee.</p>
+  <p>The normalizer depends on \(P\), so \(D\) is not the gradient of any fixed function. There is no
+     descent guarantee.</p>
   <p>Restarts are optional. On a stall, meaning no improvement of \(5\times10^{-4}\) for \(8T=200\)
      iterations, every free coordinate takes uniform noise on \([-5,5]\) and the run continues. The best
      iterate is kept under the lexicographic order \(\bigl(\max_k c_k,\ \sum_k w_k F_k\bigr)\), so a
@@ -3174,6 +3190,10 @@ window.MathJax?.startup?.promise.then(async () => {
   try {
     await MathJax.typesetPromise([dlg]);
     await document.fonts.ready;
+    // CHTML makes every expression focusable for the explorer. With the
+    // explorer off there is nothing to explore, and 130 tab stops between the
+    // dialog and its close button is worse than none.
+    dlg.querySelectorAll('mjx-container[tabindex]').forEach((c) => c.removeAttribute('tabindex'));
   } finally {
     dlg.removeAttribute('style');
   }
