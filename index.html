@@ -2903,6 +2903,8 @@ const HELP = {
   pair:     "Even spacing over every pair.",
   contr:    "Swatches under the contrast floor.",
   lsep:     "Pairs closer in lightness than the palette could manage.",
+  sym:      "Lightness asymmetry between a diverging map's two arms.",
+  wind:     "How far a loop's hue turn is from a full circle.",
   space:    "Uneven control point spacing.",
 };
 
@@ -3101,16 +3103,69 @@ const OBJ = [
       let e = 0, k = 0, at = 0;
       // Within a run only. Across a break there is no traversal, so the target
       // this term measures a residual against does not exist there.
+      const rs = runs();
       x.curves.forEach((c, ci) => {
-        const m = runs()[ci].nodes.length, P = x.pal.slice(at, at + m);
+        const m = rs[ci].nodes.length, closed = rs[ci].closed, P = x.pal.slice(at, at + m);
         at += m;
         if (m < 3) return;
         const total = arcLength(c, EUCLIDEAN);
+        // On a closed run the walk between two swatches goes the short way
+        // round, over m steps rather than m-1: an index difference is the
+        // distance along an open ramp and there is no such thing on a loop.
+        const steps = closed ? m : m - 1;
         for (let i = 0; i < m; i++) for (let j = i + 1; j < m; j++) {
-          e += (pd(v(P[i]), v(P[j]), EUCLIDEAN) - perceive((total * (j - i)) / (m - 1))) ** 2;
+          const apart = closed ? Math.min(j - i, m - (j - i)) : j - i;
+          e += (pd(v(P[i]), v(P[j]), EUCLIDEAN) - perceive((total * apart) / steps)) ** 2;
           k++;
         }
       });
+      return k ? e / k : 0;
+    } },
+  /**
+   * What makes a diverging map diverging: the two arms are mirror images in
+   * LIGHTNESS about the middle. Not in hue or chroma — the arms being different
+   * hues is the entire point, and a term that pulled them together would undo
+   * the map. Symmetric lightness is what lets a reader see equal magnitudes on
+   * either side of the center as equal.
+   *
+   * Open runs only. A loop has no middle to be symmetric about.
+   */
+  { key: 'sym', label: 'diverging symmetry', mode: 'continuous', bad: true,
+    f: (x) => {
+      let e = 0, k = 0, at = 0;
+      for (const r of runs()) {
+        const m = r.nodes.length, P = x.pal.slice(at, at + m);
+        at += m;
+        if (r.closed || m < 3) continue;
+        for (let i = 0; i < m >> 1; i++) { e += (P[i][0] - P[m - 1 - i][0]) ** 2; k++; }
+      }
+      return k ? e / k : 0;
+    } },
+  /**
+   * What makes a cyclic map cyclic: hue goes round once and comes back, rather
+   * than doubling back on itself. The signed turns around the loop have to sum
+   * to a full circle — a map that runs out to a hue and returns the way it came
+   * closes just as neatly and reads as a diverging map wrapped end to end.
+   *
+   * Closed runs only, and swatches too near the neutral axis are skipped: hue
+   * is not a real quantity there and its turn is noise.
+   */
+  { key: 'wind', label: 'hue winding', mode: 'continuous', bad: true,
+    f: (x) => {
+      let e = 0, k = 0, at = 0;
+      for (const r of runs()) {
+        const m = r.nodes.length, P = x.pal.slice(at, at + m);
+        at += m;
+        if (!r.closed || m < 3) continue;
+        let turn = 0;
+        for (let i = 0; i < m; i++) {
+          const [a, b] = [P[i], P[(i + 1) % m]];
+          if (Math.hypot(a[1], a[2]) < 1 || Math.hypot(b[1], b[2]) < 1) continue;
+          turn += angDiff(hueOf(b), hueOf(a));
+        }
+        e += ((Math.abs(turn) - 360) / 360) ** 2;
+        k++;
+      }
       return k ? e / k : 0;
     } },
   /**
@@ -3153,7 +3208,7 @@ const OBJ = [
 
 /** Terms included in the combined step. Constraints on, shaping opt-in. */
 // Shaping terms that fight the rest of the palette unless you ask for them.
-const OPT_IN = ['repcvd', 'contr', 'lsep'];
+const OPT_IN = ['repcvd', 'contr', 'lsep', 'sym', 'wind'];
 S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
 /** Relative pull of each term in the combined step. */
 S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
