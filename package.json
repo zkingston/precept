@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "katex": "^0.18.4",
     "three": "^0.185.1"
   },
   "type": "module",

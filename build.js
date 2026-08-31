@@ -26,7 +26,8 @@ await writeFile(join(OUT, 'color-space.js'), stripTypeScriptTypes(ts));
 const html = (await readFile('index.html', 'utf8'))
   .replace("'./color-space.ts'", "'./color-space.js'")
   .replace('"/node_modules/three/build/three.module.js"', '"./vendor/three.module.js"')
-  .replace('"/node_modules/three/examples/jsm/"', '"./vendor/jsm/"');
+  .replace('"/node_modules/three/examples/jsm/"', '"./vendor/jsm/"')
+  .replaceAll('/node_modules/katex/dist/', './vendor/katex/');
 for (const [what, pat] of [['color-space.js', /'\.\/color-space\.js'/], ['three', /"\.\/vendor\/three\.module\.js"/],
                            ['three/addons', /"\.\/vendor\/jsm\/"/]])
   if (!pat.test(html)) throw new Error(`rewrite for ${what} did not match — check index.html`);
@@ -54,6 +55,17 @@ while (queue.length) {
       ? { root: JSM, rel: m[1].slice(13), out: 'vendor/jsm' }
       : { root, rel: posix.normalize(posix.join(posix.dirname(rel), m[1])), out });
 }
+
+// ─── KaTeX: script, stylesheet, and the fonts the stylesheet names ──────────
+// Not part of the import graph above — it is a classic script and a stylesheet,
+// and the stylesheet's @font-face rules point at fonts/ beside it, so the
+// directory has to come along or every glyph falls back to a serif box.
+await mkdir(join(OUT, 'vendor/katex'), { recursive: true });
+for (const f of ['katex.min.js', 'katex.min.css', 'contrib/auto-render.min.js']) {
+  await mkdir(dirname(join(OUT, 'vendor/katex', f)), { recursive: true });
+  await cp(join('node_modules/katex/dist', f), join(OUT, 'vendor/katex', f));
+}
+await cp('node_modules/katex/dist/fonts', join(OUT, 'vendor/katex/fonts'), { recursive: true });
 
 // Jekyll would otherwise skip anything beginning with an underscore
 await writeFile(join(OUT, '.nojekyll'), '');

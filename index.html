@@ -5,6 +5,9 @@
 <title>Precept Palette Optimizer</title>
 <!-- the emoji as an SVG document, so there is no file to ship or fetch -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌈</text></svg>">
+<link rel="stylesheet" href="/node_modules/katex/dist/katex.min.css">
+<script defer src="/node_modules/katex/dist/katex.min.js"></script>
+<script defer src="/node_modules/katex/dist/contrib/auto-render.min.js"></script>
 <style>
   :root { --bg:#101012; --panel:#1c1c1f; --line:#32323a; --fg:#e8e8ec; --dim:#8b8b96; --hot:#ff5b5b; --sel:#3d5a6c;
           --hud:#33333a; --ctl:#26262b; --link:#7dd3fc;
@@ -163,6 +166,24 @@
   .note { color:var(--dim); font-size:11px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
+  h2 #mathbtn { float:right; margin:-3px 0 0; padding:0 6px; font:11px/1.5 ui-sans-serif,system-ui,sans-serif;
+                background:var(--ctl); color:var(--dim); border:1px solid var(--line); border-radius:3px;
+                cursor:pointer; text-transform:none; letter-spacing:0; }
+  h2 #mathbtn:hover { color:var(--fg); }
+  #mathdlg { max-width:min(760px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto;
+    overscroll-behavior:contain; padding:22px 26px; background:var(--panel); color:var(--fg);
+    border:1px solid var(--line); border-radius:9px; font:13px/1.6 ui-sans-serif,system-ui,sans-serif; }
+  #mathdlg::backdrop { background:#000a; }
+  #mathdlg h3 { margin:0 0 14px; font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
+  #mathdlg h4 { margin:19px 0 6px; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
+  #mathdlg p { margin:0 0 8px; }
+  #mathdlg dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:3px 12px; align-items:baseline; }
+  #mathdlg dt { white-space:nowrap; }
+  #mathdlg dd { margin:0; color:var(--dim); }
+  #mathdlg .katex-display { margin:10px 0; overflow-x:auto; overflow-y:hidden; }
+  #mathclose { position:absolute; top:12px; right:14px; width:26px; height:26px; padding:0;
+    background:none; border:0; color:var(--dim); font-size:19px; line-height:1; cursor:pointer; }
+  #mathclose:hover { color:var(--fg); }
   #aboutdlg { max-width:min(560px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto; overscroll-behavior:contain; padding:20px 22px;
     background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:9px;
     font:13px/1.55 ui-sans-serif,system-ui,sans-serif; }
@@ -352,7 +373,7 @@
     </section>
     <div id="dock"></div>
 
-    <section><h2>Metrics</h2><table id="metrics"></table>
+    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2><table id="metrics"></table>
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
         <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span></div>
       <div class="row"><label class="f">contrast</label>
@@ -438,6 +459,93 @@
   <h4>Credit</h4>
   <p>Built by Zachary Kingston, using Claude Opus 5. <a href="https://zkingston.com" target="_blank" rel="noopener">zkingston.com</a> /
      <a href="mailto:zkingston@purdue.edu">zkingston@purdue.edu</a></p>
+</dialog>
+
+<dialog id="mathdlg">
+  <button id="mathclose" title="close">&times;</button>
+  <h3>Formulation</h3>
+
+  <h4>1 · Space</h4>
+  <p>The chart is \(M\), Oklab scaled by 100; a color is \(p=(L,a,b)\in M\) with \(L\in[0,100]\),
+     chroma \(C(p)=\sqrt{a^2+b^2}\) and hue \(h(p)=\operatorname{atan2}(b,a)\). Local structure is a
+     Riemannian metric \(g\); global structure is a concave return</p>
+  \[ f(s)=s_0\ln\!\left(1+\frac{s}{s_0}\right),\qquad s_0=\tfrac{100}{a}\approx 18.7,\qquad f'(0)=1 .\]
+  <p>Arc length integrates \(g\). Perceived difference between two colors is
+     \(d(p,q)=f\!\left(\ell_g(p,q)\right)\), which is subadditive: \(d(p,r)\le d(p,q)+d(q,r)\), strictly
+     in general. Integrate with \(\ell_g\); compare with \(d\).</p>
+
+  <h4>2 · Variables</h4>
+  <p>\(P=(p_1,\dots,p_n)\in M^n\), with a pinned set \(\mathcal{P}\subseteq\{1,\dots,n\}\) held fixed.
+     In continuous mode \(\gamma_P:[0,1]\to M\) is the centripetal Catmull–Rom spline through \(P\),
+     sampled at \(K\) points \(\gamma_k\); the palette \(\Pi(P)=(\pi_1,\dots,\pi_n)\) is \(\gamma_P\)
+     resampled at equal \(g\)-arc length. In discrete mode \(\Pi(P)=P\) and \(\gamma_P\) is undefined.</p>
+
+  <h4>3 · Feasible set</h4>
+  \[ \mathcal{F}=G\cap\Lambda\cap X\cap H\cap\textstyle\bigcap_j B_j^{\,c}\cap\bigcap_m E_m \]
+  <dl>
+    <dt>\(G=\{p:\operatorname{rgb}_\Gamma(p)\in[0,1]^3\}\)</dt><dd>gamut of primaries \(\Gamma\)</dd>
+    <dt>\(\Lambda=\{p: L_-\le L\le L_+\}\)</dt><dd>lightness band</dd>
+    <dt>\(X=\{p: C_-\le C(p)\le C_+\}\)</dt><dd>chroma band</dd>
+    <dt>\(H=\{p: C(p)&lt;1 \ \vee\ h(p)\in[h_-,h_+]\}\)</dt><dd>hue arc, mod \(360\)</dd>
+    <dt>\(B_j=\{p: d(p,c_j)&lt;r_j\}\)</dt><dd>keep-out balls, radius in perceived units</dd>
+    <dt>\(E_m=\{p: n_m^{\!\top}\sigma(p)\le d_m\}\)</dt><dd>halfplanes, \(\sigma\) the chart\(\to\)space map</dd>
+  </dl>
+  <p>A scalar violation, smooth where it matters and zero on \(\mathcal{F}\), with \([x]_+=\max(x,0)\):</p>
+  \[ c(p)=\sqrt{\phi_G(p)}+[L_--L]_++[L-L_+]_++[C_--C]_++[C-C_+]_+
+        +\tfrac{\pi}{180}\,C\,\Delta h(p)+\sqrt{\phi_B(p)}+\sqrt{\phi_E(p)} \]
+
+  <h4>4 · Program</h4>
+  \[ \min_{P}\ \sum_k w_k F_k(P)\qquad\text{s.t.}\qquad p_i\in\mathcal{F}\ \ \forall i,
+     \qquad \gamma_P(t)\in\mathcal{F}\ \ \forall t\in[0,1] \]
+  <p>The node constraints are enforced exactly, by projection. The path constraint cannot be — the
+     samples are functions of \(P\), not variables — so it enters as an augmented Lagrangian.</p>
+
+  <h4>5 · Objectives</h4>
+  <p>Written for the palette \(\Pi(P)\); \(V\) is the set of observers (identity, or identity together
+     with the three deficiencies), \(v\in V\) acting on \(M\).</p>
+  \[ F_{\text{rep}}=\sum_{v\in V}\ \sum_{i&lt;j}\ \frac{1}{\max\!\left(\tfrac12,\ d(v\pi_i,\,v\pi_j)\right)} \]
+  \[ F_{\text{arc}}=\ell_g(\gamma_P) \qquad
+     F_{\text{lramp}}=\frac1n\sum_i\big(L(\pi_i)-\hat L(\tfrac{i}{n-1})\big)^2 \qquad
+     F_{\text{chr}}=\frac1n\sum_i\big(C(\pi_i)-\tfrac{C_-+C_+}{2}\big)^2 \]
+  \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\tfrac{\pi}{180}\,C_i\,
+     \delta\!\left(h_i,\ \hat h(\tfrac{i}{n-1})\right)\right)^2,\qquad \delta=\text{signed shortest angle} \]
+  \[ F_{\text{sp}}=\sum_{i=1}^{m}\frac{\bar\ell}{\ell_i}-m,\qquad
+     \ell_i=\max\!\left(\tfrac{1}{20},\ \ell_g(p_i,p_{i+1})\right),\quad m=n-1 \]
+  <p>\(F_{\text{sp}}\) is the AM–HM ratio, zero iff the \(\ell_i\) are equal and unbounded as any closes.
+     It is scale invariant and so cannot see a uniform collapse; \(F_{\text{arc}}\) holds the scale.</p>
+  \[ F_{\text{pair}}=\binom{n}{2}^{\!-1}\sum_{i&lt;j}\left(d(\pi_i,\pi_j)
+     -f\!\left(\tfrac{|i-j|}{n-1}\,\ell_g(\gamma_P)\right)\right)^{2} \]
+  <p>The target is \(f\) of the arc a uniform traversal would cover, not something proportional to
+     \(|i-j|\): proportionality is the additive assumption, which \(f\) denies.</p>
+  \[ F_{\text{con}}=\sum_k\big[\kappa_{\min}-\kappa(\gamma_k,\beta)\big]_+^2,\qquad
+     F_{\text{lsep}}=\sum_{i&lt;j}\big[\Delta_L-|L_i-L_j|\big]_+^2,\quad
+     \Delta_L=\tfrac{L_+-L_-}{n-1} \]
+  <p>\(\kappa\) is the WCAG 2 contrast ratio against a ground \(\beta\). Both are floors: hinges, so they
+     stop once met rather than trading against the rest of the palette forever.</p>
+
+  <h4>6 · Constraint handling</h4>
+  <p>Nodes: \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\) by alternating projection onto
+     \(G,\Lambda,X,H,E,B\), iterated until \(c(p_i)&lt;10^{-4}\) or twelve rounds. Not the metric
+     projection — \(G\) is concave in places and \(B^c\) never convex — but a feasible point near the
+     input, which is what a projected step needs.</p>
+  <p>Path: with \(c_k=c(\gamma_k)\) and multipliers \(\lambda\in\mathbb{R}_{\ge0}^{K}\),</p>
+  \[ F_{\text{feas}}=\sum_k \lambda_k c_k+\tfrac12 c_k^2,\qquad
+     \lambda_k\leftarrow\min\!\left(\lambda_{\max},\ \lambda_k+\rho\,c_k\right) \]
+  <p>updated every \(T=25\) inner iterations, with \(\rho\leftarrow2\rho\) whenever \(\max_k c_k\) fails
+     to fall below \(\tfrac34\) of its previous value. The multipliers are what let a finite \(\rho\)
+     reach feasibility; a pure penalty needs \(\rho\) large enough to flatten every other term.</p>
+
+  <h4>7 · Descent</h4>
+  <p>Gradients are central differences with \(h=\tfrac14\) over the \(3n\) coordinates, skipping
+     \(i\in\mathcal{P}\). Each term is normalized before weighting:</p>
+  \[ \hat G_k=\frac{\nabla F_k}{\lVert\nabla F_k\rVert_\infty},\qquad
+     D=\sum_k w_k\,\rho^{\,[k=\text{feas}]}\,\hat G_k \]
+  <p>and Adam is run on \(D\) with \(\beta_1=0.9\), \(\beta_2=0.999\), \(\varepsilon=10^{-8}\), step
+     \(\eta=1.2\,r\). Note \(D\ne\nabla\Phi\) for any fixed \(\Phi\): the normalizer depends on \(P\).
+     The weights are relative pulls, not coefficients of a fixed objective, and no descent guarantee is
+     claimed. Restarts jolt the free nodes by \(5\) chart units when the score goes flat for
+     \(4T\) iterations, keeping the best feasible iterate under a lexicographic
+     \((\max_k c_k,\ \textstyle\sum_k w_k F_k)\) order.</p>
 </dialog>
 
 <script type="importmap">
@@ -2957,6 +3065,23 @@ const paintHist = () => {
   $('redo').disabled = !HIST.future.length;
 };
 $('aboutbtn').onclick = () => $('aboutdlg').showModal();
+/**
+ * The formulation renders once, on first open: auto-render walks the whole
+ * subtree and there is no reason to pay for that until someone asks.
+ */
+let mathReady = false;
+$('mathbtn').onclick = () => {
+  if (!mathReady && window.renderMathInElement) {
+    renderMathInElement($('mathdlg'), { throwOnError: false, delimiters: [
+      { left: '\\[', right: '\\]', display: true },
+      { left: '\\(', right: '\\)', display: false },
+    ] });
+    mathReady = true;
+  }
+  $('mathdlg').showModal();
+};
+$('mathclose').onclick = () => $('mathdlg').close();
+$('mathdlg').onclick = (e) => { if (e.target === $('mathdlg')) $('mathdlg').close(); };
 $('aboutclose').onclick = () => $('aboutdlg').close();
 // clicking the backdrop closes it: the dialog's own box is the only child, so a
 // click whose target IS the dialog landed outside it
