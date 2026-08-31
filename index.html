@@ -1269,16 +1269,19 @@ function layout() {
   const mode = A >= 1.6 ? 'squares' : A <= 1.0 ? 'row' : 'columns';
   let RECTS, cell = null;
   if (mode === 'squares') {
-    // near aspect 2 two squares fill the canvas; the 2x2 keeps every cut and
-    // the preview square, which a strip cannot do once the canvas gets tall
-    const side = Math.min(Math.floor(w / 2), h), c = Math.floor(side / 2);
+    // A 2x2 beside the 3D view. The column's WIDTH is capped so it cannot take
+    // more than half the canvas, but its height is not: below aspect 2 a square
+    // grid would leave a band of dead space under it, and a cell slightly
+    // taller than wide costs nothing — the cameras fit their content either way.
+    const gw = Math.min(Math.floor(w / 2), h);
+    const cw = Math.floor(gw / 2), ch = Math.floor(h / 2);
     RECTS = [
-      { x: 0, y: 0, w: c, h: c },
-      { x: c, y: 0, w: side - c, h: c },
-      { x: 0, y: c, w: c, h: side - c },
-      { x: side, y: 0, w: w - side, h },
+      { x: 0, y: 0, w: cw, h: ch },
+      { x: cw, y: 0, w: gw - cw, h: ch },
+      { x: 0, y: ch, w: cw, h: h - ch },
+      { x: gw, y: 0, w: w - gw, h },
     ];
-    cell = { x: c, y: c, w: side - c, h: side - c };
+    cell = { x: cw, y: ch, w: gw - cw, h: h - ch };
   } else if (mode === 'row') {
     // square-ish cells: a quarter of the width is the natural size, and a taller
     // row only letterboxes the content it holds. Capped so the strip cannot eat
