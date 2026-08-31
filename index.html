@@ -1768,16 +1768,25 @@ function drawLines(W, H, lut) {
   });
 }
 
-/** split ground, because a categorical color has to survive both */
+/**
+ * Split ground, because a categorical color has to survive both. The split runs
+ * ACROSS the classes rather than between them: a left/right split put each
+ * class wholly on one side, so half the palette was only ever seen on white and
+ * the other half only on black — which is the one thing this test exists to
+ * catch. Every cluster now straddles the line, alternating sides point by point
+ * so each class puts the same count on each ground.
+ */
 function drawScatter(W, H, lut) {
-  tctx.fillStyle = '#f2f2f2'; tctx.fillRect(0, 0, W / 2, H);
-  tctx.fillStyle = '#101014'; tctx.fillRect(W / 2, 0, W / 2, H);
+  const mid = Math.round(H / 2);
+  tctx.fillStyle = '#f2f2f2'; tctx.fillRect(0, 0, W, mid);
+  tctx.fillStyle = '#101014'; tctx.fillRect(0, mid, W, H - mid);
   lut.forEach((c, i) => {
     const r = rnd(i * 7919 + 13);
     tctx.fillStyle = `rgb(${c.join(' ')})`;
-    const cx = ((i + 0.5) / lut.length) * W, cy = H * (0.3 + 0.4 * r());
+    const cx = ((i + 0.5) / lut.length) * W;
     for (let k = 0; k < 26; k++) {
-      const x = cx + (r() - 0.5) * (W / lut.length) * 1.5, y = cy + (r() - 0.5) * H * 0.5;
+      const x = cx + (r() - 0.5) * (W / lut.length) * 1.5;
+      const y = mid + (k % 2 ? 1 : -1) * (0.03 + 0.43 * r()) * H;
       tctx.beginPath(); tctx.arc(x, y, 2.6, 0, 7); tctx.fill();
     }
   });
