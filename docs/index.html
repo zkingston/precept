@@ -160,7 +160,6 @@
   #metrics input.w:disabled { opacity:.3; }
   #metrics td.btns { width:52px; text-align:right; white-space:nowrap; padding-left:6px; }
   #metrics td.btns button { padding:0 5px; font:11px/1.5 ui-monospace,monospace; margin-left:3px; }
-  code { color:var(--link); }
   .note { color:var(--dim); font-size:11px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
@@ -1474,7 +1473,7 @@ function sidebar() {
     const pl = S.planes[s.i], ax = SPACES[params.space].axes;
     const terms = pl.n.map((c, j) => (Math.abs(c) < 0.01 ? '' : `${c > 0 ? '+' : '−'}${Math.abs(c).toFixed(2)}·${ax[j]}`))
       .filter(Boolean).join(' ').replace(/^\+/, '');
-    $('selinfo').innerHTML = `plane ${s.i} · keep <code>${terms} ≤ ${pl.d.toFixed(1)}</code>`;
+    $('selinfo').textContent = `plane ${s.i} · keep ${terms} ≤ ${pl.d.toFixed(1)}`;
   } else if ((s?.kind === 'obs' || s?.kind === 'obsr') && S.obs[s.i]) {
     const o = S.obs[s.i];
     $('selinfo').innerHTML = `r ${o.r.toFixed(1)} perceived, ${unperceive(o.r).toFixed(1)} in chart units`;
