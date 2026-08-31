@@ -466,19 +466,26 @@
   <h3>Formulation</h3>
 
   <h4>1 · Space</h4>
-  <p>The chart is \(M\), Oklab scaled by 100; a color is \(p=(L,a,b)\in M\) with \(L\in[0,100]\),
-     chroma \(C(p)=\sqrt{a^2+b^2}\) and hue \(h(p)=\operatorname{atan2}(b,a)\). Local structure is a
-     Riemannian metric \(g\); global structure is a concave return</p>
-  \[ f(s)=s_0\ln\!\left(1+\frac{s}{s_0}\right),\qquad s_0=\tfrac{100}{a}\approx 18.7,\qquad f'(0)=1 .\]
-  <p>Arc length integrates \(g\). Perceived difference between two colors is
-     \(d(p,q)=f\!\left(\ell_g(p,q)\right)\), which is subadditive: \(d(p,r)\le d(p,q)+d(q,r)\), strictly
-     in general. Integrate with \(\ell_g\); compare with \(d\).</p>
+  <p>The chart is \(M\), Oklab scaled by 100. A color is \(p=(L,a,b)\in M\) with lightness
+     \(L\in[0,100]\), chroma \(C(p)=\sqrt{a^2+b^2}\), and hue \(h(p)=\operatorname{atan2}(b,a)\).
+     Local structure is a Riemannian metric \(g\), pulled back from the active working space.
+     Global structure is a concave saturation \(f\).</p>
+  \[ f(s)=s_0\ln\left(1+\frac{s}{s_0}\right),\qquad s_0=\frac{100}{5.34}\approx 18.7,\qquad f'(0)=1 \]
+  <p>Write \(\ell_g(p,q)\) for the \(g\)-arc length between two colors. Perceived difference is
+     \(d(p,q)=f\bigl(\ell_g(p,q)\bigr)\). Concavity of \(f\) makes \(d\) subadditive:
+     \(d(p,r)\le d(p,q)+d(q,r)\), strictly in general. Integrate with \(\ell_g\); compare with \(d\).
+     Taking \(g=I\) gives the chart's own metric, written \(\ell_I\) and \(d_I\).</p>
 
   <h4>2 · Variables</h4>
-  <p>\(P=(p_1,\dots,p_n)\in M^n\), with a pinned set \(\mathcal{P}\subseteq\{1,\dots,n\}\) held fixed.
-     In continuous mode \(\gamma_P:[0,1]\to M\) is the centripetal Catmull–Rom spline through \(P\),
-     sampled at \(K\) points \(\gamma_k\); the palette \(\Pi(P)=(\pi_1,\dots,\pi_n)\) is \(\gamma_P\)
-     resampled at equal \(g\)-arc length. In discrete mode \(\Pi(P)=P\) and \(\gamma_P\) is undefined.</p>
+  <p>The variables are the control points \(P=(p_1,\dots,p_n)\in M^n\). A pinned set
+     \(\mathcal{P}\subseteq\{1,\dots,n\}\) is held fixed. Write \(t_i=\frac{i-1}{n-1}\) for the position
+     of swatch \(i\) along the palette.</p>
+  <p>In continuous mode \(\gamma_P:[0,1]\to M\) is the centripetal Catmull–Rom spline through \(P\),
+     sampled at \(K\) points \(\gamma_1,\dots,\gamma_K\), with length \(\ell_\gamma=\ell_g(\gamma_P)\).
+     The palette \(\Pi(P)=(\pi_1,\dots,\pi_n)\) is \(\gamma_P\) resampled at equal \(g\)-arc length. In
+     discrete mode \(\Pi(P)=P\) and there is no curve.</p>
+  <p>The probe set \(Q\) is where constraints and contrast are evaluated: the curve samples in
+     continuous mode, the palette in discrete mode.</p>
 
   <h4>3 · Feasible set</h4>
   \[ \mathcal{F}=G\cap\Lambda\cap X\cap H\cap\textstyle\bigcap_j B_j^{\,c}\cap\bigcap_m E_m \]
@@ -490,62 +497,88 @@
     <dt>\(B_j=\{p: d(p,c_j)&lt;r_j\}\)</dt><dd>keep-out balls, radius in perceived units</dd>
     <dt>\(E_m=\{p: n_m^{\!\top}\sigma(p)\le d_m\}\)</dt><dd>halfplanes, \(\sigma\) the chart\(\to\)space map</dd>
   </dl>
-  <p>A scalar violation, smooth where it matters and zero on \(\mathcal{F}\), with \([x]_+=\max(x,0)\):</p>
+  <p>The violation \(c(p)\) measures how far \(p\) lies outside \(\mathcal{F}\). It is zero on
+     \(\mathcal{F}\) and differentiable off it. Each \(\phi\) is a squared distance outside its set, so
+     each root is a length in chart units, and \(\Delta h\) is the angle to the nearest edge of the hue
+     arc. With \([x]_+=\max(x,0)\),</p>
   \[ c(p)=\sqrt{\phi_G(p)}+[L_--L]_++[L-L_+]_++[C_--C]_++[C-C_+]_+
-        +\tfrac{\pi}{180}\,C\,\Delta h(p)+\sqrt{\phi_B(p)}+\sqrt{\phi_E(p)} \]
+        +\frac{\pi}{180}\,C\,\Delta h(p)+\sqrt{\phi_B(p)}+\sqrt{\phi_E(p)} \]
 
   <h4>4 · Program</h4>
   \[ \min_{P}\ \sum_k w_k F_k(P)\qquad\text{s.t.}\qquad p_i\in\mathcal{F}\ \ \forall i,
      \qquad \gamma_P(t)\in\mathcal{F}\ \ \forall t\in[0,1] \]
-  <p>The node constraints are enforced exactly, by projection. The path constraint cannot be — the
-     samples are functions of \(P\), not variables — so it enters as an augmented Lagrangian.</p>
+  <p>We enforce the node constraints exactly, by projection. The path constraint cannot be enforced the
+     same way, because the curve samples are functions of \(P\) rather than variables. It enters as an
+     augmented Lagrangian instead.</p>
 
   <h4>5 · Objectives</h4>
-  <p>Written for the palette \(\Pi(P)\); \(V\) is the set of observers (identity, or identity together
-     with the three deficiencies), \(v\in V\) acting on \(M\).</p>
-  \[ F_{\text{rep}}=\sum_{v\in V}\ \sum_{i&lt;j}\ \frac{1}{\max\!\left(\tfrac12,\ d(v\pi_i,\,v\pi_j)\right)} \]
-  \[ F_{\text{arc}}=\ell_g(\gamma_P) \qquad
-     F_{\text{lramp}}=\frac1n\sum_i\big(L(\pi_i)-\hat L(\tfrac{i}{n-1})\big)^2 \qquad
-     F_{\text{chr}}=\frac1n\sum_i\big(C(\pi_i)-\tfrac{C_-+C_+}{2}\big)^2 \]
-  \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\tfrac{\pi}{180}\,C_i\,
-     \delta\!\left(h_i,\ \hat h(\tfrac{i}{n-1})\right)\right)^2,\qquad \delta=\text{signed shortest angle} \]
+  <p>Each term is written for the palette \(\Pi(P)\). The observer set \(V\) is the identity alone, or
+     the identity together with the three deficiencies; every \(v\in V\) acts on \(M\).</p>
+  \[ F_{\text{rep}}=\sum_{v\in V}\ \sum_{i&lt;j}\ \frac{1}{\max\left(\tfrac12,\ d(v\pi_i,\,v\pi_j)\right)} \]
+  <p>The floor of \(\tfrac12\) keeps coincident colors finite. Since \(d\) saturates, far pairs
+     contribute almost nothing and the step separates the confusable ones.</p>
+  \[ F_{\text{arc}}=\ell_\gamma \qquad
+     F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\hat L(t_i)\bigr)^2 \qquad
+     F_{\text{chr}}=\frac1n\sum_i\left(C(\pi_i)-\frac{C_-+C_+}{2}\right)^2 \]
+  \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
+     \delta\bigl(h_i,\ \hat h(t_i)\bigr)\right)^2 \]
+  <p>\(\hat L\) and \(\hat h\) are the profiles drawn in the plots, and \(\delta\) is the signed shortest
+     angle, so the seam at \(0^\circ\) costs nothing. Chroma weights the angle because a \(40^\circ\)
+     error matters at chroma 20 and not at chroma 2. Swatches below chroma 1 have no usable hue and are
+     skipped.</p>
   \[ F_{\text{sp}}=\sum_{i=1}^{m}\frac{\bar\ell}{\ell_i}-m,\qquad
-     \ell_i=\max\!\left(\tfrac{1}{20},\ \ell_g(p_i,p_{i+1})\right),\quad m=n-1 \]
-  <p>\(F_{\text{sp}}\) is the AM–HM ratio, zero iff the \(\ell_i\) are equal and unbounded as any closes.
-     It is scale invariant and so cannot see a uniform collapse; \(F_{\text{arc}}\) holds the scale.</p>
-  \[ F_{\text{pair}}=\binom{n}{2}^{\!-1}\sum_{i&lt;j}\left(d(\pi_i,\pi_j)
-     -f\!\left(\tfrac{|i-j|}{n-1}\,\ell_g(\gamma_P)\right)\right)^{2} \]
-  <p>The target is \(f\) of the arc a uniform traversal would cover, not something proportional to
-     \(|i-j|\): proportionality is the additive assumption, which \(f\) denies.</p>
-  \[ F_{\text{con}}=\sum_k\big[\kappa_{\min}-\kappa(\gamma_k,\beta)\big]_+^2,\qquad
-     F_{\text{lsep}}=\sum_{i&lt;j}\big[\Delta_L-|L_i-L_j|\big]_+^2,\quad
-     \Delta_L=\tfrac{L_+-L_-}{n-1} \]
-  <p>\(\kappa\) is the WCAG 2 contrast ratio against a ground \(\beta\). Both are floors: hinges, so they
-     stop once met rather than trading against the rest of the palette forever.</p>
+     \ell_i=\max\left(\tfrac{1}{20},\ \ell_g(p_i,p_{i+1})\right),\qquad
+     \bar\ell=\frac1m\sum_i\ell_i,\qquad m=n-1 \]
+  <p>\(F_{\text{sp}}\) is the AM–HM ratio of the segment lengths. It is zero exactly when the \(\ell_i\)
+     are equal, and grows without bound as any one closes. It is also scale invariant, so a uniform
+     collapse leaves it at zero; the scale comes from the pinned nodes, or from leaving
+     \(F_{\text{arc}}\) off.</p>
+  \[ F_{\text{pair}}=\binom{n}{2}^{-1}\sum_{i&lt;j}\bigl(d_I(\pi_i,\pi_j)-\tau_{ij}\bigr)^2,\qquad
+     \tau_{ij}=f\left(\frac{j-i}{n-1}\,\ell_I\right) \]
+  <p>\(\tau_{ij}\) is the difference a uniform traversal of the curve would produce between swatches
+     \(i\) and \(j\). It is \(f\) of the arc covered, not a multiple of \(j-i\). A multiple is what
+     additivity would give, and \(f\) is not additive. Both distances use the chart metric, where \(f\)
+     is calibrated.</p>
+  \[ F_{\text{con}}=\sum_{q\in Q}\bigl[\kappa_{\min}-\kappa(q,\beta)\bigr]_+^2,\qquad
+     F_{\text{lsep}}=\sum_{i&lt;j}\bigl[\Delta_L-|L_i-L_j|\bigr]_+^2,\qquad
+     \Delta_L=\frac{L_+-L_-}{n-1} \]
+  <p>\(\kappa\) is the WCAG 2 contrast ratio against a ground \(\beta\). Both terms are floors, written
+     as hinges, so each stops once its floor is met. \(\Delta_L\) is derived rather than typed: \(n\)
+     swatches can be at most \(\frac{L_+-L_-}{n-1}\) apart in lightness, so a larger floor would push
+     against a wall forever.</p>
 
   <h4>6 · Constraint handling</h4>
-  <p>Nodes: \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\) by alternating projection onto
-     \(G,\Lambda,X,H,E,B\), iterated until \(c(p_i)&lt;10^{-4}\) or twelve rounds. Not the metric
-     projection — \(G\) is concave in places and \(B^c\) never convex — but a feasible point near the
+  <p>Nodes are projected, \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\), by alternating projection onto
+     \(G,\Lambda,X,H,E,B\). The loop stops once the violation is below \(10^{-4}\), or after twelve
+     rounds. This is not the metric projection: \(G\) is concave in places and \(B^{\,c}\) is never
+     convex, so the nearest feasible point is not available. The loop returns a feasible point near the
      input, which is what a projected step needs.</p>
-  <p>Path: with \(c_k=c(\gamma_k)\) and multipliers \(\lambda\in\mathbb{R}_{\ge0}^{K}\),</p>
-  \[ F_{\text{feas}}=\sum_k \lambda_k c_k+\tfrac12 c_k^2,\qquad
-     \lambda_k\leftarrow\min\!\left(\lambda_{\max},\ \lambda_k+\rho\,c_k\right) \]
-  <p>updated every \(T=25\) inner iterations, with \(\rho\leftarrow2\rho\) whenever \(\max_k c_k\) fails
-     to fall below \(\tfrac34\) of its previous value. The multipliers are what let a finite \(\rho\)
-     reach feasibility; a pure penalty needs \(\rho\) large enough to flatten every other term.</p>
+  <p>Curve samples are not variables, so they cannot be projected. With \(c_k=c(\gamma_k)\) and
+     multipliers \(\lambda\in\mathbb{R}_{\ge0}^{K}\),</p>
+  \[ F_{\text{feas}}=\sum_k\left(\lambda_k c_k+\tfrac12 c_k^2\right),\qquad
+     \lambda_k\leftarrow\min(\lambda_{\max},\ \lambda_k+\rho\,c_k) \]
+  <p>The multipliers update every \(T=25\) inner iterations, and \(\rho\) doubles whenever
+     \(\max_k c_k\) fails to fall below \(\tfrac34\) of its previous value. The bounds are
+     \(\lambda_{\max}=10^4\) and \(\rho\le4096\). The multipliers absorb the violation that persists at
+     a given \(\rho\), which is how a finite \(\rho\) reaches feasibility. A plain penalty has only
+     \(\rho\) to escalate, and a \(\rho\) large enough to enforce the constraint also flattens every
+     other term.</p>
 
   <h4>7 · Descent</h4>
   <p>Gradients are central differences with \(h=\tfrac14\) over the \(3n\) coordinates, skipping
-     \(i\in\mathcal{P}\). Each term is normalized before weighting:</p>
+     \(i\in\mathcal{P}\). Each term is normalized to unit max before it is weighted.</p>
   \[ \hat G_k=\frac{\nabla F_k}{\lVert\nabla F_k\rVert_\infty},\qquad
      D=\sum_k w_k\,\rho^{\,[k=\text{feas}]}\,\hat G_k \]
-  <p>and Adam is run on \(D\) with \(\beta_1=0.9\), \(\beta_2=0.999\), \(\varepsilon=10^{-8}\), step
-     \(\eta=1.2\,r\). Note \(D\ne\nabla\Phi\) for any fixed \(\Phi\): the normalizer depends on \(P\).
-     The weights are relative pulls, not coefficients of a fixed objective, and no descent guarantee is
-     claimed. Restarts jolt the free nodes by \(5\) chart units when the score goes flat for
-     \(4T\) iterations, keeping the best feasible iterate under a lexicographic
-     \((\max_k c_k,\ \textstyle\sum_k w_k F_k)\) order.</p>
+  <p>Adam runs on \(D\) with \(\beta_1=0.9\), \(\beta_2=0.999\), \(\varepsilon=10^{-8}\), and step
+     \(\eta=1.2\,r\). The terms span four orders of magnitude, so an unnormalized sum would be the
+     largest term's gradient plus rounding noise. Normalizing first makes each \(w_k\) a relative pull:
+     weight 2 against weight 1 is twice the pull, whatever the two terms measure.</p>
+  <p>The cost is that \(D\ne\nabla\Phi\) for any fixed \(\Phi\), because the normalizer depends on
+     \(P\). We claim no descent guarantee.</p>
+  <p>Restarts are optional. On a stall, meaning no improvement of \(5\times10^{-4}\) for \(8T=200\)
+     iterations, every free coordinate takes uniform noise on \([-5,5]\) and the run continues. The best
+     iterate is kept under the lexicographic order \(\bigl(\max_k c_k,\ \sum_k w_k F_k\bigr)\), so a
+     feasible palette always beats an infeasible one.</p>
 </dialog>
 
 <script type="importmap">
