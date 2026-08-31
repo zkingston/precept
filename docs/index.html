@@ -644,7 +644,7 @@ reframe();                       // FRAME must exist before anything calls world
 S.slice = [...FRAME.mid];
 
 // ─── the color pipeline, shared by every shader below ─────────────────────
-const SPACE_ID = { oklab: 0, cielab: 1, cieluv: 2, ipt: 3, xyz: 4, srgb: 5 };
+const SPACE_ID = { oklab: 0, cielab: 1, cieluv: 2, ipt: 3, xyz: 4, srgb: 5, ictcp: 6, hsl: 7, cam02: 8 };
 const CVD_ID = { none: 0, protan: 1, deutan: 2, tritan: 3 };
 const m3 = (rows) => new T.Matrix3().set(...rows.flat());   // .set takes row-major
 
@@ -661,6 +661,12 @@ uniform float uScale;
 uniform vec2 uLB, uCB, uHue;
 uniform mat3 uLmsLab, uXyzLms, uLmsXyz, uLabLms;
 uniform mat3 uIptOppI, uIptLmsI, uGamut, uLinSrgb, uXyzSrgb, uCvdM;
+uniform mat3 uIcOppI, uIcLmsI, uCamBack;
+uniform vec4 uPq;                       // m1, m2, c1 and the pair c2, c3 packed below
+uniform vec2 uPq2;
+uniform float uIcK;
+uniform vec4 uCam;                      // Aw, Nbb, c*z, n
+uniform vec2 uCam2;                     // FL, Nc*Ncb
 
 const float D = 6.0 / 29.0;
 float labfi(float t) { return t > D ? t * t * t : 3.0 * D * D * (t - 4.0 / 29.0); }
@@ -689,6 +695,64 @@ vec3 spaceToXyz(vec3 c) {
     return uIptLmsI * l;
   }
   if (uSpace == 4) return c / 100.0;
+  if (uSpace == 6) {                                      // ICtCp: opponent, then inverse PQ
+    vec3 e = uIcOppI * (c / uIcK);
+    vec3 l;
+    for (int i = 0; i < 3; i++) {
+      float pv = pow(max(e[i], 0.0), 1.0 / uPq.y);
+      l[i] = pow(max(pv - uPq.z, 0.0) / (uPq2.x - uPq2.y * pv), 1.0 / uPq.x) * 100.0;
+    }
+    return uIcLmsI * l;
+  }
+  if (uSpace == 7) {                                      // HSL, ordered L S H
+    float L = c.x / 100.0, S = c.y / 100.0;
+    float hp = mod(mod(c.z, 360.0) + 360.0, 360.0) / 60.0;
+    float ch = (1.0 - abs(2.0 * L - 1.0)) * S;
+    float x = ch * (1.0 - abs(mod(hp, 2.0) - 1.0)), m = L - ch / 2.0;
+    vec3 t = hp < 1.0 ? vec3(ch, x, 0.0) : hp < 2.0 ? vec3(x, ch, 0.0) : hp < 3.0 ? vec3(0.0, ch, x)
+           : hp < 4.0 ? vec3(0.0, x, ch) : hp < 5.0 ? vec3(x, 0.0, ch) : vec3(ch, 0.0, x);
+    vec3 g2 = t + m;
+    return uXyzSrgb * vec3(dec(g2.r), dec(g2.g), dec(g2.b));
+  }
+  if (uSpace == 8) {                                      // CAM02-UCS
+    float Jp = c.x, ap = c.y, bp = c.z;
+    float J = Jp / (1.7 - 0.007 * Jp);
+    float Mp = length(vec2(ap, bp));
+    float M = (exp(0.0228 * Mp) - 1.0) / 0.0228;
+    float C = M / pow(uCam2.x, 0.25);
+    float hr = atan(bp, ap);
+    float et = 0.25 * (cos(hr + 2.0) + 3.8);
+    float t = J <= 0.0 ? 0.0 : pow(C / (sqrt(J / 100.0) * pow(1.64 - pow(0.29, uCam.w), 0.73)), 1.0 / 0.9);
+    float A = uCam.x * pow(J / 100.0, 1.0 / uCam.z);
+    float p2v = A / uCam.y + 0.305;
+    float aa = 0.0, bb = 0.0;
+    if (t != 0.0) {
+      float p1 = (50000.0 / 13.0) * uCam2.y * et / t;
+      if (abs(sin(hr)) >= abs(cos(hr))) {
+        float p4 = p1 / sin(hr);
+        bb = (p2v * (2.0 + 21.0 / 20.0) * (460.0 / 1403.0))
+           / (p4 + (2.0 + 21.0 / 20.0) * (220.0 / 1403.0) * (cos(hr) / sin(hr))
+              - (27.0 / 1403.0) + (21.0 / 20.0) * (6300.0 / 1403.0));
+        aa = bb * (cos(hr) / sin(hr));
+      } else {
+        float p5 = p1 / cos(hr);
+        aa = (p2v * (2.0 + 21.0 / 20.0) * (460.0 / 1403.0))
+           / (p5 + (2.0 + 21.0 / 20.0) * (220.0 / 1403.0)
+              - ((27.0 / 1403.0) - (21.0 / 20.0) * (6300.0 / 1403.0)) * (sin(hr) / cos(hr)));
+        bb = aa * (sin(hr) / cos(hr));
+      }
+    }
+    vec3 rgba = vec3(460.0 * p2v + 451.0 * aa + 288.0 * bb,
+                     460.0 * p2v - 891.0 * aa - 261.0 * bb,
+                     460.0 * p2v - 220.0 * aa - 6300.0 * bb) / 1403.0;
+    vec3 hp2;
+    for (int i = 0; i < 3; i++) {
+      float d = rgba[i] - 0.1, ad = abs(d);
+      float tt = (27.13 * ad) / max(400.0 - ad, 1e-6);
+      hp2[i] = sign(d) * (100.0 / uCam2.x) * pow(tt, 1.0 / 0.42);
+    }
+    return (uCamBack * hp2) / 100.0;
+  }
   vec3 g = c / 100.0;                                     // sRGB cube: decode, then to XYZ
   return uXyzSrgb * vec3(dec(g.x), dec(g.y), dec(g.z));
 }
@@ -796,6 +860,9 @@ const colorUniforms = () => ({
       uGamut: { value: new T.Matrix3() }, uLinSrgb: { value: new T.Matrix3() },
       uXyzSrgb: { value: new T.Matrix3() },
   uCvdM: { value: new T.Matrix3() },
+  uIcOppI: { value: new T.Matrix3() }, uIcLmsI: { value: new T.Matrix3() }, uCamBack: { value: new T.Matrix3() },
+  uPq: { value: new T.Vector4() }, uPq2: { value: new T.Vector2() }, uIcK: { value: 1 },
+  uCam: { value: new T.Vector4() }, uCam2: { value: new T.Vector2() },
 });
 
 /** every constant the shaders need, straight from the model */
@@ -811,6 +878,12 @@ function setColorUniforms(u) {
   u.uGamut.value.copy(m3(I.rgbFromXYZ(params.gamut)));
   u.uLinSrgb.value.copy(m3(I.rgbFromXYZ('srgb')));
   u.uXyzSrgb.value.copy(m3(I.xyzFromRGB('srgb')));
+  const ic = I.ICTCP, cam = I.CAM;
+  u.uIcOppI.value.copy(m3(ic.OPP_I)); u.uIcLmsI.value.copy(m3(ic.LMS_I)); u.uIcK.value = ic.K;
+  u.uPq.value.set(ic.PQ.m1, ic.PQ.m2, ic.PQ.c1, 0); u.uPq2.value.set(ic.PQ.c2, ic.PQ.c3);
+  u.uCamBack.value.copy(m3(cam.BACK));
+  u.uCam.value.set(cam.Aw, cam.Nbb, cam.c * cam.z, cam.n);
+  u.uCam2.value.set(cam.FL, cam.Nc * cam.Ncb);
   u.uLB.value.set(S.lo[0], S.hi[0]); u.uCB.value.set(S.lo[1], S.hi[1]);
   u.uHue.value.fromArray(S.hue);
   u.uHueAll.value = S.hue[0] === 0 && S.hue[1] === 360 ? 1 : 0;

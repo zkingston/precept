@@ -257,6 +257,8 @@ export const internals = {
   get CHART_WHITE() { return CHART_WHITE; },
   get IPT() { return { LMS: IPT_LMS, OPP: IPT_OPP, LMS_I: IPT_LMS_I, OPP_I: IPT_OPP_I, W: IPT_W }; },
   cvdMatrix,
+  get CAM() { return CAM; },
+  get ICTCP() { return { LMS: ICTCP_LMS, LMS_I: ICTCP_LMS_I, OPP: ICTCP_OPP, OPP_I: ICTCP_OPP_I, K: ICTCP_K, PQ }; },
   rgbFromXYZ: (g = params.gamut) => mats(g).from,
   xyzFromRGB: (g = params.gamut) => mats(g).to,
 };
@@ -300,6 +302,109 @@ const IPT_LMS_I = inv3(IPT_LMS), IPT_OPP_I = inv3(IPT_OPP);
 // this tool cannot afford to be: the axis every lightness question hangs on.
 const IPT_W = apply(IPT_LMS, CHART_WHITE);
 
+// ─── ICtCp (BT.2100) ─────────────────────────────────────────────────────────
+const ICTCP_LMS     = [[0.3592, 0.6976, -0.0358], [-0.1922, 1.1004, 0.0755], [0.0070, 0.0749, 0.8434]];
+const ICTCP_OPP     = [[0.5, 0.5, 0],
+  [1.61376953125, -3.323486328125, 1.709716796875],
+  [4.378173828125, -4.24560546875, -0.132568359375]];
+const ICTCP_LMS_I = inv3(ICTCP_LMS), ICTCP_OPP_I = inv3(ICTCP_OPP);
+// ST 2084. Exact rationals, so pq(0) = 0 and pq(1) = 1 hold to float precision.
+const PQ = { m1: 2610 / 16384, m2: (2523 / 4096) * 128, c1: 3424 / 4096, c2: (2413 / 4096) * 32, c3: (2392 / 4096) * 32 };
+const pq = (v        )         => {
+  const y = Math.max(0, v) ** PQ.m1;
+  return ((PQ.c1 + PQ.c2 * y) / (1 + PQ.c3 * y)) ** PQ.m2;
+};
+const pqi = (e        )         => {
+  const p = Math.max(0, e) ** (1 / PQ.m2);
+  return (Math.max(0, p - PQ.c1) / (PQ.c2 - PQ.c3 * p)) ** (1 / PQ.m1);
+};
+const ictcpRaw = (xyz      )       => apply(ICTCP_OPP, apply(ICTCP_LMS, xyz).map((v) => pq(v / 100))        );
+const ictcpRawI = (c      )       => apply(ICTCP_LMS_I, apply(ICTCP_OPP_I, c).map((v) => pqi(v) * 100)        );
+/** so I reads 100 at white, like the L of every other space here */
+const ICTCP_K = 100 / ictcpRaw(CHART_WHITE)[0];
+
+// ─── CIECAM02, average surround ──────────────────────────────────────────────
+// The viewing conditions the CAM02-UCS fit was made under, so they are the ones
+// that make its Euclidean distance mean what the paper says it means.
+const CAM = (() => {
+  const CAT02     = [[0.7328, 0.4296, -0.1624], [-0.7036, 1.6975, 0.0061], [0.0030, 0.0136, 0.9834]];
+  const HPE     = [[0.38971, 0.68898, -0.07868], [-0.22981, 1.18340, 0.04641], [0, 0, 1]];
+  const LA = 64 / Math.PI / 5, Yb = 20, F = 1, c = 0.69, Nc = 1;
+  const Yw = CHART_WHITE[1] * 100;
+  const n = Yb / Yw, z = 1.48 + Math.sqrt(n);
+  const Nbb = 0.725 * (1 / n) ** 0.2, Ncb = Nbb;
+  const k = 1 / (5 * LA + 1);
+  const FL = 0.2 * k ** 4 * (5 * LA) + 0.1 * (1 - k ** 4) ** 2 * (5 * LA) ** (1 / 3);
+  const rgbW = apply(CAT02, CHART_WHITE.map((v) => v * 100)        );
+  const D = Math.max(0, Math.min(1, F * (1 - (1 / 3.6) * Math.exp((-LA - 42) / 92))));
+  const Dr = rgbW.map((v) => D * (Yw / v) + 1 - D)        ;
+  const adapt = (xyz      )       => {
+    const r = apply(CAT02, xyz.map((v) => v * 100)        ).map((v, i) => v * Dr[i])        ;
+    return apply(HPE, apply(inv3(CAT02), r));
+  };
+  const nl = (v        ) => {
+    const t = ((FL * Math.abs(v)) / 100) ** 0.42;
+    return Math.sign(v) * ((400 * t) / (27.13 + t)) + 0.1;
+  };
+  const nli = (v        ) => {
+    const d = v - 0.1, t = (27.13 * Math.abs(d)) / (400 - Math.abs(d));
+    return Math.sign(d) * (100 / FL) * t ** (1 / 0.42);
+  };
+  const Aw = (2 * nl(apply(HPE, apply(inv3(CAT02), apply(CAT02, CHART_WHITE.map((v) => v * 100)        )
+    .map((v, i) => v * Dr[i])        ))[0]) + nl(apply(HPE, apply(inv3(CAT02),
+    apply(CAT02, CHART_WHITE.map((v) => v * 100)        ).map((v, i) => v * Dr[i])        ))[1]) / 20
+    + nl(apply(HPE, apply(inv3(CAT02), apply(CAT02, CHART_WHITE.map((v) => v * 100)        )
+      .map((v, i) => v * Dr[i])        ))[2]) / 20 - 0.305) * Nbb;
+  const D2 = (d      )     => [[d[0], 0, 0], [0, d[1], 0], [0, 0, d[2]]];
+  const FWD = mm(HPE, mm(inv3(CAT02), mm(D2(Dr), CAT02)));      // xyz*100 -> hpe cone space
+  const BACK = inv3(FWD);
+  return { CAT02, HPE, adapt, nl, nli, Aw, Nbb, Ncb, c, Nc, z, n, FL, Dr, Yw, FWD, BACK };
+})();
+
+function cam02Forward(xyz      )                                      {
+  const [ra, ga, ba] = CAM.adapt(xyz).map(CAM.nl);
+  const a = ra - (12 * ga) / 11 + ba / 11;
+  const b = (ra + ga - 2 * ba) / 9;
+  const h = (((Math.atan2(b, a) * 180) / Math.PI) + 360) % 360;
+  const A = (2 * ra + ga + ba / 20 - 0.305) * CAM.Nbb;
+  const J = 100 * (A / CAM.Aw) ** (CAM.c * CAM.z);
+  const hr = (h * Math.PI) / 180;
+  const et = 0.25 * (Math.cos(hr + 2) + 3.8);
+  const t = ((50000 / 13) * CAM.Nc * CAM.Ncb * et * Math.hypot(a, b)) / (ra + ga + (21 * ba) / 20);
+  const C = t ** 0.9 * Math.sqrt(J / 100) * (1.64 - 0.29 ** CAM.n) ** 0.73;
+  return { J, M: C * CAM.FL ** 0.25, h };
+}
+
+function cam02Inverse(J        , M        , h        )       {
+  const C = M / CAM.FL ** 0.25;
+  const hr = (h * Math.PI) / 180;
+  const et = 0.25 * (Math.cos(hr + 2) + 3.8);
+  const t = J <= 0 ? 0 : (C / (Math.sqrt(J / 100) * (1.64 - 0.29 ** CAM.n) ** 0.73)) ** (1 / 0.9);
+  const A = CAM.Aw * (J / 100) ** (1 / (CAM.c * CAM.z));
+  const p1 = t === 0 ? 0 : ((50000 / 13) * CAM.Nc * CAM.Ncb * et) / t;
+  const p2 = A / CAM.Nbb + 0.305;
+  let a = 0, b = 0;
+  if (t !== 0) {
+    if (Math.abs(Math.sin(hr)) >= Math.abs(Math.cos(hr))) {
+      const p4 = p1 / Math.sin(hr);
+      b = (p2 * (2 + 21 / 20) * (460 / 1403))
+        / (p4 + (2 + 21 / 20) * (220 / 1403) * (Math.cos(hr) / Math.sin(hr)) - (27 / 1403) + (21 / 20) * (6300 / 1403));
+      a = b * (Math.cos(hr) / Math.sin(hr));
+    } else {
+      const p5 = p1 / Math.cos(hr);
+      a = (p2 * (2 + 21 / 20) * (460 / 1403))
+        / (p5 + (2 + 21 / 20) * (220 / 1403) - ((27 / 1403) - (21 / 20) * (6300 / 1403)) * (Math.sin(hr) / Math.cos(hr)));
+      b = a * (Math.sin(hr) / Math.cos(hr));
+    }
+  }
+  const ra = (460 * p2 + 451 * a + 288 * b) / 1403;
+  const ga = (460 * p2 - 891 * a - 261 * b) / 1403;
+  const ba = (460 * p2 - 220 * a - 6300 * b) / 1403;
+  const hp = [ra, ga, ba].map(CAM.nli)        ;
+  const r = apply(CAM.CAT02, apply(inv3(CAM.HPE), hp)).map((v, i) => v / CAM.Dr[i])        ;
+  return apply(inv3(CAM.CAT02), r).map((v) => v / 100)        ;
+}
+
 const rgb01 = (xyz      )       => apply(mats('srgb').from, xyz).map(enc)        ;
 const unrgb01 = (c      )       => apply(mats('srgb').to, c.map(dec)        );
 
@@ -341,6 +446,70 @@ export const SPACES                        = {
     name: 'IPT (1998)', axes: ['I', 'P', 'T'],
     from: (xyz) => apply(IPT_OPP, apply(IPT_LMS, xyz).map((v, i) => spow(v / IPT_W[i], 0.43))        ).map((v) => v * 100)        ,
     to: (c) => apply(IPT_LMS_I, apply(IPT_OPP_I, c.map((v) => v / 100)        ).map((v, i) => spow(v, 1 / 0.43) * IPT_W[i])        ),
+  },
+
+  /**
+   * ICtCp (ITU-R BT.2100). LMS crosstalk, the ST 2084 PQ curve, then an
+   * opponent matrix. PQ is absolute, so the chart's Y = 1 is taken as 100 nits
+   * of the 10000 the curve spans; that choice only scales I, and the chart is
+   * relative colorimetry, which has no absolute level to offer.
+   */
+  ictcp: {
+    name: 'ICtCp (BT.2100)', axes: ['I', 'Ct', 'Cp'],
+    from: (xyz) => ictcpRaw(xyz).map((v) => v * ICTCP_K)        ,
+    to: (c) => ictcpRawI(c.map((v) => v / ICTCP_K)        ),
+  },
+
+  /**
+   * HSL over the sRGB cube, ordered L S H so that axis 0 is lightness like
+   * every other space here. Not perceptual, and H is cyclic AND undefined on
+   * the neutral axis, so it has no usable metric: spaceMetric falls back to the
+   * chart for it. Somewhere to look and to place things, not to measure with.
+   */
+  hsl: {
+    name: 'HSL (sRGB)', axes: ['L', 'S', 'H'],
+    from: (xyz) => {
+      const [r, g, b] = rgb01(xyz);
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, l = (mx + mn) / 2;
+      // black and white put the saturation denominator at zero, and white is not
+      // exactly (1,1,1) after a round trip, so d is float noise rather than 0 and
+      // the unguarded formula divides it by nothing. Both ends are achromatic.
+      const den = 1 - Math.abs(2 * l - 1);
+      const grey = d < 1e-9 || den < 1e-9;
+      const h = grey ? 0
+        : mx === r ? 60 * (((g - b) / d) % 6)
+        : mx === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+      return [l * 100, grey ? 0 : (d / den) * 100, (h + 360) % 360];
+    },
+    to: ([l, s, h]) => {
+      const S2 = s / 100, L2 = l / 100;
+      const c = (1 - Math.abs(2 * L2 - 1)) * S2, hp = (((h % 360) + 360) % 360) / 60;
+      const x = c * (1 - Math.abs((hp % 2) - 1)), m = L2 - c / 2;
+      const t       = hp < 1 ? [c, x, 0] : hp < 2 ? [x, c, 0] : hp < 3 ? [0, c, x]
+        : hp < 4 ? [0, x, c] : hp < 5 ? [x, 0, c] : [c, 0, x];
+      return unrgb01(t.map((v) => v + m)        );
+    },
+  },
+
+  /**
+   * CAM02-UCS (Luo, Cui & Li 2006) over CIECAM02, average surround, adapting
+   * luminance 64/pi/5 and a 20% background — the conditions the UCS was fitted
+   * under. J' a' b' rather than J C h, because the UCS is the form where a
+   * Euclidean distance means something.
+   */
+  cam02: {
+    name: 'CAM02-UCS (2006)', axes: ['J′', 'a′', 'b′'],
+    from: (xyz) => {
+      const { J, M, h } = cam02Forward(xyz);
+      const Mp = Math.log(1 + 0.0228 * M) / 0.0228, hr = (h * Math.PI) / 180;
+      return [(1.7 * J) / (1 + 0.007 * J), Mp * Math.cos(hr), Mp * Math.sin(hr)];
+    },
+    to: ([Jp, ap, bp]) => {
+      const J = Jp / (1.7 - 0.007 * Jp);
+      const Mp = Math.hypot(ap, bp);
+      const M = (Math.exp(0.0228 * Mp) - 1) / 0.0228;
+      return cam02Inverse(J, M, (Math.atan2(bp, ap) * 180) / Math.PI);
+    },
   },
 
   xyz: {
@@ -444,7 +613,10 @@ function neutralScale(k        )         {
 }
 
 export function spaceMetric(k = params.space)         {
-  if (k === 'oklab') return EUCLIDEAN;                 // the chart is its own space
+  // oklab IS the chart. HSL has no metric to pull back: its hue is undefined on
+  // the neutral axis and jumps by 180 degrees across it, so the Jacobian there
+  // is unbounded and no calibration rescues it. Measure both in the chart.
+  if (k === 'oklab' || k === 'hsl') return EUCLIDEAN;
   const w = neutralScale(k) ** 2, h = 0.05;
   return (p) => {
     const col         = [];
@@ -764,6 +936,12 @@ function demo() {
       const g2 = toSpace(fromHex('#7f7f7f'), k);
       ok(Math.hypot(g2[1], g2[2]) < 1e-6, `gray is achromatic in ${k}`);
       ok(close(toSpace(fromHex('#ffffff'), k)[0], 100, 1e-6), `white is 100 in ${k}`);
+      // white sits at the end of every lightness scale, which is exactly where a
+      // chroma denominator tends to vanish — check it as well as mid gray
+      const w2 = toSpace(fromHex('#ffffff'), k);
+      ok(Math.hypot(w2[1], w2[2]) < 1e-4, `white is achromatic in ${k}`);
+      const p2 = fromHex('#3b528b');
+      ok(delta(fromSpace(toSpace(p2, k), k), p2) < 1e-6, `${k} round-trips`);
     }
   }
   // the chart carries the geometry, so the DEFAULT metric never moves a distance
