@@ -2765,9 +2765,10 @@ function applyBg() {
     '--dim': at(38, Math.min(C * 0.25, 4)),
     '--hot': at(34, 32, 28),
     '--link': at(46, 26, C > 3 ? h + 170 : 250),
-    // a pressed toggle: the accent hue, but only far enough from the ground to
-    // read as filled, so the panel text still sits on it
-    '--sel': at(17, 13, C > 3 ? h + 170 : 250),
+    // A pressed toggle reads as filled by being a step away from the ground,
+    // not by being colored: an accent-hue fill was a slab of light blue in the
+    // middle of the panel. The accent stays on its border, which is enough.
+    '--sel': at(15, Math.min(C * 0.3, 4)),
     '--hud': at(50, Math.min(C * 0.25, 4)),
     '--line': light ? '#0000002e' : '#ffffff26',
     '--ctl': light ? '#00000012' : '#ffffff12',
