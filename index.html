@@ -649,15 +649,20 @@
 
   <h4>Variables</h4>
   <p>The variables are the control points \(P=(p_1,\dots,p_n)\in M^n\). The points indexed by
-     \(\mathcal{P}\subseteq\{1,\dots,n\}\) are held fixed. Write \(t_i=(i-1)/(n-1)\) for the position
-     of swatch \(i\) along the palette.</p>
-  <p>In continuous mode \(\gamma_P:[0,1]\to M\) is the <a href="https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline" target="_blank" rel="noopener">centripetal
-     Catmull–Rom spline</a> through \(P\),
-     sampled at \(K\) points \(\gamma_1,\dots,\gamma_K\), with length \(\ell_\gamma=\ell_g(\gamma_P)\).
-     The palette \(\Pi(P)=(\pi_1,\dots,\pi_n)\) is \(\gamma_P\) resampled at equal \(g\)-arc length. In
-     discrete mode \(\Pi(P)=P\) and there is no curve.</p>
-  <p>The probe set \(Q\) is where constraints and contrast are evaluated: the curve samples in
-     continuous mode, the palette in discrete mode.</p>
+     \(\mathcal{P}\subseteq\{1,\dots,n\}\) are held fixed.</p>
+  <p>The points are partitioned into runs. Every point has at most two neighbours, so a run is a path
+     or a cycle, and \(P\) is ordered with each run consecutive. Write \(\mathcal{R}\) for the runs,
+     \(|r|\) for the number of points in run \(r\), and \(\mathcal{C}\subseteq\mathcal{R}\) for the
+     closed ones.</p>
+  <p>In continuous mode each run has its own spline \(\gamma_r\), the
+     <a href="https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline" target="_blank" rel="noopener">centripetal
+     Catmull–Rom spline</a> through its points, closed when the run is, with length
+     \(\ell_r=\ell_g(\gamma_r)\). Run \(r\) contributes \(|r|\) swatches, resampled from
+     \(\gamma_r\) at equal \(g\)-arc length, so the palette \(\Pi(P)=(\pi_1,\dots,\pi_n)\) has one
+     swatch per control point. In discrete mode \(\Pi(P)=P\) and there are no curves.</p>
+  <p>Write \(t_i=(i-1)/(n-1)\) for the position of swatch \(i\) along the palette, and \(Q\) for the
+     probe set where constraints and contrast are evaluated: every curve sample in continuous mode,
+     the palette in discrete mode.</p>
 
   <h4>Feasible set</h4>
   \[ \mathcal{F}=G\cap\Lambda\cap X\cap H\cap\textstyle\bigcap_j B_j^{\,c}\cap\bigcap_m E_m \]
@@ -683,7 +688,7 @@
 
   <h4>Program</h4>
   \[ \min_{P}\ \sum_k w_k F_k(P)\qquad\text{s.t.}\qquad p_i\in\mathcal{F}\ \ \forall i,
-     \qquad \gamma_P(t)\in\mathcal{F}\ \ \forall t\in[0,1] \]
+     \qquad \gamma_r(t)\in\mathcal{F}\ \ \forall r\in\mathcal{R},\ \forall t \]
   <p>We enforce the constraint on the control points exactly, by projection. The constraint along the
      curve cannot be enforced the same way, because the curve samples are functions of \(P\) rather
      than variables. It enters as an
@@ -702,8 +707,8 @@
          contribute almost nothing and the near pairs drive the step. The panel lists it
          twice: once for the observer on screen, once for all four observers together.</p></li>
 
-    <li><b>arc length</b> <span class="d">the curve's total length</span>
-      \[ F_{\text{arc}}=\ell_\gamma \]</li>
+    <li><b>arc length</b> <span class="d">every run's length, added up</span>
+      \[ F_{\text{arc}}=\sum_{r\in\mathcal{R}}\ell_r \]</li>
 
     <li><b>lightness profile</b> <span class="d">distance from the curve drawn in the plot</span>
       \[ F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \]</li>
@@ -721,20 +726,47 @@
 
     <li><b>control point spacing</b> <span class="d">keeps consecutive control points evenly spaced</span>
       \[ F_{\text{sp}}=\sum_{i=1}^{m}\frac{\bar\ell}{\ell_i}-m,\qquad
-         \ell_i=\max\left(\tfrac{1}{20},\ \ell_g(p_i,p_{i+1})\right),\qquad
-         \bar\ell=\frac1m\sum_i\ell_i,\qquad m=n-1 \]
+         \ell_i=\max\left(\tfrac{1}{20},\ \ell_g(\cdot,\cdot)\right),\qquad
+         \bar\ell=\frac1m\sum_i\ell_i \]
+      <p>The \(\ell_i\) are the gaps between neighbouring control points, over every run. \(m\) is how many
+         there are. A closed run has one more gap than it has points, the one that wraps.
+         The space across a break is not a gap and is not counted.</p>
       <p>The spacing term is the ratio of the arithmetic mean of the \(\ell_i\) to their harmonic mean, less one.
          It is zero exactly when the \(\ell_i\) are equal, and grows without bound as any one of them shrinks toward zero.
          It is also scale invariant, so shrinking every segment by the same factor leaves it at zero.
          The scale comes from the pinned control points, or from leaving <b>arc length</b> off.</p></li>
 
     <li><b>pairwise uniformity</b> <span class="d">equal perceived steps, corrected for saturation</span>
-      \[ F_{\text{pair}}=\binom{n}{2}^{-1}\sum_{i&lt;j}\bigl(d_I(\pi_i,\pi_j)-\tau_{ij}\bigr)^2,\qquad
-         \tau_{ij}=f\left(\frac{j-i}{n-1}\,\ell_I\right) \]
-      <p>\(\tau_{ij}\) is the difference a uniform traversal of the curve produces between swatches
-         \(i\) and \(j\): \(f\) applied to the arc covered. In an additive space the target would be
-         proportional to \(j-i\) instead. Both distances are taken with \(g=I\), where \(f\) is
-         calibrated.</p></li>
+      \[ F_{\text{pair}}=\frac{1}{|\mathcal{K}|}\sum_{(i,j)\in\mathcal{K}}
+         \bigl(d_I(\pi_i,\pi_j)-\tau_{ij}\bigr)^2,\qquad
+         \tau_{ij}=f\left(\frac{s_{ij}}{S_r}\,\ell_r\right) \]
+      <p>\(\mathcal{K}\) is the pairs that fall in the same run. Across a break there is no
+         traversal, so the target this term measures a residual against does not exist there.</p>
+      <p>Along an open run the two swatches are \(s_{ij}=j-i\) steps apart out of \(S_r=|r|-1\).
+         Around a closed one the walk goes the short way, \(s_{ij}=\min(j-i,\,|r|-(j-i))\) out of
+         \(S_r=|r|\): an index difference is the distance along an open ramp, and a loop has no such
+         thing. \(\tau_{ij}\) is \(f\) of the arc a uniform traversal covers in that many steps. In
+         an additive space the target would be proportional to the step count instead. Both distances
+         are taken with \(g=I\), where \(f\) is calibrated.</p></li>
+
+    <li><b>diverging symmetry</b> <span class="d">the two arms mirror each other in lightness</span>
+      \[ F_{\text{sym}}=\frac{1}{|\mathcal{S}|}\sum_{(i,j)\in\mathcal{S}}\bigl(L(\pi_i)-L(\pi_j)\bigr)^2 \]
+      <p>\(\mathcal{S}\) pairs swatch \(k\) of an open run with swatch \(|r|-1-k\) of the same one.
+         A diverging map depends on that mirroring: equal magnitudes either side of the center read
+         as equal.</p>
+      <p>In lightness only. The arms being different hues is the point of the map, and a term that
+         pulled those together would undo it. A closed run has no middle to be symmetric about, so it
+         is skipped. Viridis scores 1862 against vik at 19.5 and roma at 3.0.</p></li>
+
+    <li><b>hue winding</b> <span class="d">a loop goes round once</span>
+      \[ F_{\text{wind}}=\frac{1}{|\mathcal{C}|}\sum_{r\in\mathcal{C}}
+         \left(\frac{|\Theta_r|-360}{360}\right)^2,\qquad
+         \Theta_r=\sum_k \delta\bigl(h_{k+1},\,h_k\bigr) \]
+      <p>\(\Theta_r\) is the signed hue turn around a closed run. The sum runs over its steps and
+         includes the wrap, and skips swatches below chroma 1, where hue is not a real quantity.</p>
+      <p>A loop whose hue runs out and comes back closes as neatly as one that goes round, and is a
+         diverging map joined end to end. The turn tells them apart. Of Crameri's two cyclic maps,
+         romaO turns \(360^\circ\) and vikO turns \(0^\circ\).</p></li>
 
     <li><b>contrast floor</b> <span class="d">nothing unreadable against a chosen background</span>
       \[ F_{\text{con}}=\sum_{q\in Q}\bigl[\kappa_{\min}-\kappa(q,\beta)\bigr]_+^2 \]
@@ -777,7 +809,9 @@
      descent guarantee.</p>
   <p>Restarts are optional. A stall is no improvement of \(5\times10^{-4}\) for \(8T=200\)
      iterations. On a stall, every free coordinate takes uniform noise on \([-5,5]\) and the run
-     continues. The best iterate is kept under the lexicographic order
+     continues. The stream is seeded and reset when a run starts, so a scene optimizes to the same
+     palette twice and a link reproduces the one that made it. The best iterate is kept under the
+     lexicographic order
      \(\bigl(\max_k c_k,\ \sum_k w_k F_k\bigr)\), so a feasible palette always beats an
      infeasible one.</p>
 </dialog>
