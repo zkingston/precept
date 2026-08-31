@@ -58,6 +58,14 @@
   #hudtop { display:flex; align-items:center; gap:9px; }
   #tool { display:flex; flex-direction:column; gap:4px; }
   #tip { position:absolute; right:14px; top:12px; }
+  /* a grid cell rather than a floating card: layout() sizes it, so the canvas
+     fills what is left after the buttons */
+  #tip.cell { display:flex; flex-direction:column; gap:2px; padding:2px; }
+  #tip.cell #tipcanvas { width:100%; height:auto; flex:1; min-height:0; }
+  #tip.cell #tipbtns { margin-top:0; gap:2px; }
+  #tip.cell #tipbtns button { font-size:9px; padding:1px 0; }
+  #dock #tip { position:static; }
+  #dock #tipcanvas { width:100%; height:auto; }
   #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
   #tipbtns { display:flex; gap:4px; margin-top:6px; }
   #tipbtns button { flex:1; font-size:10px; padding:2px 0; }
@@ -194,9 +202,7 @@
      side, and the tools rise to the top now that nothing sits above them. */
   @media (max-width: 1280px), (max-height: 719px) {
     #dock { display:flex; flex-direction:column; gap:11px; }
-    #tip, #lplot { position:static; }
-    #tip { padding:0; background:none; border:0; }
-    #tipcanvas { width:100%; height:auto; }
+    #lplot { position:static; }
     #lplot { height:auto; flex-direction:column; gap:9px; }
     .pplot { flex:none; height:84px; }          /* flex:1 would beat the height */
     #hud { top:12px; }
@@ -215,10 +221,6 @@
        position must come BACK: the compact tier above sets it static to dock,
        and narrow is inside compact, so without this the inline left/top that
        layout() writes are ignored and it lays out in flow over the 3D view. */
-    #tip { position:absolute; display:flex; flex-direction:column; gap:2px; }
-    #tipcanvas { width:100%; height:auto; flex:1; min-height:0; }
-    #tipbtns { margin-top:0; gap:2px; }
-    #tipbtns button { font-size:9px; padding:1px 0; }
     #toolnote { display:none; }
     #lplot { position:static; height:auto; flex-direction:column; gap:8px; }
     #bar { top:52px; right:10px; min-height:80px; }
@@ -1258,12 +1260,33 @@ function layout() {
   const w = Math.max(1, main.clientWidth), h = Math.max(1, main.clientHeight);
   renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
   renderer.setSize(w, h, false);
-  // 3|1: the three cuts stacked in a column, 3D taking the rest. QUADS is
-  // already ordered with the ortho views first, so index 3 is the big one.
-  let RECTS;
-  if (NARROW.matches) {
-    // 1-over-3: the cuts are a strip under the 3D view. Stacking them in a
-    // column here would leave each one a letterbox a few pixels tall.
+  /**
+   * Which of three arrangements the canvas can hold, by its own aspect rather
+   * than by a media query — the panel's position changes the canvas shape as
+   * much as the window does, so 918x874 and 730x874 want different splits even
+   * though neither is a phone.
+   *
+   *   columns  the classic 3|1, three cuts stacked beside a tall 3D view
+   *   squares  two squares: a 2x2 of the cuts and the preview, and the 3D view
+   *   row      3D above, the four cells in a strip beneath it
+   *
+   * QUADS is ordered with the ortho views first, so index 3 is the big one.
+   */
+  const A = w / h;
+  const mode = A >= 1.6 ? 'squares' : A <= 1.0 ? 'row' : 'columns';
+  let RECTS, cell = null;
+  if (mode === 'squares') {
+    // near aspect 2 two squares fill the canvas; the 2x2 keeps every cut and
+    // the preview square, which a strip cannot do once the canvas gets tall
+    const side = Math.min(Math.floor(w / 2), h), c = Math.floor(side / 2);
+    RECTS = [
+      { x: 0, y: 0, w: c, h: c },
+      { x: c, y: 0, w: side - c, h: c },
+      { x: 0, y: c, w: c, h: side - c },
+      { x: side, y: 0, w: w - side, h },
+    ];
+    cell = { x: c, y: c, w: side - c, h: side - c };
+  } else if (mode === 'row') {
     // square-ish cells: a quarter of the width is the natural size, and a taller
     // row only letterboxes the content it holds. Capped so the strip cannot eat
     // the 3D view on a short canvas.
@@ -1274,10 +1297,7 @@ function layout() {
       { x: 2 * colW, y: h - rowH, w: colW, h: rowH },
       { x: 0, y: 0, w, h: h - rowH },
     ];
-    // the strip is four across: three cuts and the test image
-    Object.assign($('tip').style, { left: `${3 * colW}px`, top: `${h - rowH}px`,
-      width: `${w - 3 * colW}px`, height: `${rowH}px` });
-    $('bar').style.bottom = `${rowH + 12}px`;    // a percentage cannot track a square strip
+    cell = { x: 3 * colW, y: h - rowH, w: w - 3 * colW, h: rowH };
   } else {
     const colW = Math.min(440, Math.max(200, Math.round(w * 0.3)));
     const rowH = Math.floor(h / 3);
@@ -1287,6 +1307,26 @@ function layout() {
       { x: 0, y: 2 * rowH, w: colW, h: h - 2 * rowH },
       { x: colW, y: 0, w: w - colW, h },
     ];
+  }
+  /**
+   * The preview is the fourth cell when the split has one for it, and lives in
+   * the side panel only when it has nowhere on the canvas to be. layout() owns
+   * that call rather than reflow(), because it is the one that computed the
+   * split — reflow was deciding from main's size before the grid had settled,
+   * and on a phone that parked the preview in the panel while layout was
+   * holding a cell open for it.
+   */
+  const tip = $('tip');
+  const home = cell || !DOCK.matches ? main : $('dock');
+  if (tip.parentElement !== home) home.appendChild(tip);
+  tip.classList.toggle('cell', !!cell);
+  if (cell) {
+    Object.assign(tip.style, { left: `${cell.x}px`, top: `${cell.y}px`, right: 'auto',
+      width: `${cell.w}px`, height: `${cell.h}px` });
+    $('bar').style.bottom = mode === 'row' ? `${cell.h + 12}px` : '';
+  } else {
+    tip.removeAttribute('style');
+    $('bar').style.bottom = '';
   }
   QUADS.forEach((q, i) => {
     q.rect = RECTS[i];
@@ -1304,10 +1344,7 @@ function layout() {
   });
   $('hud').style.left = `${RECTS[3].x + 12}px`;
   // only while it is an overlay; docked in the panel it is laid out by flow
-  if (!NARROW.matches) {
-    if (!DOCK.matches) lplotEl.style.left = RECTS[3].x + 14 + 'px';
-    $('tip').removeAttribute('style'); $('bar').style.bottom = '';
-  }
+  if (!DOCK.matches) lplotEl.style.left = RECTS[3].x + 14 + 'px';
   layoutPlot();
 }
 
@@ -3555,11 +3592,8 @@ loadFromHash();
 function reflow() {
   // the profiles dock whenever the overlays are cramped; the preview does too,
   // except on a phone, where it has a better home as the fourth cut cell
-  const homes = [[$('tip'), DOCK.matches && !NARROW.matches], [lplotEl, DOCK.matches]];
-  for (const [el, docked] of homes) {
-    const to = docked ? $('dock') : main;
-    if (el.parentElement !== to) to.appendChild(el);
-  }
+  const to = DOCK.matches ? $('dock') : main;   // layout() places the preview
+  if (lplotEl.parentElement !== to) to.appendChild(lplotEl);
   layout();
   sidebar();                                 // both canvases were just resized
 }
