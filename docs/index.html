@@ -160,7 +160,7 @@
   #metrics input.w:disabled { opacity:.3; }
   #metrics td.btns { width:52px; text-align:right; white-space:nowrap; padding-left:6px; }
   #metrics td.btns button { padding:0 5px; font:11px/1.5 ui-monospace,monospace; margin-left:3px; }
-  code { color:#9fd; }
+  code { color:var(--link); }
   .note { color:var(--dim); font-size:11px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
@@ -452,7 +452,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty,
-  minSeparation, obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, gamutFromICC, internals,
+  obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, gamutFromICC, internals,
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
 } from './color-space.js';
 
@@ -1412,22 +1412,16 @@ function sidebar() {
   }
 
   const rows = [];
-  if (pal.length >= 2) {
-    const worst = minSeparation(pal, M(), criteria());
-    rows.push([`min Δ · ${observer()}`, minSeparation(pal, M(), [primary()]).toFixed(1), false, null,
-      'Closest pair.'],
-      ['min Δ · worst', worst.toFixed(1), worst < 8, null,
-      'Closest pair over every observer.']);
-  }
   if (S.mode === 'continuous' && S.pts.length >= 2) {
-    const c = curve(), bad = c.filter((p) => !inGamut(p)).length;
+    const c = curve();
+    // one count, not two: the gamut is part of the feasible set, so an
+    // out-of-gamut sample was always also an off-set one and the second row
+    // only ever repeated the first with a longer reach
+    const bad = violations(c).filter((x) => x > 1e-4).length;
     rows.push(['perceived end-to-end', perceive(arcLength(c, M())).toFixed(1), false, null,
       'Arc length after diminishing returns.'],
-      ['out of gamut', `${bad}/${c.length}`, bad > 0, null,
-      'Curve samples outside the gamut.']);
-    const off = violations(c).filter((x) => x > 1e-4).length;
-    rows.push(['curve off-set', `${off}/${c.length}`, off > 0, null,
-      'Curve samples outside the feasible set.']);
+      ['invalid samples', `${bad}/${c.length}`, bad > 0, null,
+      'Curve samples outside the gamut, the bounds or a keep-out.']);
     /**
      * Neighbor differences summed, over the true end-to-end one. This is a
      * reading about the SPACE, not about the palette: it tracks arc length and
