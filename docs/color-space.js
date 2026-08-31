@@ -551,6 +551,21 @@ export const SPACES                        = {
     },
   },
 
+  /**
+   * Oklch: Oklab in polar coordinates, the form CSS Color 4 writes. Same points
+   * and same lightness, but chroma and hue are read off directly.
+   *
+   * Hue is kept in [0, 360) rather than signed, so the box a gamut occupies is
+   * the whole hue range for anything that encircles the neutral axis. The two
+   * costs of a polar chart are real and both show up here: h is undefined on
+   * the neutral axis, and the wrap at 0 is a coordinate seam, not a boundary.
+   */
+  oklch: {
+    name: 'Oklch (polar)', axes: ['L', 'C', 'h'],
+    from: (xyz) => { const [L, C, h] = toLCh(fromXYZ(xyz)); return [L, C, h < 0 ? h + 360 : h]; },
+    to: (c) => toXYZ(fromLCh(c)),
+  },
+
   xyz: {
     name: 'CIE XYZ (1931)', axes: ['X', 'Y', 'Z'],
     from: (xyz) => xyz.map((v) => v * 100)        ,
@@ -652,7 +667,17 @@ function neutralScale(k        )         {
 }
 
 export function spaceMetric(k = params.space)         {
-  if (k === 'oklab') return EUCLIDEAN;                 // the chart is its own space
+  // Oklab is the chart, and Oklch is the chart in polar coordinates: same
+  // points, same distances, so both take the chart's own metric.
+  //
+  // Deriving one from the Jacobian would be wrong AND unusable. Wrong because
+  // a change of coordinates is not a change of perceptual model, and the two
+  // spaces agree on every distance by construction. Unusable because h is an
+  // angle: the central differences below straddle the seam at 0 and read a
+  // derivative of 360/2h, and on the neutral axis, where h is undefined, they
+  // read +-90 degrees for a step of 0.05. Measured, that puts the gray axis at
+  // 594 units instead of the 100 every other space is calibrated to.
+  if (k === 'oklab' || k === 'oklch') return EUCLIDEAN;
   const w = neutralScale(k) ** 2, h = 0.05;
   return (p) => {
     const col         = [];
@@ -991,6 +1016,13 @@ function demo() {
     ok(close(arcLength(axis, g2), 100, 0.5), `${k} metric is neutral-calibrated`);
     const m = g2([50, 0, 0]);
     ok(quad(m, [1, 2, -3]) > 0 && close(m[0][1], m[1][0], 1e-9), `${k} metric is symmetric positive`);
+  }
+  // Hue is a coordinate in Oklch, so it has to stay inside one turn: spaceExtent
+  // boxes it and the shell's seam trim compares spans against 180, and both read
+  // a negative angle as the far side of the wheel.
+  for (const hex of ['#ff0000', '#00ff00', '#0000ff', '#ffffff', '#000000', '#7f5a3c']) {
+    const h = toSpace(fromHex(hex), 'oklch')[2];
+    ok(h >= 0 && h < 360, `oklch hue in [0,360) for ${hex}, got ${h}`);
   }
   ok(spaceMetric('oklab') === EUCLIDEAN, 'the chart is its own space');
   params.space = 'oklab';
