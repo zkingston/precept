@@ -55,7 +55,6 @@
   /* tools live over the viewport, where the things they make are */
   /* one HUD column down the 3D view's left edge; layout() supplies the left */
   #hud { position:absolute; top:12px; display:flex; flex-direction:column; gap:5px; align-items:flex-start; }
-  #hudtop { display:flex; align-items:center; gap:9px; }
   #tool { display:flex; flex-direction:column; gap:4px; }
   #tip { position:absolute; right:14px; top:12px; }
   /* a grid cell rather than a floating card: layout() sizes it, so the canvas
@@ -96,8 +95,6 @@
   .phead button { padding:1px 7px; font:10px ui-monospace,monospace; background:#26262bcc;
     color:var(--hudfg); border:1px solid #32323a; border-radius:3px; cursor:pointer; }
   .pcanvas { flex:1; min-height:0; width:100%; display:block; cursor:ns-resize; touch-action:none; }
-  #toolnote { white-space:nowrap; text-align:left;
-    font:11px/1.4 ui-sans-serif,system-ui,sans-serif; color:var(--hud); pointer-events:none; }
   #hex { flex:1; min-width:0; font:12px ui-monospace,monospace; text-transform:lowercase; }
   #selswatch { flex:0 0 auto; width:40px; height:26px; border-radius:4px; border:1px solid var(--line); }
   /* monospace so 0 and O are not a guess, but otherwise the panel's own text */
@@ -221,7 +218,6 @@
        position must come BACK: the compact tier above sets it static to dock,
        and narrow is inside compact, so without this the inline left/top that
        layout() writes are ignored and it lays out in flow over the 3D view. */
-    #toolnote { display:none; }
     #lplot { position:static; height:auto; flex-direction:column; gap:8px; }
     #bar { top:52px; right:10px; min-height:80px; }
     /* a 125px cut panel cannot spare 30px for a slider, and there is no wheel
@@ -254,10 +250,7 @@
     </div>
     <div id="ctxmenu" hidden></div>
     <div id="hud">
-      <div id="hudtop">
-        <button id="aboutbtn" title="about precept">?</button>
-        <div id="toolnote"></div>
-      </div>
+      <button id="aboutbtn" title="what this is and how to drive it">?</button>
       <div id="tool">
         <button data-v="edit" title="Points"><svg viewBox="0 0 24 24">
           <polyline points="4,18 10,8 16,14 20,5"/><circle cx="4" cy="18" r="2.1"/>
@@ -407,7 +400,7 @@
 
   <h4>Getting around</h4>
   <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view it
-     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) for a menu to pin a node or delete it; a pinned node is held still by the solver. The tools switch between nodes, keep-out spheres and halfplanes. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette. Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.</p>
+     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) for a menu to pin a node or delete it; a pinned node is held still by the solver. The tools switch between nodes, keep-out spheres and halfplanes: a sphere is placed by double-clicking a cut panel and resized by dragging the small handle beside it, and a halfplane is cut the same way, then slid by its center or turned by its tip. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette. Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.</p>
 
   <h4>Motivation (personal)</h4>
   <p>Color palettes have been on my mind for quite some time as someone who creates plots, charts,
@@ -1486,9 +1479,6 @@ function sidebar() {
     const o = S.obs[s.i];
     $('selinfo').innerHTML = `sphere ${s.i} · r ${o.r.toFixed(1)} perceived, ${unperceive(o.r).toFixed(1)} in chart units`;
   }
-  $('toolnote').textContent = { edit: 'double-click to add · drag to move · right-click to pin or delete',
-    obstacle: 'double-click a slice to place · drag the handle to resize',
-    plane: 'double-click a slice to cut · drag the center or the tip' }[S.tool];
 
   paintPlotButtons(); drawPlots(); drawWheel();
   drawTest();
