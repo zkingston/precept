@@ -492,7 +492,7 @@
 
   <h4>Getting around</h4>
   <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view it
-     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) for a menu to pin a node or delete it; a pinned node is held still by the solver. The tools switch between nodes, keep-out spheres and halfplanes: a sphere is placed by double-clicking a cut panel and resized by dragging the small handle beside it, and a halfplane is cut the same way, then slid by its center or turned by its tip. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette. Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.</p>
+     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) for a menu to pin a node or delete it; a pinned node is held still by the solver. Ctrl-click two nodes to mark them, then connect or disconnect them from that same menu: disconnecting splits the ramp into separate runs, and connecting the two ends of one run closes it into a loop, which is how a cyclic map that sweeps the whole hue circle is built. The tools switch between nodes, keep-out spheres and halfplanes: a sphere is placed by double-clicking a cut panel and resized by dragging the small handle beside it, and a halfplane is cut the same way, then slid by its center or turned by its tip. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette. Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.</p>
 
   <h4>Motivation (personal)</h4>
   <p>Color palettes have been on my mind for quite some time as someone who creates plots, charts,
@@ -739,6 +739,9 @@ const S = {
   mode: 'continuous', tool: 'edit', cvd: 'none', sev: 1, gray: false,
   shell: 0.8, sliceOp: 0.8, rad: 12, rate: 0.3,
   pin: [],                                       // parallel to pts: held still by the solver
+  cut: [],                                       // cut[i]: no edge from pts[i] to pts[i+1]
+  loop: [],                                      // loop[c]: run c closes back on itself
+  marks: [],                                     // ctrl-clicked nodes, for linking
   bg: '#f0ead6', lock: true, planes3d: false,
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection color format
   restart: false,                                // kick the solver out of stalls
@@ -840,16 +843,27 @@ const PER_SPAN = 24;                             // spline samples per control i
  */
 function addPoint(p) {
   const d3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-  const at = (i) => { S.pin.splice(i, 0, false); return i; };          // pins move with points
+  // pins and breaks both move with the points: a new node inherits neither
+  const at = (i) => { S.pin.splice(i, 0, false); S.cut.splice(i, 0, false); return i; };
   if (S.mode !== 'continuous' || S.pts.length < 2) return at(S.pts.push(p) - 1);
 
-  const c = curve();
-  let best = 0, near = Infinity;
-  c.forEach((q, i) => { const d = d3(p, q); if (d < near) { near = d; best = i; } });
-  if (near <= 10) {                              // chart units: about a comfortable ΔE
-    const k = Math.min(S.pts.length - 1, Math.floor(best / PER_SPAN) + 1);
-    S.pts.splice(k, 0, p);
-    return at(k);
+  // the nearest place on any run, not on a concatenation of them: the index of
+  // a sample only names a span within the run it came from
+  let best = null;
+  runs().forEach((r) => {
+    if (r.nodes.length < 2) return;
+    curveOf(r.nodes.map((i) => S.pts[i]), r.closed).forEach((q, j) => {
+      const d = d3(p, q);
+      if (!best || d < best.d) best = { d, j, r };
+    });
+  });
+  if (best && best.d <= 10) {                    // chart units: about a comfortable ΔE
+    const { r, j } = best, m = r.nodes.length;
+    // spans are PER_SPAN samples each, and span s runs from node s to node s+1,
+    // so the new point goes just after node s
+    const idx = r.nodes[Math.min(m - 1, Math.floor(j / PER_SPAN))] + 1;
+    S.pts.splice(idx, 0, p);
+    return at(idx);
   }
   if (d3(p, S.pts[0]) < d3(p, S.pts[S.pts.length - 1])) { S.pts.unshift(p); return at(0); }
   return at(S.pts.push(p) - 1);
@@ -941,10 +955,13 @@ const M = () => spaceMetric();
 
 // Interpolated in the space you are looking at, so a curve that reads straight
 // in the sRGB panel IS straight there. Control points still live in the chart.
-const curve = () => (S.pts.length >= 2 ? spline(S.pts.map((p) => toSpace(p)), PER_SPAN).map((c) => fromSpace(c)) : S.pts);
+/** every run's trajectory, in order */
+const curves = () => runs().map((r) => curveOf(r.nodes.map((i) => S.pts[i]), r.closed));
+/** all of them end to end, for callers that want the colors and not the order */
+const curve = () => curves().flat();
 /** One swatch per control point: the count is a consequence of the trajectory,
  *  not a separate dial that could disagree with it. */
-const palette = () => (S.mode === 'discrete' || S.pts.length < 2 ? S.pts : resample(curve(), S.pts.length, M()));
+const palette = () => (S.mode === 'discrete' || S.pts.length < 2 ? S.pts : ctxOf(S.pts).pal);
 
 // ─── renderer, scene, four cameras ───────────────────────────────────────────
 const canvas = $('gl'), main = canvas.parentElement, lplotEl = $('lplot');
@@ -1452,22 +1469,57 @@ scene.add(tube, tubeEdge);
 
 function buildTube() {
   tube.geometry.dispose(); tubeEdge.geometry.dispose();
-  const c = curve();
-  tube.visible = tubeEdge.visible = S.mode === 'continuous' && c.length >= 2;
+  // The runs are drawn as one geometry each and then concatenated into the two
+  // meshes, rather than as a mesh per run: the vertex colors already carry the
+  // ramp, so the only thing a break has to change is that no tube spans it.
+  const cs = S.mode === 'continuous' ? curves().filter((c) => c.length >= 2) : [];
+  tube.visible = tubeEdge.visible = cs.length > 0;
   if (!tube.visible) { tube.geometry = tubeEdge.geometry = new T.BufferGeometry(); return; }
+  const parts = cs.map((c) => tubeOf(c));
+  tube.geometry = mergeParts(parts.map((x) => x.body));
+  tubeEdge.geometry = mergeParts(parts.map((x) => x.edge));
+}
+
+/** concatenate BufferGeometries that share an attribute layout */
+function mergeParts(gs) {
+  if (gs.length === 1) return gs[0];
+  const keys = Object.keys(gs[0].attributes);
+  const out = new T.BufferGeometry();
+  for (const k of keys) {
+    const size = gs[0].attributes[k].itemSize;
+    const arr = new Float32Array(gs.reduce((a, g) => a + g.attributes[k].count * size, 0));
+    let at = 0;
+    for (const g of gs) { arr.set(g.attributes[k].array, at); at += g.attributes[k].count * size; }
+    out.setAttribute(k, new T.BufferAttribute(arr, size));
+  }
+  const idx = [];
+  let base = 0;
+  for (const g of gs) {
+    for (const v of g.index.array) idx.push(v + base);
+    base += g.attributes.position.count;
+    g.dispose();
+  }
+  out.setIndex(idx);
+  return out;
+}
+
+function tubeOf(c) {
   const seg = Math.min(400, c.length * 2), radial = 8;
   const path = new T.CatmullRomCurve3(c.map(wpt));
-  const g = new T.TubeGeometry(path, seg, 1.3, radial, false);
-  tubeEdge.geometry = new T.TubeGeometry(path, seg, 1.75, radial, false);
+  const body = new T.TubeGeometry(path, seg, 1.3, radial, false);
+  const edge = new T.TubeGeometry(path, seg, 1.75, radial, false);
   // TubeGeometry emits (seg+1) rings of (radial+1) vertices in order, so the
   // ring index recovers the curve parameter, and with it the color.
-  const col = new Float32Array(g.attributes.position.count * 3);
-  for (let i = 0; i < g.attributes.position.count; i++) {
+  const col = new Float32Array(body.attributes.position.count * 3);
+  for (let i = 0; i < body.attributes.position.count; i++) {
     const ring = Math.floor(i / (radial + 1));
     col.set(rgb(c[Math.min(c.length - 1, Math.round((ring / seg) * (c.length - 1)))]), i * 3);
   }
-  g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
-  tube.geometry = g;
+  body.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+  // the edge mesh is drawn flat, but the merge needs both to carry the same
+  // attributes or the concatenated arrays do not line up
+  edge.setAttribute('color', new T.Float32BufferAttribute(col.slice(), 3));
+  return { body, edge };
 }
 
 const ptGroup = new T.Group(), obsGroup = new T.Group(), planeGroup = new T.Group();
@@ -1480,9 +1532,10 @@ function buildPoints() {
   ptGroup.clear();
   S.pts.forEach((p, i) => {
     const sel = S.sel?.kind === 'pt' && S.sel.i === i;
+    const marked = S.marks.includes(i);
     // a handle sitting exactly on its own cut plane would otherwise be half
     // buried in it, and a handle you cannot see is one you cannot grab
-    const ring = new T.Mesh(RING, overlay({ color: sel ? 0xffffff : 0x0d0d10, side: T.BackSide }));
+    const ring = new T.Mesh(RING, overlay({ color: marked ? 0x7dd3fc : sel ? 0xffffff : 0x0d0d10, side: T.BackSide }));
     const dot = new T.Mesh(DOT, overlay({}));
     dot.material.color.setRGB(...rgb(p));
     ring.renderOrder = 8; dot.renderOrder = 9;
@@ -1714,7 +1767,7 @@ function sidebar() {
   if (ramp) {
     sctx.clearRect(0, 0, W, H);
     // uniform in ARC LENGTH — the additive quantity. See color-space.ts.
-    resample(curve(), H, M()).forEach((p, i) => { sctx.fillStyle = out(p); sctx.fillRect(0, H - 1 - i, W, 1); });
+    rampOf(H).forEach((p, i) => { sctx.fillStyle = out(p); sctx.fillRect(0, H - 1 - i, W, 1); });
   } else {
     $('swatches').innerHTML = pal.map((p, i) =>
       `<div class="sw" data-i="${i}" data-sel="${S.sel?.kind === 'pt' && S.sel.i === i}"
@@ -1846,8 +1899,17 @@ const TESTS = {
 };
 
 /** the palette as bytes, through the active view — CVD and grayscale included */
-const lutOf = (n) => (S.mode === 'continuous' && S.pts.length >= 2 ? resample(curve(), n, M()) : palette())
-  .map((p) => rgb(S.gray ? [p[0], 0, 0] : p).map((c) => Math.round(255 * c)));
+function rampOf(n) {
+  if (S.mode !== 'continuous' || S.pts.length < 2) return palette();
+  const g = M(), cs = curves().filter((c) => c.length >= 2);
+  if (!cs.length) return palette();
+  const len = cs.map((c) => arcLength(c, g)), total = len.reduce((a, b) => a + b, 0) || 1;
+  // proportional to arc length, so a short run does not get the same share of
+  // the bar as a long one, and every run gets at least a pixel of it
+  const share = len.map((l) => Math.max(2, Math.round((n * l) / total)));
+  return cs.flatMap((c, k) => resample(c, share[k], g));
+}
+const lutOf = (n) => rampOf(n).map((p) => rgb(S.gray ? [p[0], 0, 0] : p).map((c) => Math.round(255 * c)));
 
 function drawTest() {
   // the cell it sits in is a wide strip on desktop and a tall quarter of the
@@ -1972,7 +2034,7 @@ const ident = () => stem().replace(/\W/g, '_').replace(/^(?=\d)/, 'cmap_');
  *  resampling exists to remove. toHex maps into sRGB whatever the working gamut
  *  is, because that is what every one of these consumers will display. */
 const expCont = () => S.mode === 'continuous' && S.pts.length >= 2;
-const expCols = () => (expCont() ? resample(curve(), 256, M()) : palette());
+const expCols = () => (expCont() ? rampOf(256) : palette());
 
 /** provenance, as plain lines; each format wraps them in its own comment syntax */
 function headText(cols) {
@@ -2065,7 +2127,7 @@ const sceneJSON = () => JSON.stringify({
   precept: 1, space: params.space, gamut: params.gamut,
   // a profile is not one of the built-ins, so it has to travel with the scene
   icc: params.gamut.startsWith('icc-') ? GAMUTS[params.gamut] : undefined,
-  ...S, sel: undefined,
+  ...S, sel: undefined, marks: undefined,
 }, null, 1);
 
 const vec3 = (a) => Array.isArray(a) && a.length === 3 && a.every(Number.isFinite);
@@ -2232,7 +2294,135 @@ $('colorfmt').onchange = (e) => {
 // objective is a functional of the CURVE they generate, so the gradient flows
 // back through the spline for free — no separate "trajectory" path is needed.
 
-const curveOf = (pts) => (pts.length >= 2 ? spline(pts.map((p) => toSpace(p)), PER_SPAN).map((c) => fromSpace(c)) : pts);
+/**
+ * The palette is a set of runs, not one chain.
+ *
+ * Every node has degree at most two, so any legal state is a disjoint union of
+ * paths and cycles, and any such graph can be renumbered into consecutive runs.
+ * That is what lets the topology live in two small arrays beside the points
+ * rather than in an adjacency list: `cut` marks where the order breaks, `loop`
+ * marks which runs close. Linking two arbitrary nodes reorders the points so
+ * they become neighbours, so the graph work happens once, at edit time, and
+ * every reader downstream keeps its simple ordered view.
+ */
+function runs() {
+  const out = [];
+  let run = [];
+  for (let i = 0; i < S.pts.length; i++) {
+    run.push(i);
+    if (S.cut[i] || i === S.pts.length - 1) { out.push(run); run = []; }
+  }
+  return out.map((nodes, c) => ({ nodes, closed: !!S.loop[c] && nodes.length >= 3 }));
+}
+
+/** write runs back, renumbering the points and everything parallel to them */
+function setRuns(rs) {
+  const order = rs.flatMap((r) => r.nodes);
+  const at = new Map(order.map((from, to) => [from, to]));
+  S.pts = order.map((i) => S.pts[i]);
+  S.pin = order.map((i) => !!S.pin[i]);
+  S.marks = S.marks.map((i) => at.get(i)).filter((i) => i !== undefined);
+  if (S.sel?.kind === 'pt') S.sel = at.has(S.sel.i) ? { kind: 'pt', i: at.get(S.sel.i) } : null;
+  S.cut = new Array(S.pts.length).fill(false);
+  let k = 0;
+  for (const r of rs) { k += r.nodes.length; if (k < S.pts.length) S.cut[k - 1] = true; }
+  S.loop = rs.map((r) => r.closed);
+}
+
+/**
+ * Are the two marked nodes already neighbours, and which way round?
+ * A pair is joined either by sitting next to each other in a run, or by being
+ * that run's two ends when it is closed.
+ */
+function markedEdge() {
+  if (S.marks.length !== 2) return null;
+  const [a, b] = S.marks, wa = whereIs(a), wb = whereIs(b);
+  if (!wa || !wb || wa.c !== wb.c) return null;
+  const n = wa.run.nodes.length, lo = Math.min(wa.k, wb.k), hi = Math.max(wa.k, wb.k);
+  if (hi - lo === 1) return 'inner';
+  if (wa.run.closed && lo === 0 && hi === n - 1) return 'wrap';
+  return null;
+}
+
+/** what the menu can offer for the marks as they stand */
+function linkActs() {
+  if (S.marks.length !== 2) return S.marks.length ? ['clear marks'] : [];
+  if (markedEdge()) return ['disconnect', 'clear marks'];
+  const [a, b] = S.marks;
+  return degree(a) < 2 && degree(b) < 2 ? ['connect', 'clear marks'] : ['clear marks'];
+}
+
+/**
+ * Join the two marked nodes.
+ *
+ * Both have to be ends — degree under two — and then there are two cases. Ends
+ * of the same run close it into a cycle. Ends of different runs merge them,
+ * reversing whichever sides are needed so the two marked nodes finish adjacent.
+ */
+function linkMarks() {
+  const [a, b] = S.marks;
+  if (S.marks.length !== 2 || degree(a) >= 2 || degree(b) >= 2) return;
+  const rs = runs(), wa = whereIs(a), wb = whereIs(b);
+  if (wa.c === wb.c) {
+    if (wa.run.nodes.length < 3) return;         // two points cannot enclose anything
+    rs[wa.c].closed = true;
+  } else {
+    // put a at the tail of its run and b at the head of its own, then concatenate
+    const ra = rs[wa.c], rb = rs[wb.c];
+    if (ra.nodes[ra.nodes.length - 1] !== a) ra.nodes.reverse();
+    if (rb.nodes[0] !== b) rb.nodes.reverse();
+    ra.nodes = [...ra.nodes, ...rb.nodes];
+    rs.splice(wb.c, 1);
+  }
+  setRuns(rs);
+  S.marks = [];
+  disturb();                                     // the problem changed shape under Adam
+  lprofFit(); hprofFit();
+  sync();
+}
+
+/** Break the edge between the two marked nodes: open a cycle, or split a run. */
+function unlinkMarks() {
+  const edge = markedEdge();
+  if (!edge) return;
+  const rs = runs(), w = whereIs(S.marks[0]);
+  if (edge === 'wrap') {
+    rs[w.c].closed = false;                      // a cycle opens at the seam
+  } else {
+    const nodes = rs[w.c].nodes, at = Math.min(w.k, whereIs(S.marks[1]).k);
+    if (rs[w.c].closed) {
+      // opening a cycle anywhere else means rotating the seam to the new break
+      rs[w.c] = { nodes: [...nodes.slice(at + 1), ...nodes.slice(0, at + 1)], closed: false };
+    } else {
+      rs.splice(w.c, 1, { nodes: nodes.slice(0, at + 1), closed: false },
+                         { nodes: nodes.slice(at + 1), closed: false });
+    }
+  }
+  setRuns(rs);
+  S.marks = [];
+  disturb();
+  lprofFit(); hprofFit();
+  sync();
+}
+
+/** which run a node belongs to, and where in it */
+function whereIs(i) {
+  const rs = runs();
+  for (let c = 0; c < rs.length; c++) { const k = rs[c].nodes.indexOf(i); if (k >= 0) return { c, k, run: rs[c] }; }
+  return null;
+}
+
+/** a node is free to take another edge unless it already has two */
+function degree(i) {
+  const w = whereIs(i);
+  if (!w) return 0;
+  const n = w.run.nodes.length;
+  if (w.run.closed) return 2;
+  return (w.k > 0 ? 1 : 0) + (w.k < n - 1 ? 1 : 0);
+}
+
+const curveOf = (pts, closed = false) =>
+  (pts.length >= 2 ? spline(pts.map((p) => toSpace(p)), PER_SPAN, closed).map((c) => fromSpace(c)) : pts.slice());
 
 /**
  * Everything a term needs, built once per candidate point set. The spline is by
@@ -2241,9 +2431,15 @@ const curveOf = (pts) => (pts.length >= 2 ? spline(pts.map((p) => toSpace(p)), P
  * once a combined step evaluates nine of them at each of 6n perturbations.
  */
 function ctxOf(pts) {
-  const curve = curveOf(pts);
   const continuous = S.mode === 'continuous' && pts.length >= 2;
-  return { pts, curve, pal: continuous ? resample(curve, pts.length, M()) : pts, probe: continuous ? curve : pts };
+  if (!continuous) return { pts, curves: [], pal: pts, probe: pts };
+  const g = M();
+  // one spline per run, and one swatch per control point within it, so the
+  // palette still has exactly as many entries as there are points
+  const rs = runs();
+  const curves = rs.map((r) => curveOf(r.nodes.map((i) => pts[i]), r.closed));
+  const pal = curves.flatMap((c, k) => (c.length >= 2 ? resample(c, rs[k].nodes.length, g) : c));
+  return { pts, curves, pal, probe: curves.flat() };
 }
 /** perceived chord — the cheap version of `delta` for use inside a gradient */
 const pd = (a, b, g) => perceive(segLength(a, b, g));
@@ -2349,12 +2545,12 @@ const lprofArch = () => {
 
 /** target ← whatever the ramp is doing right now, as a starting point to edit */
 const lprofFit = () => {
-  const P = S.pts.length >= 2 ? resample(curve(), LK, M()) : [];
+  const P = S.pts.length >= 2 ? rampOf(LK) : [];
   if (P.length === LK) S.lprof = P.map((p) => p[0]);
 };
 
 const hprofFit = () => {
-  const P = S.pts.length >= 2 ? resample(curve(), LK, M()) : [];
+  const P = S.pts.length >= 2 ? rampOf(LK) : [];
   if (P.length === LK) S.hprof = P.map(hueOf).map(norm360);
 };
 /**
@@ -2455,6 +2651,18 @@ const pinnedAt = (i) => !!S.pin[i];
  * worse than none — so they go with them.
  */
 const syncPins = () => { if (S.pin.length !== S.pts.length) S.pin = S.pts.map(() => false); };
+/**
+ * Put the topology back in range. Cheaper to repair once per sync than to get
+ * every splice right in every editing path, and it is what keeps a loaded
+ * scene, a deleted node and an undone drag from disagreeing about the shape.
+ */
+function syncRuns() {
+  S.cut.length = S.pts.length;
+  for (let i = 0; i < S.cut.length; i++) S.cut[i] = !!S.cut[i];
+  if (S.pts.length) S.cut[S.pts.length - 1] = false;   // nothing follows the last point
+  S.loop = runs().map((r, c) => !!S.loop[c] && r.nodes.length >= 3);
+  S.marks = [...new Set(S.marks)].filter((i) => i >= 0 && i < S.pts.length);
+}
 /** WCAG 2 relative luminance and contrast ratio, on the sRGB the viewer gets */
 const wcagY = (p) => {
   const [r, g, b] = toLinear(toGamut(p, 'srgb'), 'srgb').map(clamp01);
@@ -2503,7 +2711,8 @@ const OBJ = [
   { key: 'rep', label: () => `repulsion · ${observer()}`, f: (x) => repulsion(x.pal, [primary()]) },
   { key: 'repcvd', label: () => `repulsion · ${S.cvd === 'none' ? 'all' : '+' + S.cvd}`,
     f: (x) => repulsion(x.pal, criteria()) },
-  { key: 'arc', label: 'arc length', mode: 'continuous', f: (x) => arcLength(x.curve, M()) },
+  { key: 'arc', label: 'arc length', mode: 'continuous',
+    f: (x) => { const g = M(); return x.curves.reduce((a, c) => a + arcLength(c, g), 0); } },
   /**
    * Perceptual uniformity: equal perceived steps between consecutive swatches.
    * Measured with the CHART metric, deliberately, not the active space's — the
@@ -2578,12 +2787,18 @@ const OBJ = [
    */
   { key: 'space', label: 'control point spacing', mode: 'continuous',
     f: (x) => {
-      const P = x.pts, n = P.length - 1;
-      if (n < 2) return 0;
       const g = M(), d = [];
-      for (let i = 0; i < n; i++) d.push(Math.max(0.05, segLength(P[i], P[i + 1], g)));
-      const mean = d.reduce((a2, b) => a2 + b, 0) / n;
-      return d.reduce((a2, b) => a2 + mean / b, 0) - n;
+      // per run: the gap across a break is not a gap, and a closed run has one
+      // more of them than it has points, the one that wraps
+      for (const r of runs()) {
+        const P = r.nodes.map((i) => x.pts[i]), m = P.length;
+        if (m < 3) continue;
+        for (let i = 0; i + 1 < m; i++) d.push(Math.max(0.05, segLength(P[i], P[i + 1], g)));
+        if (r.closed) d.push(Math.max(0.05, segLength(P[m - 1], P[0], g)));
+      }
+      if (d.length < 2) return 0;
+      const mean = d.reduce((a2, b) => a2 + b, 0) / d.length;
+      return d.reduce((a2, b) => a2 + mean / b, 0) - d.length;
     } },
   /**
    * The curve, not the nodes. Projection makes a NODE feasible exactly, but the
@@ -2617,15 +2832,21 @@ const OBJ = [
    */
   { key: 'pair', label: 'pairwise uniformity', mode: 'continuous', bad: true,
     f: (x) => {
-      const P = x.pal, n = P.length, v = primary();
-      if (n < 3) return 0;
-      const total = arcLength(x.curve, EUCLIDEAN);
-      let e = 0, k = 0;
-      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
-        e += (pd(v(P[i]), v(P[j]), EUCLIDEAN) - perceive((total * (j - i)) / (n - 1))) ** 2;
-        k++;
-      }
-      return e / k;
+      const v = primary();
+      let e = 0, k = 0, at = 0;
+      // Within a run only. Across a break there is no traversal, so the target
+      // this term measures a residual against does not exist there.
+      x.curves.forEach((c, ci) => {
+        const m = runs()[ci].nodes.length, P = x.pal.slice(at, at + m);
+        at += m;
+        if (m < 3) return;
+        const total = arcLength(c, EUCLIDEAN);
+        for (let i = 0; i < m; i++) for (let j = i + 1; j < m; j++) {
+          e += (pd(v(P[i]), v(P[j]), EUCLIDEAN) - perceive((total * (j - i)) / (m - 1))) ** 2;
+          k++;
+        }
+      });
+      return k ? e / k : 0;
     } },
   /**
    * Contrast against a chosen ground, as a hinge rather than something to
@@ -3293,7 +3514,7 @@ const disturb = () => { if (adam) adam = null; };
 
 /** Rebuild whatever the change touched. Small enough to be blunt about it. */
 function sync({ colors = false, light = false } = {}) {
-  syncPins();
+  syncPins(); syncRuns();
   constrain();
   slices.forEach(paintSlice);
   paintShell();
@@ -3451,6 +3672,15 @@ canvas.addEventListener('pointerdown', (e) => {
   controls.enabled = q.axis === undefined;      // a drag in a slice panel must not orbit 3D
   const grabbed = hitTest();
 
+  if (grabbed && (e.ctrlKey || e.metaKey) && grabbed.object.userData.kind === 'pt') {
+    // marking, not grabbing: no drag, no orbit, and the selection is left alone
+    const { i } = grabbed.object.userData;
+    const at = S.marks.indexOf(i);
+    if (at >= 0) S.marks.splice(at, 1); else S.marks.push(i);
+    controls.enabled = false;
+    sync();
+    return;
+  }
   if (grabbed) {
     select({ ...grabbed.object.userData });
     // Drag on the plane through the object facing the camera. In an ortho panel
@@ -3500,7 +3730,13 @@ canvas.addEventListener('dblclick', (e) => {
 
 function removeAt(kind, i) {
   ({ pt: S.pts, obs: S.obs, obsr: S.obs, plane: S.planes, planerot: S.planes })[kind].splice(i, 1);
-  if (kind === 'pt') S.pin.splice(i, 1);
+  if (kind === 'pt') {
+    S.pin.splice(i, 1);
+    // the node's two edges collapse into one, and it is a break if either was
+    if (i > 0 && S.cut[i]) S.cut[i - 1] = true;
+    S.cut.splice(i, 1);
+    S.marks = S.marks.filter((m) => m !== i).map((m) => (m > i ? m - 1 : m));
+  }
   S.sel = null;
   sync();
 }
@@ -3513,7 +3749,9 @@ function removeAt(kind, i) {
 let ctxFor = null;
 function openMenu(clientX, clientY, kind, i) {
   ctxFor = { kind, i };
-  const acts = kind === 'pt' ? [S.pin[i] ? 'unpin' : 'pin', 'delete'] : ['delete'];
+  const acts = kind === 'pt'
+    ? [...linkActs(), S.pin[i] ? 'unpin' : 'pin', 'delete']
+    : ['delete'];
   const m = $('ctxmenu');
   m.innerHTML = acts.map((a) => `<button data-act="${a}">${a}</button>`).join('');
   m.hidden = false;
@@ -3527,6 +3765,9 @@ $('ctxmenu').onclick = (e) => {
   if (!act || !ctxFor) return;
   const { kind, i } = ctxFor;
   closeMenu();
+  if (act === 'connect') return linkMarks();
+  if (act === 'disconnect') return unlinkMarks();
+  if (act === 'clear marks') { S.marks = []; return sync(); }
   if (act === 'delete') return removeAt(kind, i);
   S.pin[i] = !S.pin[i];
   sync();
@@ -3720,6 +3961,8 @@ $('loadlist').onclick = (e) => {
   S.mode = preset.mode;
   S.pts = preset.hex.map(fromHex);
   S.pin = [];                                    // a new palette, not the old one renumbered
+  S.cut = []; S.marks = [];
+  S.loop = [preset.kind === 'cyclic'];           // the cyclic maps load as the loops they are
   S.sel = null;
   lprofLine(); hprofFit();                         // a new ramp gets fresh targets
   for (const b of $('mode').children) b.ariaPressed = b.dataset.v === S.mode;
@@ -3965,6 +4208,7 @@ $('exportfmt').innerHTML = Object.keys(FORMATS).map((k) => `<option value="${k}"
 $('colorfmt').innerHTML = Object.entries(COLORFMT)
   .map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('');
 buildShell();
+
 shell.material.uniforms.uOpacity.value = S.shell; shell.visible = S.shell > 0;
 select(S.sel);
 

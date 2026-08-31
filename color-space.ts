@@ -867,14 +867,21 @@ function span(P: Vec3[], n: number): Vec3[] {
  * Returns a dense polyline. Hand it to `resample` for even perceptual spacing,
  * or to `arcLength` for the trajectory cost.
  */
-export function spline(controls: Vec3[], perSpan = 24): Vec3[] {
+export function spline(controls: Vec3[], perSpan = 24, closed = false): Vec3[] {
   if (controls.length < 2) return controls.slice();
-  const refl = (a: Vec3, b: Vec3): Vec3 => [2 * a[0] - b[0], 2 * a[1] - b[1], 2 * a[2] - b[2]];
-  const P = [refl(controls[0], controls[1]), ...controls, refl(controls[controls.length - 1], controls[controls.length - 2])];
+  const n = controls.length;
+  // Closed takes its phantom points from the far end instead of reflecting,
+  // which is the whole difference: the curve then meets itself with matching
+  // tangents rather than turning around. It also runs one span further, back
+  // from the last control point to the first.
+  const P = closed
+    ? [controls[n - 1], ...controls, controls[0], controls[1]]
+    : [refl(controls[0], controls[1]), ...controls, refl(controls[n - 1], controls[n - 2])];
   const out: Vec3[] = [];
   for (let i = 0; i + 3 < P.length; i++) out.push(...span(P.slice(i, i + 4), perSpan));
-  return [...out, controls[controls.length - 1]];
+  return [...out, closed ? controls[0] : controls[n - 1]];
 }
+const refl = (a: Vec3, b: Vec3): Vec3 => [2 * a[0] - b[0], 2 * a[1] - b[1], 2 * a[2] - b[2]];
 
 /**
  * Continuous palette: resample a trajectory to n colors at equal ARC LENGTH.
