@@ -190,15 +190,15 @@
     text-transform:none; letter-spacing:normal;   /* h2 hosts would pass theirs down */
     vertical-align:baseline; pointer-events:none; }
   .q:hover { opacity:1; color:var(--link); }
-  #metrics td.w { width:40px; padding-left:4px; }
+  #metrics td.w { width:52px; padding-left:4px; white-space:nowrap; }
   #metrics input.w { width:38px; background:var(--ctl); color:var(--fg); border:1px solid var(--line);
     border-radius:3px; padding:1px 3px; font:11px 'Fira Mono',ui-monospace,monospace; text-align:right;
     -moz-appearance:textfield; appearance:textfield; }
   #metrics input.w::-webkit-outer-spin-button, #metrics input.w::-webkit-inner-spin-button {
     -webkit-appearance:none; margin:0; }
   #metrics input.w:disabled { opacity:.3; }
-  #metrics thead td { padding:0 0 2px; color:var(--dim); font-size:10px; letter-spacing:.08em; }
-  #metrics thead td.w { text-align:center; padding-left:0; }
+  #metrics .mx { color:var(--dim); font-size:10px; margin-left:3px; }
+  #metrics .mx[data-off] { opacity:.3; }
   .note { color:var(--dim); font-size:11px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
@@ -2810,20 +2810,21 @@ function paintMetrics(rows) {
   const shape = rows.map(([k, , , obj]) => `${k}|${obj ?? ''}`).join(';');
   if (shape !== metricsShape) {
     metricsShape = shape;
-    // a header only for the weight, which is the one column whose number does
-    // not say what it is: the others are a name and a measurement
-    tbl.innerHTML = '<thead><tr><td></td><td></td><td class="w">&times;</td></tr></thead><tbody>'
-      + rows.map(([k, v, warn, obj, help]) => {
+    tbl.innerHTML = '<tbody>' + rows.map(([k, v, warn, obj, help]) => {
       // data-help, not title: the OS tooltip makes you wait a second to find out
       // whether hovering does anything, and the sidebar scrolls, which would clip
       // a positioned one. A line under the table is instant and never clipped.
       const q = help ? `<span class="q" data-h="${esc(help)}">?</span>` : '';
       return `<tr><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}${q}</td>` +
       `<td class="${warn ? 'warn' : ''}">${v}</td>` +
+      // the multiplier sits against its own number rather than over the column:
+      // one mark per weight says what that weight is, where a heading says it
+      // once and then leaves eleven bare numbers to be taken on trust
       (obj ? `<td class="w"><input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
-           + ` value="${S.w[obj]}"${S.on[obj] ? '' : ' disabled'} title="relative pull in the combined step"></td>`
+           + ` value="${S.w[obj]}"${S.on[obj] ? '' : ' disabled'} title="relative pull in the combined step"`
+           + `><span class="mx"${S.on[obj] ? '' : ' data-off'}>&times;</span></td>`
            : '<td class="w"></td>') + '</tr>';
-      }).join('') + '</tbody>';
+    }).join('') + '</tbody>';
     return;
   }
   rows.forEach(([, v, warn, obj], i) => {
@@ -2838,6 +2839,7 @@ function paintMetrics(rows) {
     if (!w || document.activeElement === w) return;     // never overwrite what is being typed
     if (+w.value !== S.w[obj]) w.value = S.w[obj];
     if (w.disabled === !!S.on[obj]) w.disabled = !S.on[obj];
+    tr.querySelector('.mx')?.toggleAttribute('data-off', !S.on[obj]);
   });
 }
 
