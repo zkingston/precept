@@ -6,7 +6,11 @@
 <!-- the emoji as an SVG document, so there is no file to ship or fetch -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌈</text></svg>">
 <style>
-  :root { --bg:#101012; --panel:#1c1c1f; --line:#32323a; --fg:#e8e8ec; --dim:#8b8b96; --hot:#ff5b5b; --hud:#33333a; }
+  :root { --bg:#101012; --panel:#1c1c1f; --line:#32323a; --fg:#e8e8ec; --dim:#8b8b96; --hot:#ff5b5b;
+          --hud:#33333a; --ctl:#26262b; --link:#7dd3fc;
+          /* chips sit over the 3D view, not in the panel, so they keep their own
+             dark scheme however the panel is themed */
+          --hudfg:#e8e8ec; --hudbg:#26262bd9; }
   * { box-sizing:border-box; }
   body { margin:0; overflow:hidden; background:var(--bg); color:var(--fg); font:13px/1.45 ui-sans-serif,system-ui,sans-serif; }
   /* the row must be 1fr, not the implicit auto: a sidebar taller than the
@@ -26,7 +30,7 @@
                     writing-mode:vertical-lr; direction:rtl; }
   .quad .sl b { font-weight:400; text-align:center; }
   .quad .sl i { font-style:normal; }
-  input[type=color] { width:34px; height:24px; padding:1px; background:#26262b;
+  input[type=color] { width:34px; height:24px; padding:1px; background:var(--ctl);
                       border:1px solid var(--line); border-radius:4px; }
   input[type=checkbox] { accent-color:#5f8ba6; width:14px; height:14px; }
   /* no native dual range exists, so stack two: tracks inert, thumbs live */
@@ -54,20 +58,19 @@
   #tipbtns button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
   #hist { position:absolute; top:190px; right:130px; display:flex; gap:4px; }
   #hist button:disabled { opacity:.3; cursor:default; }
-  #trace { width:100%; height:34px; display:block; margin-top:6px; }
   #ctxmenu { position:absolute; z-index:40; display:flex; flex-direction:column; min-width:88px;
-             background:#1c1c20f2; border:1px solid var(--line); border-radius:6px; padding:3px;
+             background:#1c1c20f2; border:1px solid #32323a; border-radius:6px; padding:3px;
              box-shadow:0 6px 18px #000a; }
   #ctxmenu[hidden] { display:none; }
-  #ctxmenu button { background:none; border:0; color:var(--fg); text-align:left; cursor:pointer;
+  #ctxmenu button { background:none; border:0; color:var(--hudfg); text-align:left; cursor:pointer;
                     padding:5px 9px; border-radius:4px; font:12px ui-sans-serif,system-ui,sans-serif; }
   #ctxmenu button:hover { background:#3d5a6c; }
   #tool button, #graybtn, #hist button, #aboutbtn { width:34px; height:34px; padding:0; display:grid; place-items:center;
-    background:#26262bd9; border:1px solid var(--line); border-radius:5px; cursor:pointer;
-    color:var(--fg); font-size:15px; line-height:1; }
+    background:var(--hudbg); border:1px solid #32323a; border-radius:5px; cursor:pointer;
+    color:var(--hudfg); font-size:15px; line-height:1; }
   #tool button:hover, #graybtn:hover, #hist button:not(:disabled):hover, #aboutbtn:hover { background:#32323ae6; }
   #tool button[aria-pressed=true], #graybtn[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
-  #tool svg { width:19px; height:19px; fill:none; stroke:var(--fg); stroke-width:1.5;
+  #tool svg { width:19px; height:19px; fill:none; stroke:var(--hudfg); stroke-width:1.5;
     stroke-linecap:round; stroke-linejoin:round; }
   #lplot { position:absolute; bottom:14px; right:14px; height:126px; display:flex; gap:16px; }
   .pplot { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
@@ -77,7 +80,7 @@
            font:10px ui-sans-serif,system-ui,sans-serif; color:var(--hud); }
   .phead .pbtns { margin-left:auto; display:flex; gap:3px; }
   .phead button { padding:1px 7px; font:10px ui-monospace,monospace; background:#26262bcc;
-    color:var(--fg); border:1px solid var(--line); border-radius:3px; cursor:pointer; }
+    color:var(--hudfg); border:1px solid #32323a; border-radius:3px; cursor:pointer; }
   .pcanvas { flex:1; min-height:0; width:100%; display:block; cursor:ns-resize; touch-action:none; }
   #toolnote { position:absolute; top:230px; right:12px; white-space:nowrap; text-align:right;
     font:11px/1.4 ui-sans-serif,system-ui,sans-serif; color:var(--hud); pointer-events:none; }
@@ -96,7 +99,7 @@
   label.f { flex:0 0 68px; color:var(--dim); }
   input[type=range] { flex:1; min-width:0; accent-color:#7dd3fc; }
   .v { width:32px; text-align:right; font-variant-numeric:tabular-nums; }
-  select, button { background:#26262b; color:var(--fg); border:1px solid var(--line);
+  select, button { background:var(--ctl); color:var(--fg); border:1px solid var(--line);
                              border-radius:4px; padding:4px 6px; font:inherit; }
   button { cursor:pointer; } button:hover { background:#32323a; }
   .seg { display:flex; } .seg button { border-radius:0; flex:1; }
@@ -126,14 +129,14 @@
   .q[data-h]:hover::after {
     content:attr(data-h); position:absolute; left:0; right:0; top:calc(100% + 6px); z-index:30;
     padding:6px 8px; text-align:left; white-space:normal;
-    background:#111116; border:1px solid var(--line); border-radius:5px; color:var(--fg);
+    background:#111116; border:1px solid #32323a; border-radius:5px; color:var(--hudfg);
     font:11px/1.45 ui-sans-serif,system-ui,sans-serif; box-shadow:0 5px 16px #000a;
     text-transform:none; letter-spacing:normal;   /* h2 hosts would pass theirs down */
     vertical-align:baseline; pointer-events:none; }
-  .q:hover { opacity:1; color:#7dd3fc; }
+  .q:hover { opacity:1; color:var(--link); }
   #termhelp { min-height:2.6em; margin-top:7px; padding-top:6px; border-top:1px solid var(--line); }
   #metrics td.w { width:40px; padding-left:4px; }
-  #metrics input.w { width:38px; background:#26262b; color:var(--fg); border:1px solid var(--line);
+  #metrics input.w { width:38px; background:var(--ctl); color:var(--fg); border:1px solid var(--line);
     border-radius:3px; padding:1px 3px; font:11px ui-monospace,monospace; text-align:right;
     -moz-appearance:textfield; appearance:textfield; }
   #metrics input.w::-webkit-outer-spin-button, #metrics input.w::-webkit-inner-spin-button {
@@ -155,7 +158,7 @@
   #aboutdlg .lede { color:var(--dim); margin:3px 0 13px; }
   #aboutdlg ul { margin:6px 0 0; padding-left:17px; color:var(--dim); font-size:12px; }
   #aboutdlg li + li { margin-top:5px; }
-  #aboutdlg a { color:#7dd3fc; }
+  #aboutdlg a { color:var(--link); }
   #aboutdlg .q { opacity:1; vertical-align:baseline; margin:0; font-size:inherit; color:#7dd3fc; }
   #aboutclose { position:absolute; top:12px; right:12px; width:26px; height:26px; padding:0;
     background:none; border:0; color:var(--dim); font-size:19px; line-height:1; cursor:pointer; }
@@ -349,23 +352,18 @@
                style="width:52px" title="minimum contrast ratio the palette should reach">
         <span class="note" style="flex:1">:1 floor</span>
         <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
-      <div class="row"><label class="chk"><input type="checkbox" id="restart">random restarts</label></div>
+      <div class="row"><label class="f">solve</label><button id="run" style="flex:1">run Adam</button>
+        <label class="chk"><input type="checkbox" id="restart">random restarts</label></div>
       <div class="note" id="restartinfo"></div>
-      <canvas id="trace" height="34"></canvas>
-      <div class="row"><label class="f">solve</label><button id="steptotal" style="flex:1">step once</button>
-        <button id="run" style="flex:1">run Adam</button></div>
     </section>
     <section><h2>Export</h2>
       <div class="row"><label class="f">name</label>
         <input type="text" id="scenename" value="precept" style="flex:1;min-width:0"></div>
-      <div class="row"><label class="f">scene</label><button id="savescene" style="flex:1">save scene</button>
-        <button id="loadscene" style="flex:1">load scene</button>
-        <input type="file" id="scenefile" accept=".json,application/json" hidden></div>
+      <div class="row"><label class="f">link</label>
+        <button id="sharelink" style="flex:1">copy link to this palette</button></div>
       <div class="row"><label class="f">format</label><select id="exportfmt" style="flex:1"></select></div>
       <div class="row"><button id="copypy" style="flex:1">copy</button>
-        <button id="savepy" style="flex:1">save</button></div>
-      <div class="row"><label class="f">link</label>
-        <button id="sharelink" style="flex:1">copy link to this palette</button></div></section>
+        <button id="savepy" style="flex:1">save</button></div></section>
   </aside>
 </div>
 
@@ -1351,7 +1349,6 @@ function sidebar() {
 
   paintPlotButtons(); drawPlots(); drawWheel();
   drawTest();
-  drawTrace();
   $('restartinfo').textContent = !S.restart ? ''
     : RESTART.n ? `${RESTART.n} restart${RESTART.n > 1 ? 's' : ''} · best ${RESTART.bestScore.toFixed(3)}`
     : 'jolts the free points when Adam stalls, and keeps the best attempt';
@@ -1672,14 +1669,6 @@ $('sharelink').onclick = async (e) => {
   setTimeout(() => (e.target.textContent = 'copy link to this palette'), 1400);
 };
 
-$('savescene').onclick = () => download(`${stem()}.json`, sceneJSON(), 'application/json');
-$('loadscene').onclick = () => $('scenefile').click();
-$('scenefile').onchange = async (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
-  try { loadScene(await f.text()); } catch (err) { alert(`could not load scene: ${err.message}`); }
-  e.target.value = '';                               // so the same file reloads
-};
 $('savepy').onclick = () => {
   const f = FORMATS[S.fmt];
   download(`${f.ext === 'py' ? ident() : stem()}.${f.ext}`, f.gen() + '\n', f.mime);
@@ -2316,51 +2305,14 @@ function restartTick() {
   if (score < RESTART.prev - RESTART.gain) { RESTART.prev = score; RESTART.flat = 0; return; }
   if (++RESTART.flat < RESTART.patience) return;
   RESTART.flat = 0; RESTART.prev = Infinity; RESTART.n++;
-  TRACE.marks.push(TRACE.v.length);
   jolt(); adamReset();
-}
-
-/**
- * The score per outer iteration, so a run has a shape rather than a number.
- * Recorded on the AL cadence, which is also when restarts decide, so a mark
- * lines up with the jolt whose recovery follows it.
- */
-const TRACE = { v: [], marks: [], cap: 600 };
-function drawTrace() {
-  const el = $('trace'), n = TRACE.v.length;
-  el.style.display = n > 1 ? '' : 'none';
-  if (n < 2 || !el.clientWidth) return;
-  const dpr = Math.min(2, devicePixelRatio || 1);
-  const W = Math.round(el.clientWidth * dpr), H = Math.round(el.clientHeight * dpr);
-  if (el.width !== W || el.height !== H) { el.width = W; el.height = H; }
-  const g = el.getContext('2d');
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const w = el.clientWidth, h = el.clientHeight;
-  g.clearRect(0, 0, w, h);
-  const lo = Math.min(...TRACE.v), span = Math.max(...TRACE.v) - lo || 1;
-  const x = (i) => (i / (n - 1)) * w, y = (v) => h - 2 - ((v - lo) / span) * (h - 4);
-  const hud = getComputedStyle(document.documentElement).getPropertyValue('--hud').trim() || '#888';
-  g.strokeStyle = hud; g.globalAlpha = 0.3; g.lineWidth = 1;
-  for (const m of TRACE.marks) { g.beginPath(); g.moveTo(x(m), 0); g.lineTo(x(m), h); g.stroke(); }
-  g.globalAlpha = 1; g.strokeStyle = '#7dd3fc'; g.lineWidth = 1.5; g.lineJoin = 'round';
-  g.beginPath();
-  TRACE.v.forEach((v, i) => (i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v))));
-  g.stroke();
 }
 
 let running = false, tick = 0;
 function solve() {
   if (!running) return;
   const moved = adamStep();
-  if (tick % AL_EVERY === AL_EVERY - 1) {
-    alStep();
-    if (S.restart) restartTick();
-    TRACE.v.push(scores([S.pts])[0]);
-    if (TRACE.v.length > TRACE.cap) {
-      TRACE.v.shift();
-      TRACE.marks = TRACE.marks.map((m) => m - 1).filter((m) => m >= 0);
-    }
-  }
+  if (tick % AL_EVERY === AL_EVERY - 1) { alStep(); if (S.restart) restartTick(); }
   // the sidebar rebuilds its whole table and re-evaluates every term, which is
   // far too much to do at solver rate; the views stay live, the numbers lag
   sync({ light: ++tick % 8 !== 0 });
@@ -2371,7 +2323,6 @@ function startSolver() {
   if (running) return;
   running = true; tick = 0; adamReset();
   Object.assign(RESTART, { n: 0, best: null, bestScore: 0, scale: {}, flat: 0, prev: Infinity });
-  TRACE.v = []; TRACE.marks = [];
   $('run').textContent = 'stop'; $('run').style.background = '#6c3030';
   requestAnimationFrame(solve);
 }
@@ -2560,13 +2511,26 @@ $('lplot').ondblclick = (e) => {
   sidebar();
 };
 
-/** The backdrop drives the HUD and outline colors too — a light surround with
- *  light labels on it is unreadable. Contrast is decided by the backdrop's own
- *  lightness in the chart, which is the one perceptual number we already have. */
+/**
+ * The backdrop is the whole interface's ground, not just the viewport's: the
+ * panel takes the same color and everything on it flips for contrast. Which
+ * way to flip is decided by the backdrop's own lightness in the chart, the one
+ * perceptual number already to hand. Chips over the 3D view keep their dark
+ * scheme, since they float over a colored solid rather than sit on the panel.
+ */
 function applyBg() {
   renderer.setClearColor(new T.Color(S.bg), 1);
   const light = fromHex(S.bg)[0] > 55;
-  document.documentElement.style.setProperty('--hud', light ? '#3a3a42' : '#c6c6d0');
+  const v = document.documentElement.style;
+  for (const [k, val] of Object.entries({
+    '--panel': S.bg, '--bg': S.bg,
+    '--fg': light ? '#17171b' : '#e8e8ec',
+    '--dim': light ? '#5d5d66' : '#8b8b96',
+    '--line': light ? '#0000002e' : '#32323a',
+    '--ctl': light ? '#00000012' : '#26262b',
+    '--link': light ? '#0b6ea0' : '#7dd3fc',
+    '--hud': light ? '#3a3a42' : '#c6c6d0',
+  })) v.setProperty(k, val);
   slices.forEach((s) => s.edge.material.color.set(light ? 0x3a3a42 : 0xc6c6d0));
   drawPlots();
 }
@@ -3117,7 +3081,6 @@ $('metrics').oninput = (e) => {
   const k = e.target.dataset?.w;
   if (k) S.w[k] = Math.max(0, +e.target.value || 0);
 };
-$('steptotal').onclick = () => stepBy(activeTerms(), 1);
 $('run').onclick = () => (running ? stopSolver() : startSolver());
 $('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; sidebar(); };
 $('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1); };
@@ -3356,9 +3319,9 @@ const HINTS = {
   cbg: 'Contrast ground and target ratio.',
   rate: 'Step size.',
   restart: 'Jolt and retry on a stall, keeping the best.',
-  steptotal: 'Step once, or run continuously.',
+  run: 'Run Adam over every enabled term until you stop it.',
   scenename: 'Name for saved files and exports.',
-  savescene: 'Save or load the whole setup.',
+  sharelink: 'Put the whole setup in the address bar and copy it.',
   exportfmt: 'What copy and save produce.',
 };for (const [k, text] of Object.entries(HINTS)) {
   const el = document.getElementById(k);

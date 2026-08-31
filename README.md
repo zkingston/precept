@@ -8,6 +8,10 @@ the small steps that make them up.
   perceptual color space*, PNAS 2022, [10.1073/pnas.2119753119](https://doi.org/10.1073/pnas.2119753119)
 - Bujack, Stark, Turton, Miller & Rogers, *The Geometry of Color in the Light of
   a Non-Riemannian Space*, CGF 2025, [10.1111/cgf.70136](https://doi.org/10.1111/cgf.70136)
+- Machado, Oliveira & Fernandes, *A Physiologically-based Model for Simulation of
+  Color Vision Deficiency*, IEEE TVCG 15(6) 2009,
+  [10.1109/TVCG.2009.113](https://doi.org/10.1109/TVCG.2009.113) — the
+  simulation model, including the tabulated matrices for anomalous trichromacy
 
 ## Run
 
