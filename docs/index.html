@@ -1689,8 +1689,12 @@ function layout() {
    * QUADS is ordered with the ortho views first, so index 3 is the big one.
    */
   const A = w / h;
-  const mode = A >= 1.6 ? 'squares' : A <= 1.0 ? 'row' : 'columns';
-  let RECTS, cell = null;
+  // Aspect alone cannot choose between the last two. A phone in portrait leaves
+  // a canvas near 412x380 and a laptop leaves one near 1060x900, which are the
+  // same shape and want opposite splits: three stacked cuts are readable at 350
+  // wide and useless at 100. So the column split also needs the width to run it.
+  const mode = A >= 1.6 ? 'squares' : (A <= 1.0 || w < 640) ? 'row' : 'columns';
+  let RECTS, cell = null, stripH = 0;
   if (mode === 'squares') {
     // A 2x2 beside the 3D view. The column's WIDTH is capped so it cannot take
     // more than half the canvas, but its height is not: below aspect 2 a square
@@ -1706,17 +1710,23 @@ function layout() {
     ];
     cell = { x: cw, y: ch, w: gw - cw, h: h - ch };
   } else if (mode === 'row') {
-    // square-ish cells: a quarter of the width is the natural size, and a taller
+    // square-ish cells: a share of the width is the natural size, and a taller
     // row only letterboxes the content it holds. Capped so the strip cannot eat
     // the 3D view on a short canvas.
-    const colW = Math.floor(w / 4), rowH = Math.min(colW, Math.round(h * 0.4));
+    //
+    // Four cells when the preview is one of them, three when the panel has
+    // taken it: on a phone a quarter of the width is a hundred pixels, and
+    // three cuts at a third are worth more than four at a quarter.
+    const four = !DOCK.matches;
+    const colW = Math.floor(w / (four ? 4 : 3)), rowH = Math.min(colW, Math.round(h * 0.4));
+    stripH = rowH;
     RECTS = [
       { x: 0, y: h - rowH, w: colW, h: rowH },
       { x: colW, y: h - rowH, w: colW, h: rowH },
-      { x: 2 * colW, y: h - rowH, w: colW, h: rowH },
+      { x: 2 * colW, y: h - rowH, w: four ? colW : w - 2 * colW, h: rowH },
       { x: 0, y: 0, w, h: h - rowH },
     ];
-    cell = { x: 3 * colW, y: h - rowH, w: w - 3 * colW, h: rowH };
+    cell = four ? { x: 3 * colW, y: h - rowH, w: w - 3 * colW, h: rowH } : null;
   } else {
     const colW = Math.min(440, Math.max(200, Math.round(w * 0.3)));
     const rowH = Math.floor(h / 3);
@@ -1742,11 +1752,12 @@ function layout() {
   if (cell) {
     Object.assign(tip.style, { left: `${cell.x}px`, top: `${cell.y}px`, right: 'auto',
       width: `${cell.w}px`, height: `${cell.h}px` });
-    $('bar').style.bottom = mode === 'row' ? `${cell.h + 12}px` : '';
   } else {
     tip.removeAttribute('style');
-    $('bar').style.bottom = '';
   }
+  // the color bar stops above the strip whenever there is one, whether or not
+  // the preview is one of its cells
+  $('bar').style.bottom = stripH ? `${stripH + 12}px` : '';
   // the bar takes everything the tools used to occupy; only a FLOATING preview
   // is still above it, and only in the column split is the preview floating
   const floating = tip.parentElement === main && !cell;
