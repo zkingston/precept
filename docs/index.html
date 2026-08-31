@@ -54,6 +54,7 @@
   #tipbtns button[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
   #hist { position:absolute; top:190px; right:130px; display:flex; gap:4px; }
   #hist button:disabled { opacity:.3; cursor:default; }
+  #trace { width:100%; height:34px; display:block; margin-top:6px; }
   #ctxmenu { position:absolute; z-index:40; display:flex; flex-direction:column; min-width:88px;
              background:#1c1c20f2; border:1px solid var(--line); border-radius:6px; padding:3px;
              box-shadow:0 6px 18px #000a; }
@@ -350,6 +351,7 @@
         <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
       <div class="row"><label class="chk"><input type="checkbox" id="restart">random restarts</label></div>
       <div class="note" id="restartinfo"></div>
+      <canvas id="trace" height="34"></canvas>
       <div class="row"><label class="f">solve</label><button id="steptotal" style="flex:1">step once</button>
         <button id="run" style="flex:1">run Adam</button></div>
     </section>
@@ -361,7 +363,9 @@
         <input type="file" id="scenefile" accept=".json,application/json" hidden></div>
       <div class="row"><label class="f">format</label><select id="exportfmt" style="flex:1"></select></div>
       <div class="row"><button id="copypy" style="flex:1">copy</button>
-        <button id="savepy" style="flex:1">save</button></div></section>
+        <button id="savepy" style="flex:1">save</button></div>
+      <div class="row"><label class="f">link</label>
+        <button id="sharelink" style="flex:1">copy link to this palette</button></div></section>
   </aside>
 </div>
 
@@ -386,7 +390,7 @@
 
   <h4>Getting around</h4>
   <p>Double-click empty space to add a node: in a cut panel it lands on that cut, in the 3D view it
-     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) to delete. The tools switch between nodes, keep-out spheres and halfplanes. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON. Hover any <span class="q">?</span> for what a control or a term means.</p>
+     takes the color you clicked on. Drag to move, right-click (or press and hold on a touchscreen) for a menu to pin a node or delete it; a pinned node is held still by the solver. The tools switch between nodes, keep-out spheres and halfplanes. Run Adam to optimize against the enabled terms. Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette. Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.</p>
 
   <h4>Motivation (personal)</h4>
   <p>Color palettes have been on my mind for quite some time as someone who creates plots, charts,
@@ -1351,6 +1355,7 @@ function sidebar() {
 
   paintPlotButtons(); drawPlots(); drawWheel();
   drawTest();
+  drawTrace();
   $('restartinfo').textContent = !S.restart ? ''
     : RESTART.n ? `${RESTART.n} restart${RESTART.n > 1 ? 's' : ''} · best ${RESTART.bestScore.toFixed(3)}`
     : 'jolts the free points when Adam stalls, and keeps the best attempt';
@@ -1636,6 +1641,40 @@ function applyScene(o) {
   mirror();
   sync({ colors: true, light: true });
 }
+
+/**
+ * The scene in the URL. Deflated before base64 because the JSON is a couple of
+ * kilobytes of mostly punctuation and repeated keys; base64url so the result
+ * survives being pasted anywhere a link goes.
+ */
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64url = (t) => Uint8Array.from(atob(t.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+const pipe = (data, stream) => new Response(new Blob([data]).stream().pipeThrough(stream));
+
+/** pack into the address bar; copying it is the button's job, not this one's */
+async function packLink() {
+  const packed = b64url(await pipe(sceneJSON(), new CompressionStream('deflate-raw')).arrayBuffer());
+  history.replaceState(null, '', `#s=${packed}`);
+  return location.href;
+}
+
+/** a scene in the hash wins over the default palette, so a link opens on it */
+async function loadFromHash() {
+  const m = /^#s=(.+)$/.exec(location.hash);
+  if (!m) return false;
+  try {
+    loadScene(await pipe(unb64url(m[1]), new DecompressionStream('deflate-raw')).text());
+    return true;
+  } catch (err) { console.warn('ignoring unreadable scene in the URL:', err.message); return false; }
+}
+
+$('sharelink').onclick = async (e) => {
+  const url = await packLink();
+  await navigator.clipboard.writeText(url);
+  e.target.textContent = `copied · ${url.length} chars`;
+  setTimeout(() => (e.target.textContent = 'copy link to this palette'), 1400);
+};
 
 $('savescene').onclick = () => download(`${stem()}.json`, sceneJSON(), 'application/json');
 $('loadscene').onclick = () => $('scenefile').click();
@@ -2281,14 +2320,51 @@ function restartTick() {
   if (score < RESTART.prev - RESTART.gain) { RESTART.prev = score; RESTART.flat = 0; return; }
   if (++RESTART.flat < RESTART.patience) return;
   RESTART.flat = 0; RESTART.prev = Infinity; RESTART.n++;
+  TRACE.marks.push(TRACE.v.length);
   jolt(); adamReset();
+}
+
+/**
+ * The score per outer iteration, so a run has a shape rather than a number.
+ * Recorded on the AL cadence, which is also when restarts decide, so a mark
+ * lines up with the jolt whose recovery follows it.
+ */
+const TRACE = { v: [], marks: [], cap: 600 };
+function drawTrace() {
+  const el = $('trace'), n = TRACE.v.length;
+  el.style.display = n > 1 ? '' : 'none';
+  if (n < 2 || !el.clientWidth) return;
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  const W = Math.round(el.clientWidth * dpr), H = Math.round(el.clientHeight * dpr);
+  if (el.width !== W || el.height !== H) { el.width = W; el.height = H; }
+  const g = el.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const w = el.clientWidth, h = el.clientHeight;
+  g.clearRect(0, 0, w, h);
+  const lo = Math.min(...TRACE.v), span = Math.max(...TRACE.v) - lo || 1;
+  const x = (i) => (i / (n - 1)) * w, y = (v) => h - 2 - ((v - lo) / span) * (h - 4);
+  const hud = getComputedStyle(document.documentElement).getPropertyValue('--hud').trim() || '#888';
+  g.strokeStyle = hud; g.globalAlpha = 0.3; g.lineWidth = 1;
+  for (const m of TRACE.marks) { g.beginPath(); g.moveTo(x(m), 0); g.lineTo(x(m), h); g.stroke(); }
+  g.globalAlpha = 1; g.strokeStyle = '#7dd3fc'; g.lineWidth = 1.5; g.lineJoin = 'round';
+  g.beginPath();
+  TRACE.v.forEach((v, i) => (i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v))));
+  g.stroke();
 }
 
 let running = false, tick = 0;
 function solve() {
   if (!running) return;
   const moved = adamStep();
-  if (tick % AL_EVERY === AL_EVERY - 1) { alStep(); if (S.restart) restartTick(); }
+  if (tick % AL_EVERY === AL_EVERY - 1) {
+    alStep();
+    if (S.restart) restartTick();
+    TRACE.v.push(scores([S.pts])[0]);
+    if (TRACE.v.length > TRACE.cap) {
+      TRACE.v.shift();
+      TRACE.marks = TRACE.marks.map((m) => m - 1).filter((m) => m >= 0);
+    }
+  }
   // the sidebar rebuilds its whole table and re-evaluates every term, which is
   // far too much to do at solver rate; the views stay live, the numbers lag
   sync({ light: ++tick % 8 !== 0 });
@@ -2299,6 +2375,7 @@ function startSolver() {
   if (running) return;
   running = true; tick = 0; adamReset();
   Object.assign(RESTART, { n: 0, best: null, bestScore: 0, scale: {}, flat: 0, prev: Infinity });
+  TRACE.v = []; TRACE.marks = [];
   $('run').textContent = 'stop'; $('run').style.background = '#6c3030';
   requestAnimationFrame(solve);
 }
@@ -3295,6 +3372,7 @@ const HINTS = {
 }
 
 lprofLine(); hprofFit(); mirror(); commit();
+loadFromHash();
 /**
  * The two overlays that are readouts rather than camera furniture move into the
  * panel when there is no room for them over the canvas. Reparenting rather than
