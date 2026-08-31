@@ -496,7 +496,7 @@
     </section>
     <div id="dock"></div>
 
-    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button><button id="a11ybtn" title="how this palette reads for everyone else">a11y</button></h2><table id="metrics"></table>
+    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2><table id="metrics"></table>
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
         <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span></div>
       <div class="row"><label class="f">contrast</label>
@@ -609,12 +609,15 @@
      <a href="mailto:zkingston@purdue.edu">zkingston@purdue.edu</a></p>
 </dialog>
 
+<!-- Shelved, not deleted: the report and its styling are still below, and the
+     button in the Optimize heading is the other half of putting it back.
 <dialog id="a11ydlg">
   <button id="a11yclose" title="close">&times;</button>
   <h3>Accessibility</h3>
   <table id="a11ybody"></table>
   <button id="a11ycopy">copy as text</button>
 </dialog>
+-->
 
 <dialog id="loaddlg">
   <button id="loadclose" title="close">&times;</button>
@@ -3973,7 +3976,11 @@ let drag = null;
 let hovered = null;
 let hold = null;
 const dropHold = () => { if (hold) { clearTimeout(hold.t); hold = null; } };
-const quadAt = (x, y) => QUADS.find((q) => x >= q.rect.x && x < q.rect.x + q.rect.w && y >= q.rect.y && y < q.rect.y + q.rect.h);
+// A hidden quad has no rect, and reading one threw here rather than returning
+// nothing — which took every pointer interaction on the canvas down with it,
+// so collapsing the cuts made the 3D view unclickable.
+const quadAt = (x, y) => QUADS.find((q) => q.rect
+  && x >= q.rect.x && x < q.rect.x + q.rect.w && y >= q.rect.y && y < q.rect.y + q.rect.h);
 
 function castFrom(e) {
   scene.updateMatrixWorld();   // three does not do this for us, and a mesh built
@@ -4314,6 +4321,10 @@ $('spacesel').onchange = (e) => {
 /**
  * What a palette does for a reader who is not you.
  *
+ * Shelved: nothing calls this at the moment. The dialog and its wiring are
+ * commented out further down, and the button that opened it is out of the
+ * Optimize heading. Kept because the measuring is the part that took the work.
+ *
  * Built as rows rather than as markup so the dialog and the text you copy out
  * of it come from one place and cannot drift apart.
  *
@@ -4424,6 +4435,7 @@ $('panelbtn').onclick = () => {
   S.panels = !S.panels;
   layout(); mirror(); sync();
 };
+/* eslint-disable -- shelved with the dialog above
 function paintA11y() {
   $('a11ybody').innerHTML = a11yReport().map(([kind, a, b, ok]) =>
     kind === 'head'
@@ -4435,6 +4447,7 @@ $('a11ybtn').onclick = () => { paintA11y(); $('a11ydlg').showModal(); };
 $('a11yclose').onclick = () => $('a11ydlg').close();
 $('a11ydlg').onclick = (e) => { if (e.target === $('a11ydlg')) $('a11ydlg').close(); };
 $('a11ycopy').onclick = (e) => copyText(e.target, a11yText(), 'copy as text');
+*/
 
 $('loadbtn').onclick = () => { paintLoadList(); $('loaddlg').showModal(); };
 $('loadclose').onclick = () => $('loaddlg').close();
