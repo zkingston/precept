@@ -364,9 +364,7 @@
         <span class="note" style="flex:1">:1 floor</span>
         <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
       <div class="row" id="lseprow"><label class="f">grayscale</label>
-        <input type="number" id="lsep" min="0" max="50" step="1" value="6"
-               style="width:52px" title="least lightness any two swatches should differ by">
-        <span class="note" style="flex:1">ΔL floor</span>
+        <span class="note" style="flex:1">ΔL floor <b id="lsepv">–</b>, closest pair</span>
         <span class="v" id="lnow" style="width:auto" title="closest pair in lightness">–</span></div>
       <div class="row"><label class="f">solve</label><button id="run" style="flex:1">run Adam</button>
         <label class="chk"><input type="checkbox" id="restart">random restarts</label></div>
@@ -474,7 +472,6 @@ const S = {
   pin: [],                                       // parallel to pts: held still by the solver
   bg: '#f0ead6', lock: true, planes3d: false,
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection color format
-  lsep: 6,                                       // floor on pairwise lightness, for grayscale
   restart: false,                                // kick the solver out of stalls
   cbg: '#ffffff', cmin: 3,                       // contrast: against what, and how much
   tipKind: 'sineramp',                           // which test image is showing
@@ -1361,12 +1358,15 @@ function sidebar() {
   // closest pair in lightness alone: what a grayscale print leaves you with
   $('lseprow').style.display = S.mode === 'discrete' ? '' : 'none';
   if (S.mode === 'discrete') {
+    LSEP = autoLsep();
     let gap = Infinity;
     for (let i = 0; i < pal.length; i++)
       for (let j = i + 1; j < pal.length; j++) gap = Math.min(gap, Math.abs(pal[i][0] - pal[j][0]));
     const ok = Number.isFinite(gap);
+    $('lsepv').textContent = LSEP.toFixed(1);
+    // no red: this is even spacing to aim at, not a rule being broken, and
+    // how close you get is a trade against chroma that only you can price
     $('lnow').textContent = ok ? gap.toFixed(1) : '–';
-    $('lnow').style.color = ok && gap < S.lsep ? 'var(--hot)' : '';
   }
 
   const rows = [];
@@ -2065,7 +2065,7 @@ const HELP = {
   feas:     "Curve outside the feasible set.",
   pair:     "Even spacing over every pair.",
   contr:    "Swatches under the contrast floor.",
-  lsep:     "Pairs closer in lightness than the floor.",
+  lsep:     "Pairs closer in lightness than the palette could manage.",
   space:    "Uneven control point spacing.",
 };
 
@@ -2088,6 +2088,26 @@ const contrastRatio = (a, b) => {
   const [hi, lo] = [wcagY(a), wcagY(b)].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
 };
+
+/**
+ * The floor the lightness-spread term aims at: the lightness range the palette
+ * is allowed, over the gaps its swatches have to fill. Even steps, in other
+ * words, which is what reads as separable in grayscale.
+ *
+ * Two cleverer versions did worse. Measuring each swatch's reach at its own
+ * chroma and taking the union is too generous — one near-neutral swatch
+ * reaching the whole scale makes it look like they all can, and tab10 has a
+ * grey. Holding chroma fixed and asking whether n points can be scheduled d
+ * apart in their bands is too mean, because the optimizer is free to give up
+ * chroma to move in lightness, which is exactly what it does. The range is the
+ * bounds, and tightening them is how you ask for less.
+ */
+let LSEP = 0;
+function autoLsep() {
+  const P = palette();
+  if (S.mode !== 'discrete' || P.length < 2) return 0;
+  return Math.max(0, S.hi[0] - S.lo[0]) / (P.length - 1);
+}
 
 /**
  * Halfplanes are placed in the ACTIVE SPACE's coordinates — an axis-aligned cut
@@ -2253,18 +2273,17 @@ const OBJ = [
    * so a term that always pushed for more would fight chroma and the palette's
    * own repulsion forever. Once every pair clears the floor it stops.
    *
-   * That bound is also the thing to watch when setting it. n swatches need
-   * (n-1) x floor of lightness range between them, and how much range there is
-   * depends on their chroma: measured over 400 steps, Okabe-Ito reaches 8.6 at
-   * a floor of 8, tab10 reaches 6.3 at 6, and Set2 cannot clear 8 at all
-   * because eight swatches at its chroma only span 51.
+   * The floor is derived, not typed, because a typed one can be impossible:
+   * eight Set2 swatches at their chroma span 51 lightness, so a floor of 8
+   * asks for 56 and the term pushes forever against a wall. LSEP measures what
+   * the palette can actually reach and divides by the gaps it has to fill.
    */
   { key: 'lsep', label: 'lightness spread', mode: 'discrete', bad: true,
     f: (x) => {
       const P = x.pal;
       let e = 0;
       for (let i = 0; i < P.length; i++)
-        for (let j = i + 1; j < P.length; j++) e += hinge(S.lsep - Math.abs(P[i][0] - P[j][0])) ** 2;
+        for (let j = i + 1; j < P.length; j++) e += hinge(LSEP - Math.abs(P[i][0] - P[j][0])) ** 2;
       return e;
     } },
 
@@ -3269,7 +3288,6 @@ $('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = 
 $('restart').onchange = (e) => { S.restart = e.target.checked; sidebar(); };
 $('cbg').oninput = (e) => { S.cbg = e.target.value; sidebar(); };
 $('cfloor').oninput = (e) => { S.cmin = Math.max(1, +e.target.value || 1); sidebar(); };
-$('lsep').oninput = (e) => { S.lsep = Math.max(0, +e.target.value || 0); sidebar(); };
 $('flip').onclick = () => {
   const pl = S.planes[S.sel?.i];
   if (!pl || !S.sel.kind.startsWith('plane')) return;
@@ -3449,7 +3467,7 @@ function mirror() {
   $('sliceop').value = S.sliceOp; $('sliceopv').textContent = S.sliceOp.toFixed(2).slice(1);
   $('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
   $('restart').checked = S.restart;
-  $('cbg').value = S.cbg; $('cfloor').value = S.cmin; $('lsep').value = S.lsep;
+  $('cbg').value = S.cbg; $('cfloor').value = S.cmin;
   $('exportfmt').value = S.fmt; $('colorfmt').value = S.cfmt;
   $('hex').placeholder = COLORFMT[S.cfmt].hint;
   $('sevv').textContent = S.sev.toFixed(1);
@@ -3505,7 +3523,7 @@ const HINTS = {
   cmin: 'Chroma band.',
   huewheel: 'Allowed hue arc.',
   cbg: 'Contrast ground and target ratio.',
-  lsep: 'Least lightness two swatches should differ by. n swatches need (n−1)× that much range.',
+  lseprow: 'Even lightness steps for grayscale. The floor is what the palette can reach, over the gaps to fill.',
   rate: 'Step size.',
   restart: 'Jolt and retry on a stall, keeping the best.',
   run: 'Run Adam over every enabled term until you stop it.',
@@ -3514,6 +3532,9 @@ const HINTS = {
   exportfmt: 'What copy and save produce.',
 };for (const [k, text] of Object.entries(HINTS)) {
   const el = document.getElementById(k);
+  // a hint for a control that no longer exists is a typo, not a reason to take
+  // the page down on the way past
+  if (!el) { console.warn(`hint for missing control: ${k}`); continue; }
   const host = el.closest('label.chk') ?? el.closest('.row')?.querySelector('label.f')
             ?? el.closest('.row') ?? el.closest('section').querySelector('h2');
   host.insertAdjacentHTML('beforeend', `<span class="q" data-h="${esc(text)}">?</span>`);
