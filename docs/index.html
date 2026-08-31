@@ -518,11 +518,11 @@
   <p>The floor of \(\tfrac12\) keeps coincident colors finite. Since \(d\) saturates, far pairs
      contribute almost nothing and the step separates the confusable ones.</p>
   \[ F_{\text{arc}}=\ell_\gamma \qquad
-     F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\hat L(t_i)\bigr)^2 \qquad
+     F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \qquad
      F_{\text{chr}}=\frac1n\sum_i\left(C(\pi_i)-\frac{C_-+C_+}{2}\right)^2 \]
   \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
-     \delta\bigl(h_i,\ \hat h(t_i)\bigr)\right)^2 \]
-  <p>\(\hat L\) and \(\hat h\) are the profiles drawn in the plots, and \(\delta\) is the signed shortest
+     \delta\bigl(h_i,\ \widehat h(t_i)\bigr)\right)^2 \]
+  <p>\(\widehat L\) and \(\widehat h\) are the profiles drawn in the plots, and \(\delta\) is the signed shortest
      angle, so the seam at \(0^\circ\) costs nothing. Chroma weights the angle because a \(40^\circ\)
      error matters at chroma 20 and not at chroma 2. Swatches below chroma 1 have no usable hue and are
      skipped.</p>
@@ -567,8 +567,8 @@
   <h4>7 · Descent</h4>
   <p>Gradients are central differences with \(h=\tfrac14\) over the \(3n\) coordinates, skipping
      \(i\in\mathcal{P}\). Each term is normalized to unit max before it is weighted.</p>
-  \[ \hat G_k=\frac{\nabla F_k}{\lVert\nabla F_k\rVert_\infty},\qquad
-     D=\sum_k w_k\,\rho^{\,[k=\text{feas}]}\,\hat G_k \]
+  \[ \widehat G_k=\frac{\nabla F_k}{\lVert\nabla F_k\rVert_\infty},\qquad
+     D=\sum_k w_k\,\rho^{\,[k=\text{feas}]}\,\widehat G_k \]
   <p>Adam runs on \(D\) with \(\beta_1=0.9\), \(\beta_2=0.999\), \(\varepsilon=10^{-8}\), and step
      \(\eta=1.2\,r\). The terms span four orders of magnitude, so an unnormalized sum would be the
      largest term's gradient plus rounding noise. Normalizing first makes each \(w_k\) a relative pull:
