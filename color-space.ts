@@ -301,7 +301,7 @@ export type Ball = { c: Vec3; r: number };
  * you clear for normal vision may still be sitting on top of you in protanopia.
  */
 export const obstaclePenalty = (p: Vec3, obs: Ball[], g: Metric = EUCLIDEAN, v: View = (q) => q): number =>
-  obs.reduce((acc, o) => acc + Math.max(0, o.r - delta(v(p), v(o.c), g)) ** 2, 0);
+  obs.reduce((acc, o) => acc + Math.max(0, o.r - lineDelta(v(p), v(o.c), g)) ** 2, 0);
 
 /** Nearest in-gamut point at fixed L and hue: bisect chroma (CSS Color 4 style). */
 export function toGamut(p: Vec3, g = params.gamut): Vec3 {
@@ -735,14 +735,70 @@ export const arcLength = (path: Vec3[], g: Metric = EUCLIDEAN): number =>
   path.slice(1).reduce((acc, q, i) => acc + segLength(path[i], q, g), 0);
 
 /**
+ * The shortest path between two colors under g, as a polyline.
+ *
+ * Straight line first, then relax the interior points by minimizing the
+ * discrete energy sum (dx)' G (dx) with G taken at each segment's midpoint.
+ * Setting the derivative at one point to zero gives it in closed form,
+ *
+ *   (Ga + Gb) x = Ga a + Gb b,
+ *
+ * so a sweep is one 3x3 solve per interior point rather than a search. Under a
+ * constant metric Ga = Gb and the update is the plain midpoint, which leaves a
+ * straight line straight — so the chart, where g is the identity, is untouched
+ * and pays nothing.
+ *
+ * Energy rather than length for the step, because energy is the one with a
+ * closed form. They do not share a minimizer here: the metric in the solve is
+ * lagged a half-step behind the point it moves, so the fixed point is near the
+ * shortest path rather than on it. Unguarded that produced paths up to 0.6%
+ * LONGER than the straight line they started from, and more sweeps made some
+ * of them worse. So each move is a proposal, kept only when the two segments
+ * it joins actually get shorter, which makes a sweep monotone in total length
+ * and the result never worse than the line.
+ */
+export function geodesic(p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8, sweeps = 4): Vec3[] {
+  const path = Array.from({ length: n + 1 }, (_, i) => lerp(p, q, i / n));
+  if (g === EUCLIDEAN) return path;             // already the shortest one
+  for (let s = 0; s < sweeps; s++)
+    for (let i = 1; i < n; i++) {
+      const a = path[i - 1], x = path[i], b = path[i + 1];
+      const ga = g(lerp(a, x, 0.5)), gb = g(lerp(x, b, 0.5));
+      const sum = ga.map((r, u) => r.map((v, w) => v + gb[u][w]));
+      const y = apply(inv3(sum), [0, 1, 2].map((u) =>
+        ga[u][0] * a[0] + ga[u][1] * a[1] + ga[u][2] * a[2]
+        + gb[u][0] * b[0] + gb[u][1] * b[1] + gb[u][2] * b[2]) as Vec3);
+      if (segLength(a, y, g) + segLength(y, b, g) < segLength(a, x, g) + segLength(x, b, g)) path[i] = y;
+    }
+  return path;
+}
+
+/**
  * Perceived difference between two colors — the non-Riemannian one.
- * Uses the straight chord, which upper-bounds the geodesic; equality holds for
- * EUCLIDEAN.
- * ponytail: chord, not geodesic. Swap in the planner's path when there is one.
- * CGF 2025 §4 wants the geodesic here specifically to capture Bezold-Brücke —
- * straight lines in the chart are the wrong path for a hue-preserving ramp.
+ *
+ * Along the geodesic, not the chord. CGF 2025 §4 wants it there specifically to
+ * capture Bezold-Brücke: a straight line in the chart is the wrong path between
+ * two colors of a hue-preserving ramp, and measuring along it overstates how
+ * far apart they are. Under the chart's own metric the two coincide, so this
+ * only bites once a working space or a weighted metric bends the geometry.
  */
 export const delta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
+  perceive(arcLength(geodesic(p, q, g, n), g));
+
+/**
+ * The same thing along the straight line, for the inner loop.
+ *
+ * A geodesic costs about a hundred times a chord under a varying metric —
+ * measured, 0.0018ms against 0.177ms in CIELAB — and obstaclePenalty runs once
+ * per curve sample per perturbation, which at nine points is 193 x 54 per
+ * gradient step. Paying for the exact path there turned 0.12ms into 30ms and
+ * the step into a second and a half.
+ *
+ * So the keep-out radius is measured along the line and the panel reports along
+ * the path. They differ by at most the 2% the two lengths differ by, and by
+ * nothing at all in the chart, where the line IS the path.
+ */
+const lineDelta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
   perceive(arcLength(Array.from({ length: n + 1 }, (_, i) => lerp(p, q, i / n)), g));
 
 // ─── color vision deficiency: a projection on M ──────────────────────────────
@@ -1050,6 +1106,26 @@ function demo() {
     ok(quad(m, [1, 2, -3]) > 0 && close(m[0][1], m[1][0], 1e-9), `${k} metric is symmetric positive`);
   }
   ok(spaceMetric('oklab') === EUCLIDEAN, 'the chart is its own space');
+  // A geodesic is the shortest path, so it can never be longer than the line it
+  // started from. The relaxation does not guarantee that on its own — the metric
+  // in the closed-form step is lagged half a segment behind the point it moves,
+  // and unguarded it produced paths 0.6% LONGER — so this is what the guard is
+  // there for and the check that it is still doing its job.
+  for (const k of ['cielab', 'cieluv', 'cam02', 'ipt']) {
+    const g2 = spaceMetric(k);
+    for (const [a, b] of [['#440154', '#fde725'], ['#e41a1c', '#377eb8'], ['#00ff00', '#ff00ff']]) {
+      const [p3, q3] = [fromHex(a), fromHex(b)];
+      const line = Array.from({ length: 9 }, (_, i) => lerp(p3, q3, i / 8));
+      ok(arcLength(geodesic(p3, q3, g2), g2) <= arcLength(line, g2) + 1e-9,
+        `${k} geodesic is no longer than the chord, ${a} to ${b}`);
+    }
+  }
+  // and in the chart it IS the line, so nothing there changes or pays for this
+  {
+    const [p3, q3] = [fromHex('#440154'), fromHex('#fde725')];
+    ok(geodesic(p3, q3).every((x, i) => close(x[0], lerp(p3, q3, i / 8)[0], 1e-12)),
+      'the chart geodesic is the straight line');
+  }
   // The analytic Jacobians have to agree with the central differences they
   // replace. Away from black they do, to five digits; at black they disagree
   // completely and the analytic one is right, because chart→XYZ cubes its
