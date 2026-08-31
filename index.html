@@ -202,6 +202,8 @@
   .note { color:var(--dim); font-size:11px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
+  h2 #a11ybtn { float:right; margin:-3px 6px 0 0; padding:0 6px;
+    font:11px/1.5 'Fira Mono',ui-monospace,monospace; }
   h2 #mathbtn { float:right; margin:-3px 0 0; padding:0 6px; font:11px/1.5 'Fira Sans',ui-sans-serif,system-ui,sans-serif;
                 background:var(--ctl); color:var(--dim); border:1px solid var(--line); border-radius:3px;
                 cursor:pointer; text-transform:none; letter-spacing:0; }
@@ -250,6 +252,25 @@
     background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:9px;
     font:13px/1.55 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
   #aboutdlg::backdrop { background:#000a; }
+  #a11ydlg { width:min(520px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto;
+    overscroll-behavior:contain; padding:20px 22px; background:var(--panel); color:var(--fg);
+    border:1px solid var(--line); border-radius:9px;
+    font:13px/1.5 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
+  #a11ydlg::backdrop { background:#000a; }
+  #a11ydlg h3 { margin:0 0 6px; font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
+  #a11yclose { position:absolute; top:12px; right:12px; width:26px; height:26px; padding:0;
+    background:none; border:0; color:var(--dim); font-size:19px; line-height:1; cursor:pointer; }
+  #a11yclose:hover { color:var(--fg); }
+  #a11ybody { width:100%; border-collapse:collapse; }
+  #a11ybody td { padding:2px 0; vertical-align:baseline; }
+  #a11ybody td.v { text-align:right; white-space:nowrap; padding-left:12px;
+    font-family:'Fira Mono',ui-monospace,monospace; font-size:11px; }
+  #a11ybody td.mark { width:16px; text-align:right; font-size:11px; }
+  #a11ybody tr.h td { padding:14px 0 4px; font-size:10px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--dim); }
+  #a11ybody tr.h td em { font-style:normal; text-transform:none; letter-spacing:normal; }
+  #a11ybody .no { color:var(--hot); }
+  #a11ycopy { margin-top:16px; padding:5px 10px; }
   #loaddlg { width:min(720px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto;
     overscroll-behavior:contain; padding:20px 22px; background:var(--panel); color:var(--fg);
     border:1px solid var(--line); border-radius:9px;
@@ -475,7 +496,7 @@
     </section>
     <div id="dock"></div>
 
-    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2><table id="metrics"></table>
+    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button><button id="a11ybtn" title="how this palette reads for everyone else">a11y</button></h2><table id="metrics"></table>
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
         <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span></div>
       <div class="row"><label class="f">contrast</label>
@@ -586,6 +607,13 @@
   <p>Built by Zachary Kingston, using Claude Opus 5.</p>
   <p><a href="https://zkingston.com" target="_blank" rel="noopener">zkingston.com</a> /
      <a href="mailto:zkingston@purdue.edu">zkingston@purdue.edu</a></p>
+</dialog>
+
+<dialog id="a11ydlg">
+  <button id="a11yclose" title="close">&times;</button>
+  <h3>Accessibility</h3>
+  <table id="a11ybody"></table>
+  <button id="a11ycopy">copy as text</button>
 </dialog>
 
 <dialog id="loaddlg">
@@ -761,7 +789,7 @@ import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
-  arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty,
+  arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty, delta,
   obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, gamutFromICC, internals,
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
 } from './color-space.ts';
@@ -4284,6 +4312,74 @@ $('spacesel').onchange = (e) => {
   sync();
 };
 /**
+ * What a palette does for a reader who is not you.
+ *
+ * Built as rows rather than as markup so the dialog and the text you copy out
+ * of it come from one place and cannot drift apart.
+ *
+ * Two of the three thresholds are somebody else's: WCAG 2 fixes 3:1 and 4.5:1.
+ * The separation line at 5 is ours, and calibrated rather than looked up —
+ * Okabe and Ito's set, which was designed against color vision deficiency,
+ * holds 6.4 under deuteranopia, while tab10 and Set1, which were not, fall to
+ * 1.3 and 2.8. A JND of one chart unit is likewise a working figure, not a
+ * measurement, and it only scales the step count.
+ */
+const JND = 1, SEP_MIN = 5;
+
+function a11yReport() {
+  const g = M(), pal = palette(), cont = S.mode === 'continuous' && S.pts.length >= 2;
+  const c = cont ? curve() : pal;
+  const rows = [];
+  const VIEWS = [['normal', NORMAL], ['protanopia', simulate('protan', 1)],
+                 ['deuteranopia', simulate('deutan', 1)], ['tritanopia', simulate('tritan', 1)]];
+
+  if (cont) {
+    rows.push(['head', 'Resolvable steps', `along the ramp, at ${JND} chart unit per step`]);
+    for (const [name, v] of VIEWS) {
+      const n = arcLength(c.map(v), g) / JND;
+      rows.push(['row', name, `${n.toFixed(0)} steps`, null]);
+    }
+  } else {
+    rows.push(['head', 'Separation', `closest pair, in perceived units · ${SEP_MIN} or more passes`]);
+    for (const [name, v] of VIEWS) {
+      let lo = Infinity, at = null;
+      for (let i = 0; i < pal.length; i++) for (let j = i + 1; j < pal.length; j++) {
+        const d = delta(v(pal[i]), v(pal[j]), g);
+        if (d < lo) { lo = d; at = [i, j]; }
+      }
+      rows.push(['row', name, at ? `${lo.toFixed(1)} · swatches ${at[0] + 1} and ${at[1] + 1}` : '—',
+                 at ? lo >= SEP_MIN : null]);
+    }
+  }
+
+  // grayscale: what a photocopy, or anyone whose vision collapses hue, is left with
+  const L = pal.map((p) => p[0]);
+  const up = L.every((v, i) => i === 0 || v >= L[i - 1] - 1e-9);
+  const down = L.every((v, i) => i === 0 || v <= L[i - 1] + 1e-9);
+  let gap = Infinity, gpair = null;
+  for (let i = 0; i < pal.length; i++) for (let j = i + 1; j < pal.length; j++)
+    if (Math.abs(L[i] - L[j]) < gap) { gap = Math.abs(L[i] - L[j]); gpair = [i, j]; }
+  rows.push(['head', 'Grayscale', 'printed, photocopied, or read without hue']);
+  if (cont) rows.push(['row', 'lightness runs one way', up || down ? 'yes' : 'no', up || down]);
+  rows.push(['row', 'closest pair in lightness',
+             gpair ? `${gap.toFixed(1)} · swatches ${gpair[0] + 1} and ${gpair[1] + 1}` : '—',
+             gpair ? gap >= (cont ? 0 : SEP_MIN) : null]);
+
+  // contrast against the ground the palette will actually sit on
+  const bg = fromHex(S.cbg);
+  const cr = pal.map((p) => contrastRatio(p, bg));
+  const worst = Math.min(...cr), at = cr.indexOf(worst);
+  rows.push(['head', 'Contrast', `against ${S.cbg} · WCAG 2`]);
+  rows.push(['row', 'worst swatch', `${worst.toFixed(2)}:1 · swatch ${at + 1}`, null]);
+  rows.push(['row', 'clears 3:1', worst >= 3 ? 'yes' : 'no', worst >= 3]);
+  rows.push(['row', 'clears 4.5:1', worst >= 4.5 ? 'yes' : 'no', worst >= 4.5]);
+  return rows;
+}
+
+const a11yText = () => a11yReport().map(([kind, a, b]) =>
+  kind === 'head' ? `\n${a} — ${b}` : `  ${a.padEnd(26)} ${b}`).join('\n').trim();
+
+/**
  * The strip a preset would actually produce, as a CSS gradient.
  *
  * Rendered rather than listed: a continuous map is its spline resampled to
@@ -4328,6 +4424,18 @@ $('panelbtn').onclick = () => {
   S.panels = !S.panels;
   layout(); mirror(); sync();
 };
+function paintA11y() {
+  $('a11ybody').innerHTML = a11yReport().map(([kind, a, b, ok]) =>
+    kind === 'head'
+      ? `<tr class="h"><td colspan="3">${esc(a)} <em>— ${esc(b)}</em></td></tr>`
+      : `<tr><td>${esc(a)}</td><td class="v">${esc(b)}</td>`
+        + `<td class="mark ${ok === false ? 'no' : ''}">${ok === null || ok === undefined ? '' : ok ? '✓' : '✗'}</td></tr>`).join('');
+}
+$('a11ybtn').onclick = () => { paintA11y(); $('a11ydlg').showModal(); };
+$('a11yclose').onclick = () => $('a11ydlg').close();
+$('a11ydlg').onclick = (e) => { if (e.target === $('a11ydlg')) $('a11ydlg').close(); };
+$('a11ycopy').onclick = (e) => copyText(e.target, a11yText(), 'copy as text');
+
 $('loadbtn').onclick = () => { paintLoadList(); $('loaddlg').showModal(); };
 $('loadclose').onclick = () => $('loaddlg').close();
 $('loaddlg').onclick = (e) => { if (e.target === $('loaddlg')) $('loaddlg').close(); };
@@ -4662,6 +4770,7 @@ new ResizeObserver(layout).observe(main);   // catches sidebar and devtools resi
 reflow();
 applyBg();
 setView();
+
 frame();
 </script>
 </html>
