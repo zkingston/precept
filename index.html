@@ -861,7 +861,7 @@ reframe();                       // FRAME must exist before anything calls world
 S.slice = [...FRAME.mid];
 
 // ─── the color pipeline, shared by every shader below ─────────────────────
-const SPACE_ID = { oklab: 0, cielab: 1, cieluv: 2, ipt: 3, xyz: 4, srgb: 5, ictcp: 6, oklch: 7, cam02: 8 };
+const SPACE_ID = { oklab: 0, cielab: 1, cieluv: 2, ipt: 3, xyz: 4, srgb: 5, ictcp: 6, cam02: 8 };
 const CVD_ID = { none: 0, protan: 1, deutan: 2, tritan: 3 };
 const m3 = (rows) => new T.Matrix3().set(...rows.flat());   // .set takes row-major
 
@@ -912,11 +912,6 @@ vec3 spaceToXyz(vec3 c) {
     return uIptLmsI * l;
   }
   if (uSpace == 4) return c / 100.0;
-  if (uSpace == 7) {                                      // Oklch: polar Oklab
-    float hr = radians(c.z);
-    vec3 l = uLmsLab * (vec3(c.x, c.y * cos(hr), c.y * sin(hr)) / 100.0);
-    return uXyzLms * (l * l * l);
-  }
   if (uSpace == 6) {                                      // ICtCp: opponent, then inverse PQ
     vec3 e = uIcOppI * (c / uIcK);
     vec3 l;
@@ -1109,8 +1104,8 @@ function setColorUniforms(u) {
 // The gamut is the image of the RGB cube, so its boundary is the image of the
 // cube's six faces. Exact, and 6N² quads instead of a volume of samples.
 const SHELL_N = 28;
-const SHELL_IDX = (() => {
-  const N = SHELL_N, idx = [];
+const shellGeo = (() => {
+  const N = SHELL_N, idx = [], count = 6 * (N + 1) ** 2;
   for (let f = 0; f < 6; f++) {
     const base = f * (N + 1) ** 2;
     // Half the cube's faces have to wind the other way. The u×v normal of the
@@ -1126,50 +1121,11 @@ const SHELL_IDX = (() => {
         : [o, o + 1, o + N + 1, o + 1, o + N + 2, o + N + 1]));
     }
   }
-  return idx;
-})();
-const shellGeo = (() => {
   const g = new T.BufferGeometry();
-  g.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(6 * (SHELL_N + 1) ** 2 * 3), 3));
-  g.setIndex(SHELL_IDX);
+  g.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(count * 3), 3));
+  g.setIndex(idx);
   return g;
 })();
-
-/**
- * Oklch measures hue as an angle, so 359.9 and 0.1 are neighbors that the
- * coordinates place 360 apart. The shell is the RGB cube's surface mapped in,
- * and any triangle whose three corners land on both sides of that wrap is
- * stretched across the entire hue range: 144 of 6912 triangles, carrying 52%
- * of the surface area, and enough to flip the mesh's signed volume from
- * -212698 to +56182. They are dropped. The solid is then open where the
- * coordinate cuts it, which is the truth about these coordinates rather than a
- * hole in the gamut.
- */
-const HUE_AXIS = { oklch: 2 };
-function trimSeam(hue) {
-  if (!hue) return SHELL_IDX;
-  const kept = [];
-  for (let t = 0; t < SHELL_IDX.length; t += 3) {
-    const [a, b, c] = [hue[SHELL_IDX[t]], hue[SHELL_IDX[t + 1]], hue[SHELL_IDX[t + 2]]];
-    if (Math.max(a, b, c) - Math.min(a, b, c) <= 180) kept.push(SHELL_IDX[t], SHELL_IDX[t + 1], SHELL_IDX[t + 2]);
-  }
-  return kept;
-}
-
-/** signed volume the shell's triangles enclose, in world units */
-function shellVolume(idx) {
-  const P = shellGeo.attributes.position;
-  let v = 0;
-  for (let t = 0; t < idx.length; t += 3) {
-    const [i, j, k] = [idx[t], idx[t + 1], idx[t + 2]];
-    const a = [P.getX(i), P.getY(i), P.getZ(i)];
-    const b = [P.getX(j), P.getY(j), P.getZ(j)];
-    const c = [P.getX(k), P.getY(k), P.getZ(k)];
-    v += a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
-       + a[2] * (b[0] * c[1] - b[1] * c[0]);
-  }
-  return v / 6;
-}
 
 /**
  * Positions depend on the active gamut, so this reruns when the gamut changes.
@@ -1184,40 +1140,19 @@ function shellVolume(idx) {
  */
 function buildShell() {
   const N = SHELL_N, pos = shellGeo.attributes.position;
-  const ax = HUE_AXIS[params.space], hue = ax === undefined ? null : [];
   let k = 0, maxC = 0;
   for (const [u, v, w, f] of CUBE_FACES)
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const c = []; c[u] = (i / N) ** 3; c[v] = (j / N) ** 3; c[w] = f;
       const chart = fromLinear(c);
       maxC = Math.max(maxC, Math.hypot(chart[1], chart[2]));
-      // the space coords, not the world ones: world() permutes and rescales,
-      // so an angle is no longer an angle by the time it reaches the buffer
-      const sp = toSpace(chart);
-      if (hue) hue.push(sp[ax]);
-      const p = world(sp);
+      const p = wpt(chart);
       pos.setXYZ(k++, p.x, p.y, p.z);
     }
   // the hull is already being walked, so the gamut's reach is free here
   setChromaCeiling(Math.ceil(maxC * 1.02));
   pos.needsUpdate = true;
-  const idx = trimSeam(hue);
-  shellGeo.setIndex(idx);
   shellGeo.computeBoundingSphere();
-  // "The gamut is the image of the RGB cube, so its boundary is the image of
-  // the cube's six faces" holds in every chart here but the polar one. In Oklch
-  // the region is 0 <= C <= Cmax(L,h) and the cube's surface supplies only the
-  // outer sheet: the C=0 wall is a whole plane that the surface touches at two
-  // points, black and white, so nothing closes the solid. Measured, the
-  // triangles enclose 341 world units against 54170 for Oklab and 373248 for
-  // the sRGB cube. Drawing the far faces of a sheet that encloses nothing
-  // leaves 77 pixels on screen, so draw both faces and show it as the surface
-  // it is.
-  const open = Math.abs(shellVolume(idx)) < 1e3;
-  if (shell.material.side !== (open ? T.DoubleSide : T.BackSide)) {
-    shell.material.side = open ? T.DoubleSide : T.BackSide;
-    shell.material.needsUpdate = true;
-  }
 }
 // BackSide, not DoubleSide: drawing only the far faces gives one clean layer of
 // translucency instead of six stacked ones, and leaves the interior readable.

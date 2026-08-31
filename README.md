@@ -86,8 +86,8 @@ path across all of them.
 - **Gamuts** — sRGB, Display P3, Adobe RGB, Rec.2020, ProPhoto, ACEScg, NTSC
   1953. Derived from primaries and white point; the selector changes what is
   *reachable*, the screen stays sRGB.
-- **Spaces** — Oklab, Oklch, CIELAB, CIELUV, IPT, ICtCp, CAM02-UCS, XYZ, sRGB.
-  A change of chart: points live in the chart, so switching view never moves a
+- **Spaces** — Oklab, CIELAB, CIELUV, IPT, ICtCp, CAM02-UCS, XYZ, sRGB. A
+  change of chart: points live in the chart, so switching view never moves a
   palette.
 - **Constraints** — keep-out spheres, rotatable halfplanes, lightness/chroma/hue
   bounds shaded into the views, and a hard gamut projection applied wherever
