@@ -357,6 +357,7 @@ export const internals = {
   get CHART_WHITE() { return CHART_WHITE; },
   get IPT() { return { LMS: IPT_LMS, OPP: IPT_OPP, LMS_I: IPT_LMS_I, OPP_I: IPT_OPP_I, W: IPT_W }; },
   cvdMatrix,
+  get BRETTEL_TRITAN() { return BRETTEL_TRITAN; },
   get CAM() { return CAM; },
   get ICTCP() { return { LMS: ICTCP_LMS, LMS_I: ICTCP_LMS_I, OPP: ICTCP_OPP, OPP_I: ICTCP_OPP_I, K: ICTCP_K, PQ }; },
   rgbFromXYZ: (g = params.gamut) => mats(g).from,
@@ -1020,11 +1021,64 @@ export function cvdMatrix(type: CVD, severity = 1): number[] {
   return a.map((v, k) => v + f * (b[k] - v));
 }
 
+/**
+ * Brettel, Viénot & Mollon 1997 for tritanopia, because Machado's does not
+ * reach it.
+ *
+ * A dichromat sees two dimensions of color, so a simulation of one has to be
+ * rank 2. Machado's protan and deutan matrices are: their third singular value
+ * at severity 1 is 0 to seven figures. The tritan one is not — its singular
+ * values are 1.327, 1.137 and 0.156, so at full severity it still passes three
+ * dimensions through and the blue-yellow collapse never happens. That is the
+ * published matrix, checked against the authors' own table, not a transcription
+ * slip here.
+ *
+ * Brettel's construction is rank 2 by definition: a dichromat's gamut in cone
+ * space is two half-planes hinged on the neutral axis, and simulating is
+ * projecting onto whichever half-plane the color falls in. Both projections
+ * here have determinant 4e-6, both fix white exactly, and the separating normal
+ * is orthogonal to white, so the hinge runs down the gray axis where it should.
+ *
+ * Two planes is the reason this is not just another entry in MACHADO. Viénot's
+ * 1999 single-matrix simplification of Brettel covers protanopia and
+ * deuteranopia, where the two planes very nearly coincide, and does NOT cover
+ * tritanopia, where they do not.
+ *
+ * Parameters from libDaltonLens (public domain), which folds the LMS round trip
+ * into the matrices, so these act on linear sRGB exactly as MACHADO does.
+ */
+const BRETTEL_TRITAN = {
+  h1: [1.01277, 0.13548, -0.14826, -0.01243, 0.86812, 0.14431, 0.07589, 0.805, 0.11911],
+  h2: [0.93678, 0.18979, -0.12657, 0.06154, 0.81526, 0.1232, -0.37562, 1.12767, 0.24796],
+  n: [0.03901, -0.02788, -0.01113],
+};
+
+export const brettelTritan = (lin: Vec3): Vec3 => {
+  const { h1, h2, n } = BRETTEL_TRITAN;
+  const m = n[0] * lin[0] + n[1] * lin[1] + n[2] * lin[2] >= 0 ? h1 : h2;
+  return [0, 1, 2].map((r) => m[3 * r] * lin[0] + m[3 * r + 1] * lin[1] + m[3 * r + 2] * lin[2]) as Vec3;
+};
+
+/**
+ * How much of Brettel to mix in, for tritan only.
+ *
+ * Machado is the better model of an anomalous trichromat and is kept wherever
+ * it is one. Brettel is the only one of the two that reaches a dichromat, so it
+ * takes over at the top. The ramp between them is a seam, not a physiological
+ * parameter, and it is placed in the last fifth so that everything below 0.8 is
+ * Machado untouched and 1.0 is Brettel exactly.
+ */
+export const tritanMix = (severity: number) => Math.min(1, Math.max(0, (severity - 0.8) / 0.2));
+
 export function simulate(type: CVD, severity = 1): View {
   const m = cvdMatrix(type, severity);
+  const w = type === 'tritan' ? tritanMix(severity) : 0;
   return (p) => {
     const c = toLinear(p, 'srgb');
-    return fromLinear([0, 1, 2].map((r) => m[3 * r] * c[0] + m[3 * r + 1] * c[1] + m[3 * r + 2] * c[2]) as Vec3, 'srgb');
+    const a = [0, 1, 2].map((r) => m[3 * r] * c[0] + m[3 * r + 1] * c[1] + m[3 * r + 2] * c[2]) as Vec3;
+    if (w === 0) return fromLinear(a, 'srgb');
+    const b = brettelTritan(c);
+    return fromLinear(a.map((v, i) => v + w * (b[i] - v)) as Vec3, 'srgb');
   };
 }
 
@@ -1175,6 +1229,21 @@ function demo() {
   // achromatic comes through untouched, at any severity.
   const red = fromHex('#d62728'), green = fromHex('#2ca02c'), blue = fromHex('#1f77b4'), orange = fromHex('#ff7f0e');
   ok(delta(simulate('deutan', 0)(red), red) < 1e-4, 'severity 0 is identity'); // chart round-trip float error
+
+  // A dichromat sees two dimensions, so a simulation of one has to be rank 2.
+  // Machado reaches that for protan and deutan and not for tritan, which is why
+  // tritan blends into Brettel at the top: both of Brettel's half-plane
+  // projections are singular by construction, and the hinge is the gray axis.
+  for (const [nm, m] of [['1', BRETTEL_TRITAN.h1], ['2', BRETTEL_TRITAN.h2]] as [string, number[]][]) {
+    const det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6])
+              + m[2] * (m[3] * m[7] - m[4] * m[6]);
+    ok(Math.abs(det) < 1e-4, `Brettel tritan half-plane ${nm} is a projection`);
+    ok([0, 1, 2].every((r) => Math.abs(m[3 * r] + m[3 * r + 1] + m[3 * r + 2] - 1) < 1e-4),
+       `Brettel tritan half-plane ${nm} fixes white`);
+  }
+  ok(Math.abs(BRETTEL_TRITAN.n.reduce((a, v) => a + v, 0)) < 1e-9, 'the tritan hinge runs down the gray axis');
+  ok(tritanMix(0.8) === 0 && Math.abs(tritanMix(1) - 1) < 1e-12 && tritanMix(0.79) === 0,
+     'the tritan seam is confined to the top fifth');
   const deu = simulate('deutan');
   for (const t of ['protan', 'deutan', 'tritan'] as CVD[])
     for (const sev of [0.3, 0.6, 1]) {

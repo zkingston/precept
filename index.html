@@ -582,6 +582,7 @@ import {
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty, delta, lineDelta,
   obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, gamutFromICC, internals,
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES, SPECTRAL_LOCUS, toXYZ, fromXYZ,
+  tritanMix,
 } from './color-space.ts';
 
 // We do every color computation ourselves and hand three gamma-encoded sRGB
@@ -914,7 +915,9 @@ uniform vec3 uLo, uHi, uWhite, uIptW, uMid;
 uniform float uScale;
 uniform vec2 uLB, uCB, uHue;
 uniform mat3 uLmsLab, uXyzLms, uLmsXyz, uLabLms;
-uniform mat3 uIptOppI, uIptLmsI, uGamut, uLinSrgb, uXyzSrgb, uCvdM;
+uniform mat3 uIptOppI, uIptLmsI, uGamut, uLinSrgb, uXyzSrgb, uCvdM, uBr1, uBr2;
+uniform vec3 uBrN;
+uniform float uBrMix;
 uniform mat3 uIcOppI, uIcLmsI, uCamBack;
 uniform vec4 uPq;                       // m1, m2, c1 and the pair c2, c3 packed below
 uniform vec2 uPq2;
@@ -1018,7 +1021,13 @@ bool inBounds(vec3 lab) {
 /** XYZ, through the selected observer, to something a monitor can show */
 vec3 shown(vec3 xyz) {
   vec3 lin = uLinSrgb * xyz;
-  if (uCvd > 0) lin = uCvdM * lin;      // severity is already baked into the matrix
+  if (uCvd > 0) {
+    vec3 a = uCvdM * lin;               // severity is already baked into the matrix
+    // tritan past 0.8 blends into Brettel, which picks a half-plane per color
+    if (uBrMix > 0.0)
+      a = mix(a, (dot(uBrN, lin) >= 0.0 ? uBr1 : uBr2) * lin, uBrMix);
+    lin = a;
+  }
   return clamp(vec3(enc(lin.r), enc(lin.g), enc(lin.b)), 0.0, 1.0);
 }
 
@@ -1104,6 +1113,10 @@ const colorUniforms = () => ({
       uGamut: { value: new T.Matrix3() }, uLinSrgb: { value: new T.Matrix3() },
       uXyzSrgb: { value: new T.Matrix3() },
   uCvdM: { value: new T.Matrix3() },
+  uBr1: { value: m3([internals.BRETTEL_TRITAN.h1.slice(0, 3), internals.BRETTEL_TRITAN.h1.slice(3, 6), internals.BRETTEL_TRITAN.h1.slice(6)]) },
+  uBr2: { value: m3([internals.BRETTEL_TRITAN.h2.slice(0, 3), internals.BRETTEL_TRITAN.h2.slice(3, 6), internals.BRETTEL_TRITAN.h2.slice(6)]) },
+  uBrN: { value: new T.Vector3(...internals.BRETTEL_TRITAN.n) },
+  uBrMix: { value: 0 },
   uIcOppI: { value: new T.Matrix3() }, uIcLmsI: { value: new T.Matrix3() }, uCamBack: { value: new T.Matrix3() },
   uPq: { value: new T.Vector4() }, uPq2: { value: new T.Vector2() }, uIcK: { value: 1 },
   uCam: { value: new T.Vector4() }, uCam2: { value: new T.Vector2() },
@@ -1134,6 +1147,7 @@ function setColorUniforms(u) {
   u.uCvd.value = CVD_ID[S.cvd]; u.uSev.value = S.sev;
   if (S.cvd !== 'none') {
     u.uCvdM.value.set(...I.cvdMatrix(S.cvd, S.sev));
+    u.uBrMix.value = S.cvd === 'tritan' ? tritanMix(S.sev) : 0;
   }
 }
 
@@ -3864,8 +3878,26 @@ const chroma = $('chroma');
 const CH = { w: 420, h: 450, m: { l: 34, r: 10, t: 10, b: 26 }, xmax: 0.75, ymax: 0.85 };
 let locusFill = null, locusKey = null;             // sRGB, so it survives a gamut change
 let locusLCh = null;                               // per pixel, so bounds are arithmetic
-/** the deficiency as a matrix on linear sRGB, which is where Machado defines it */
-const cvdM = () => (S.cvd === 'none' ? null : internals.cvdMatrix(S.cvd, S.sev));
+/**
+ * The deficiency on linear sRGB, where both models are defined.
+ *
+ * Machado is one matrix. Tritan above severity 0.8 blends into Brettel, which
+ * is two matrices and a plane test, so this is a function rather than a matrix
+ * and callers cannot assume linearity — see how the triangle is drawn.
+ */
+const cvdLin = () => {
+  if (S.cvd === 'none') return null;
+  const m = internals.cvdMatrix(S.cvd, S.sev);
+  const w = S.cvd === 'tritan' ? tritanMix(S.sev) : 0;
+  const B = internals.BRETTEL_TRITAN;
+  return (l) => {
+    const a = [0, 1, 2].map((r) => m[3 * r] * l[0] + m[3 * r + 1] * l[1] + m[3 * r + 2] * l[2]);
+    if (!w) return a;
+    const h = B.n[0] * l[0] + B.n[1] * l[1] + B.n[2] * l[2] >= 0 ? B.h1 : B.h2;
+    const b = [0, 1, 2].map((r) => h[3 * r] * l[0] + h[3 * r + 1] * l[1] + h[3 * r + 2] * l[2]);
+    return a.map((v, i) => v + w * (b[i] - v));
+  };
+};
 
 const chX = (x) => CH.m.l + (x / CH.xmax) * (CH.w - CH.m.l - CH.m.r);
 const chY = (y) => CH.h - CH.m.b - (y / CH.ymax) * (CH.h - CH.m.t - CH.m.b);
@@ -3906,7 +3938,7 @@ function paintLocus(cvd) {
         if (y <= 0) continue;
         const xyz = [x / y, 1, (1 - x - y) / y];
         let rgb = [0, 1, 2].map((r) => M[r][0] * xyz[0] + M[r][1] * xyz[1] + M[r][2] * xyz[2]);
-        if (cvd) rgb = [0, 1, 2].map((r) => cvd[3 * r] * rgb[0] + cvd[3 * r + 1] * rgb[1] + cvd[3 * r + 2] * rgb[2]);
+        if (cvd) rgb = cvd(rgb);
         const mx = Math.max(...rgb);
         if (!(mx > 0)) continue;
         const o = 4 * (py * CH.w + px);
@@ -3988,7 +4020,7 @@ function drawChroma() {
   if (key !== locusKey) {
     const off = document.createElement('canvas');
     off.width = CH.w; off.height = CH.h;
-    off.getContext('2d').putImageData(paintLocus(cvdM()), 0, 0);
+    off.getContext('2d').putImageData(paintLocus(cvdLin()), 0, 0);
     locusFill = off; locusKey = key;
   }
   g.drawImage(locusFill, 0, 0, CH.w, CH.h);
@@ -4037,13 +4069,13 @@ function drawChroma() {
    * because a simulation reports the color a normal observer would see, not a
    * different set of matching functions.
    */
-  const cv = cvdM();
+  const cv = cvdLin();
   const seen = ([x, y]) => {
     if (!cv) return [x, y];
     const xyz = [x / y, 1, (1 - x - y) / y];
     const M0 = internals.rgbFromXYZ('srgb'), M1 = internals.xyzFromRGB('srgb');
     const l = [0, 1, 2].map((r) => M0[r][0] * xyz[0] + M0[r][1] * xyz[1] + M0[r][2] * xyz[2]);
-    const c = [0, 1, 2].map((r) => cv[3 * r] * l[0] + cv[3 * r + 1] * l[1] + cv[3 * r + 2] * l[2]);
+    const c = cv(l);
     const q = [0, 1, 2].map((r) => M1[r][0] * c[0] + M1[r][1] * c[1] + M1[r][2] * c[2]);
     const t = q[0] + q[1] + q[2];
     return t > 0 ? [q[0] / t, q[1] / t] : [x, y];
@@ -4053,8 +4085,19 @@ function drawChroma() {
   const triangle = (k, stroke, wide, dot) => {
     const gm = GAMUTS[k];
     if (!gm?.p) return;
+    // walked, not cornered: a dichromat's map is two projections and an edge
+    // folds where it crosses between them, so three mapped vertices would draw
+    // a triangle over what is really a pair of segments meeting at white
+    const N = cv ? 48 : 1;
     g.beginPath();
-    gm.p.map(seen).forEach(([x, y], i) => (i ? g.lineTo(chX(x), chY(y)) : g.moveTo(chX(x), chY(y))));
+    let first = true;
+    for (let e = 0; e < 3; e++) {
+      const [ax, ay] = gm.p[e], [bx, by] = gm.p[(e + 1) % 3];
+      for (let i = 0; i <= N; i++) {
+        const t = i / N, [x, y] = seen([ax + (bx - ax) * t, ay + (by - ay) * t]);
+        if (first) { g.moveTo(chX(x), chY(y)); first = false; } else g.lineTo(chX(x), chY(y));
+      }
+    }
     g.closePath();
     g.strokeStyle = stroke; g.lineWidth = wide; g.stroke();
     if (!dot) return;
@@ -4090,7 +4133,7 @@ function drawChroma() {
       ? 'The bounds rule out no chromaticity. '
       : 'The veiled region is what the chroma and hue bounds rule out. Lightness has no axis here, '
         + 'and enters only by limiting what the chroma band can reach. ')
-    + (cv ? `Everything is through ${observer()}: the triangle is where those primaries land, `
+    + (cv ? `Everything is through ${observer()}: the outline is where those primaries land, `
           + 'and the axes stay the normal observer\'s.' : '');
 }
 $('chromabtn').onclick = () => { $('chromadlg').showModal(); drawChroma(); };
@@ -4957,8 +5000,8 @@ const HINTS = {
   loadbtn: 'Published palettes, as swatches. Click one to load it.',
   spacesel: 'Space the panels are drawn in and distances measured in.',
   gamutsel: 'Which colors are reachable. ICC loads a matrix/TRC RGB profile, \u25b3 draws the gamut on a chromaticity diagram.',
-  cvd: 'Simulate a color-vision deficiency.',
-  sev: 'Below 1 is anomalous trichromacy; 1 is dichromacy.',
+  cvd: 'Simulate a color-vision deficiency. Machado 2009, and Brettel 1997 for tritanopia.',
+  sev: 'Below 1 is anomalous trichromacy; 1 is dichromacy. Tritan crosses to Brettel above 0.8.',
   shell: 'Opacity of the gamut solid.',
   sliceop: 'Opacity of the three cut planes.',
   bg: 'Backdrop color. The panel follows it.',
