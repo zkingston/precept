@@ -1316,9 +1316,10 @@ const refl = (a      , b      )       => [2 * a[0] - b[0], 2 * a[1] - b[1], 2 * 
  * additive quantity. Interpolation is linear in the chart between knots, so
  * pass a finely discretized path.
  */
-export function resample(path        , n        , g         = EUCLIDEAN)         {
+export function resample(path        , n        , g         = EUCLIDEAN, seg           )         {
   const cum = [0];
-  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + segLength(path[i - 1], path[i], g));
+  for (let i = 1; i < path.length; i++)
+    cum.push(cum[i - 1] + (seg ? seg[i - 1] : segLength(path[i - 1], path[i], g)));
   const total = cum[cum.length - 1];
   let k = 1;
   return Array.from({ length: n }, (_, i) => {

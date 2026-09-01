@@ -144,25 +144,79 @@ export function degree(i) {
   return (w.k > 0 ? 1 : 0) + (w.k < n - 1 ? 1 : 0);
 }
 
-export const curveOf = (pts, closed = false) =>
-  (pts.length >= 2 ? spline(pts.map((p) => toSpace(p)), PER_SPAN, closed).map((c) => fromSpace(c)) : pts.slice());
+/**
+ * A run's trajectory. `prev` and `ranges` are the same reuse ctxOf does for the
+ * segment lengths: a Catmull-Rom span reads four control points, so moving one
+ * bends only the four spans around it and every sample outside them converts to
+ * exactly the value it had. The spline itself is polynomial arithmetic and runs
+ * whole either way; what this skips is fromSpace on each sample, which is a
+ * full color conversion.
+ *
+ * The reused samples are shared with `prev`, not copied. Nothing downstream
+ * writes to a curve point — resample lerps into new arrays and the terms only
+ * read — so this stays sound as long as that holds.
+ */
+export const curveOf = (pts, closed = false, prev, ranges) => {
+  if (pts.length < 2) return pts.slice();
+  const s = spline(pts.map((p) => toSpace(p)), PER_SPAN, closed);
+  if (!prev || prev.length !== s.length) return s.map((c) => fromSpace(c));
+  const out = prev.slice();
+  for (const [lo, hi] of ranges)
+    for (let i = lo; i < Math.min(hi, s.length); i++) out[i] = fromSpace(s[i]);
+  return out;
+};
+
+/**
+ * Segment lengths along one run's curve, reusing a base curve's wherever the
+ * probe cannot have moved them.
+ *
+ * A control point only bends the four spans around it, so within one gradient
+ * every probe shares the rest of the curve with the palette it was perturbed
+ * from — 58% of the segments at nine control points, 92% at forty-nine. Each
+ * one is a metric evaluation, and those were 60% of the solver.
+ *
+ * The window is the arc term's, for the same reason: a segment moved if either
+ * of its ends did, so it opens one earlier than the sample window.
+ */
+function segLengths(c, g, prev, ranges) {
+  const n = c.length - 1;
+  if (!prev || prev.length !== n) {
+    const out = new Array(n);
+    for (let i = 0; i < n; i++) out[i] = segLength(c[i], c[i + 1], g);
+    return out;
+  }
+  const out = prev.slice();
+  for (const [lo, hi] of ranges)
+    for (let i = Math.max(0, lo - 1); i < Math.min(hi, n); i++) out[i] = segLength(c[i], c[i + 1], g);
+  return out;
+}
 
 /**
  * Everything a term needs, built once per candidate point set. The spline is by
  * far the most expensive part of an objective evaluation and every term used to
  * rebuild it independently — which cost little with one term and a great deal
  * once a combined step evaluates nine of them at each of 6n perturbations.
+ *
+ * `reuse` is the context every probe in a gradient is a perturbation of, with
+ * the window saying which of its samples and lengths are still good. Runs other
+ * than the perturbed one keep all of theirs: the runs partition the points, so
+ * a point in one cannot bend another.
  */
-export function ctxOf(pts) {
+export function ctxOf(pts, reuse) {
   const continuous = S.mode === 'continuous' && pts.length >= 2;
-  if (!continuous) return { pts, curves: [], pal: pts, probe: pts };
+  if (!continuous) return { pts, curves: [], pal: pts, probe: pts, seg: [] };
   const g = M();
   // one spline per run, and one swatch per control point within it, so the
   // palette still has exactly as many entries as there are points
   const rs = runs();
-  const curves = rs.map((r) => curveOf(r.nodes.map((i) => pts[i]), r.closed));
-  const pal = curves.flatMap((c, k) => (c.length >= 2 ? resample(c, rs[k].nodes.length, g) : c));
-  return { pts, curves, pal, probe: curves.flat() };
+  // the probe window is into its own run's curve; the runs partition the
+  // points, so every other run is untouched and keeps all of its samples
+  const win = (k) => (k === reuse?.rng.run ? reuse.rng.ranges : []);
+  const curves = rs.map((r, k) =>
+    curveOf(r.nodes.map((i) => pts[i]), r.closed, reuse?.from.curves[k], win(k)));
+  const seg = curves.map((c, k) => (c.length >= 2 ? segLengths(c, g, reuse?.from.seg[k], win(k)) : []));
+  const pal = curves.flatMap((c, k) => (c.length >= 2 ? resample(c, rs[k].nodes.length, g, seg[k]) : c));
+  return { pts, curves, pal, probe: curves.flat(), seg };
 }
 /** perceived chord — the cheap version of `delta` for use inside a gradient */
 export const pd = (a, b, g) => perceive(segLength(a, b, g));
@@ -406,19 +460,25 @@ export const OBJ = [
   { key: 'rep', label: () => `repulsion · ${observer()}`, f: (x) => repulsion(x.pal, [primary()]) },
   { key: 'repcvd', label: () => `repulsion · ${S.cvd === 'none' ? 'all' : '+' + S.cvd}`,
     f: (x) => repulsion(x.pal, criteria()) },
+  /**
+   * Both of these are sums of numbers ctxOf is already holding.
+   *
+   * It had to measure every segment to place the swatches by arc length, and
+   * this term is that same measurement — so asking for it again was a second
+   * metric evaluation per segment, and in a space that differentiates by
+   * central differences that is six color conversions each. It was a quarter
+   * of the solver at nine control points. Now it costs no metric evaluations.
+   *
+   * The window is the one ctxOf reuses by: a segment counts if either of its
+   * ends moved, so it opens one earlier than the sample window.
+   */
   { key: 'arc', label: 'arc length', mode: 'continuous',
-    f: (x) => { const g = M(); return x.curves.reduce((a, c) => a + arcLength(c, g), 0); },
-    // One metric evaluation per segment, and in a space that differentiates by
-    // central differences that is six color conversions each — which is why this
-    // term, four microseconds in the chart, is a millisecond in CAM02-UCS. Only
-    // the segments touching a moved span change; a segment counts if either of
-    // its ends did, so the window opens one earlier than the sample window.
+    f: (x) => x.seg.reduce((a, s) => a + s.reduce((b, v) => b + v, 0), 0),
     part: (x, w) => {
-      const g = M(), c = x.curves[w.run];
+      const s = x.seg[w.run];
       let a = 0;
       for (const [lo, hi] of w.ranges)
-        for (let i = Math.max(0, lo - 1); i < Math.min(hi, c.length - 1); i++)
-          a += segLength(c[i], c[i + 1], g);
+        for (let i = Math.max(0, lo - 1); i < Math.min(hi, s.length); i++) a += s[i];
       return a;
     } },
   /**
@@ -756,14 +816,17 @@ export function gradientOf(terms) {
   // gated on the mode too, so a hidden checkbox cannot quietly hold points still
   const pinned = pinnedAt;
   const per = terms.map(() => base.map(() => [0, 0, 0]));
-  const wants = terms.some((t) => t.part);
+  // the palette every probe is a perturbation of: its segment lengths are the
+  // ones each probe gets to keep, so this pays for itself 6n times over
+  const from = ctxOf(base);
   for (let i = 0; i < base.length; i++) {
     if (pinned(i)) continue;
-    const rng = wants ? probeRanges(i) : null;
+    const rng = probeRanges(i);
+    const reuse = rng && from.seg.length ? { from, rng } : null;
     for (let k = 0; k < 3; k++) {
       const lo = base.map((q) => [...q]), hi = base.map((q) => [...q]);
       lo[i][k] -= h; hi[i][k] += h;
-      const [cl, ch] = [ctxOf(lo), ctxOf(hi)];
+      const [cl, ch] = [ctxOf(lo, reuse), ctxOf(hi, reuse)];
       terms.forEach((t, m) => {
         const ev = t.part && rng ? (x) => t.part(x, rng) : t.f;
         per[m][i][k] = (ev(ch) - ev(cl)) / (2 * h);

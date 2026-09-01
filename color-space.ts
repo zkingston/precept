@@ -1316,9 +1316,10 @@ const refl = (a: Vec3, b: Vec3): Vec3 => [2 * a[0] - b[0], 2 * a[1] - b[1], 2 * 
  * additive quantity. Interpolation is linear in the chart between knots, so
  * pass a finely discretized path.
  */
-export function resample(path: Vec3[], n: number, g: Metric = EUCLIDEAN): Vec3[] {
+export function resample(path: Vec3[], n: number, g: Metric = EUCLIDEAN, seg?: number[]): Vec3[] {
   const cum = [0];
-  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + segLength(path[i - 1], path[i], g));
+  for (let i = 1; i < path.length; i++)
+    cum.push(cum[i - 1] + (seg ? seg[i - 1] : segLength(path[i - 1], path[i], g)));
   const total = cum[cum.length - 1];
   let k = 1;
   return Array.from({ length: n }, (_, i) => {
