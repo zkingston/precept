@@ -4578,6 +4578,11 @@ function setChromaCeiling(max) {
   if (S.hi[1] >= was - 1e-9) S.hi[1] = max; else S.hi[1] = Math.min(S.hi[1], max);
   S.lo[1] = Math.min(S.lo[1], S.hi[1]);
   capKey = null;
+  // the thumbs and the readout come from S, and nothing else on this path puts
+  // them there. Raising the ceiling left the handle behind at its old value
+  // while the band said otherwise; lowering it only looked right because the
+  // browser clamps a range value when max drops under it.
+  paintBounds();
 }
 
 const setSlice = (k, v) => {
