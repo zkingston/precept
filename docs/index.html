@@ -4027,12 +4027,10 @@ function drawChroma() {
   // what the bounds rule out, veiled rather than cut away: the horseshoe is the
   // landmark you read the rest against, and removing most of it loses that
   const mask = boundsMask();
-  let ruled = 0;
   {
     const veil = new ImageData(CH.w, CH.h), v = veil.data;
     for (let i = 0; i < mask.length; i++)
       if (!mask[i] && !Number.isNaN(locusLCh.ratio[i])) {
-        ruled++;
         v[4 * i] = bg[0]; v[4 * i + 1] = bg[1]; v[4 * i + 2] = bg[2]; v[4 * i + 3] = 214;
       }
     const off = document.createElement('canvas');
@@ -4123,18 +4121,8 @@ function drawChroma() {
     g.strokeStyle = 'rgba(16,16,18,.85)'; g.lineWidth = 1.2; g.stroke();
   }
 
-  const gm = GAMUTS[params.gamut];
   $('chromacap').textContent =
-    `${gm.name}, white at (${gm.w[0]}, ${gm.w[1]}). `
-    + `${pal.length} swatch${pal.length === 1 ? '' : 'es'} plotted. `
-    + (params.gamut === 'srgb' ? '' : 'The faint triangle is sRGB. ')
-    + 'Colors are drawn in sRGB, so anything outside that triangle is shown at the nearest it can manage. '
-    + (ruled === 0
-      ? 'The bounds rule out no chromaticity. '
-      : 'The veiled region is what the chroma and hue bounds rule out. Lightness has no axis here, '
-        + 'and enters only by limiting what the chroma band can reach. ')
-    + (cv ? `Everything is through ${observer()}: the outline is where those primaries land, `
-          + 'and the axes stay the normal observer\'s.' : '');
+    'Colors are drawn in sRGB, so anything outside that triangle is shown at the nearest it can manage.';
 }
 $('chromabtn').onclick = () => { $('chromadlg').showModal(); drawChroma(); };
 $('chromaclose').onclick = () => $('chromadlg').close();
