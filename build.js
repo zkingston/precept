@@ -22,6 +22,16 @@ await mkdir(join(OUT, 'vendor/jsm'), { recursive: true });
 const ts = await readFile('color-space.ts', 'utf8');
 await writeFile(join(OUT, 'color-space.js'), stripTypeScriptTypes(ts));
 
+// ─── the solver, and the worker that runs it ─────────────────────────────────
+// Both name color-space by the specifier the page uses, so both need the same
+// rewrite. The worker is fetched by URL at run time rather than imported, so
+// nothing in the module graph walked below would notice a missing copy.
+for (const f of ['solver.js', 'solver-worker.js']) {
+  const src = (await readFile(f, 'utf8')).replace("'./color-space.ts'", "'./color-space.js'");
+  if (src.includes('color-space.ts')) throw new Error(`${f}: a color-space.ts specifier survived the rewrite`);
+  await writeFile(join(OUT, f), src);
+}
+
 // ─── the page, with every specifier pointed at something that will exist ─────
 const html = (await readFile('index.html', 'utf8'))
   .replace("'./color-space.ts'", "'./color-space.js'")
@@ -107,5 +117,6 @@ for (const doc of ['about.md', 'formulation.md', 'spaces.md']) await copyInto(do
 // Jekyll would otherwise skip anything beginning with an underscore
 await writeFile(join(OUT, '.nojekyll'), '');
 
-console.log(`${OUT}/ built — index.html, color-space.js, and ${copied.size} vendored module(s):`);
+console.log(`${OUT}/ built — index.html, color-space.js, solver.js, solver-worker.js,`
+            + ` and ${copied.size} vendored module(s):`);
 for (const f of copied) console.log(`  ${f}`);
