@@ -873,7 +873,15 @@ reframe();                       // FRAME must exist before anything calls world
 S.slice = [...FRAME.mid];
 
 // ─── the color pipeline, shared by every shader below ─────────────────────
-const SPACE_ID = { oklab: 0, cielab: 1, cieluv: 2, ipt: 3, xyz: 4, srgb: 5, ictcp: 6, cam02: 8 };
+// The shader cannot import SPACES, so each one needs an id and a branch in
+// glToXYZ below. CIEDE2000's coordinates ARE CIELAB's -- only its metric
+// differs, and the metric is not something the shader knows about -- so it
+// takes the same branch.
+const SPACE_ID = { oklab: 0, cielab: 1, de2000: 1, cieluv: 2, ipt: 3, xyz: 4, srgb: 5, ictcp: 6, cam02: 8 };
+// A space with no id set the uniform to undefined, which silently painted the
+// gamut through whichever branch that landed on. Fail at startup instead.
+for (const k of Object.keys(SPACES))
+  if (SPACE_ID[k] === undefined) throw new Error(`space ${k} has no SPACE_ID for the shader`);
 const CVD_ID = { none: 0, protan: 1, deutan: 2, tritan: 3 };
 const m3 = (rows) => new T.Matrix3().set(...rows.flat());   // .set takes row-major
 
