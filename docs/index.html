@@ -3961,11 +3961,14 @@ function drawChroma() {
     if (!dot) return;
     g.fillStyle = stroke;
     g.beginPath(); g.arc(chX(gm.w[0]), chY(gm.w[1]), 3, 0, 7); g.fill();
-    g.strokeStyle = 'rgba(16,16,18,.8)'; g.lineWidth = 1; g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 1; g.stroke();
   };
+  // Black, not the interface foreground: this sits on the filled horseshoe
+  // rather than on the panel, and that fill is bright everywhere the triangle
+  // can reach, in either theme.
   // sRGB for reference whenever it is not the one selected
-  if (params.gamut !== 'srgb') triangle('srgb', 'rgba(232,232,236,.28)', 1, false);
-  triangle(params.gamut, '#e8e8ec', 1.6, true);
+  if (params.gamut !== 'srgb') triangle('srgb', 'rgba(0,0,0,.35)', 1, false);
+  triangle(params.gamut, '#000', 1.6, true);
 
   // where the palette actually sits
   const pal = palette();
