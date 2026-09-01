@@ -694,8 +694,8 @@
         +\frac{\pi}{180}\,C\,\Delta h(p)+\sqrt{\phi_B(p)}+\sqrt{\phi_E(p)} \]
   <p>A control point is put back into \(\mathcal{F}\) by projection,
      \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\), onto \(G,\Lambda,X,H,E,B\) in turn, repeating until
-     \(c(p_i)\) falls below \(10^{-4}\) or twelve rounds pass. This is not the nearest point of
-     \(\mathcal{F}\): the set is not convex.</p>
+     \(c(p_i)\) falls below \(10^{-4}\) or twelve rounds pass. The projection does not return the
+     nearest point of \(\mathcal{F}\): the set is not convex.</p>
 
   <h4>Objectives</h4>
   <p>Each term is written for the palette \(\Pi(P)\). Each is a row in the panel behind this
@@ -712,7 +712,7 @@
     <li><b>arc length</b>
       \[ F_{\text{arc}}=\sum_{r\in\mathcal{R}}\ell_r \]</li>
 
-    <li><b>bending</b> <span class="d">how sharply the ramp curves, along the curve itself</span>
+    <li><b>bending</b> <span class="d">how sharply the ramp curves</span>
       \[ F_{\text{bend}}=\frac1{|\mathcal{R}|}\sum_{r\in\mathcal{R}}
          \frac{\ell_r}{4\pi^2}\int_{\gamma_r}\kappa^2\,ds \]
       <p>\(\kappa\) is the <a href="https://en.wikipedia.org/wiki/Curvature" target="_blank" rel="noopener">curvature</a>
@@ -722,18 +722,18 @@
          sample owns, so the sum is \(\int\kappa^2ds\) and does not change when you add a control
          point. The factor \(\ell_r/4\pi^2\) makes it dimensionless: a circle is 1 at any radius,
          a straight ramp is 0.</p>
-      <p>Squared rather than absolute, which is the reason to prefer it. Total turning alone cannot
-         separate a kink from a sweep — a ramp that turns 180° at one point and a smooth half-circle
-         both total 180°. Squaring divides the turn by the length it happens over, so a tight bend
-         costs far more than the same rotation spread out.</p></li>
+      <p>Squared rather than absolute. Total turning alone cannot separate a kink from a sweep:
+         a ramp that turns 180° at one point and a smooth half-circle both total 180°. Squaring
+         divides the turn by the length it happens over, so a tight bend costs far more than the
+         same rotation spread out.</p></li>
 
     <li><b>lightness profile</b> and <b>hue profile</b>
       <span class="d">distance from the curves drawn in the plots</span>
       \[ F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \]
       \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
          \delta\bigl(h_i,\ \widehat h(t_i)\bigr)\right)^2 \]
-      <p>Two rows in the panel, one shape: the squared distance from the swatches to a curve you
-         draw. \(\widehat L\) and \(\widehat h\) are those curves. Lightness is a plain
+      <p>Both terms are the squared distance from the swatches to a curve you draw, and
+         \(\widehat L\) and \(\widehat h\) are those curves. Lightness is a plain
          difference. Hue is an angle, so \(\delta\) takes the signed shortest one and the wrap at
          \(0^\circ\) costs nothing, and chroma weights it because a \(40^\circ\) error matters at
          chroma 20 and not at chroma 2. Swatches below chroma 1 have no usable hue and are skipped
@@ -2442,10 +2442,10 @@ function applyScene(o) {
   for (const k of Object.keys(S)) if (k in o) S[k] = o[k];
   if (!('pin' in o)) S.pin = [];                 // a scene written before pins existed
   // The two term maps are keyed by objective, and which objectives exist changes
-  // between versions. Restoring them wholesale gives a scene written before a
-  // term the power to leave that term at undefined, which reads as off and
-  // cannot be switched on. Keep the keys OBJ defines and take the file's value
-  // only where it has one.
+  // between versions. Restoring them wholesale lets a scene written before a
+  // term leave that term at undefined, which reads as off and cannot be
+  // switched on. Keep the keys OBJ defines and take the file's value only
+  // where it has one.
   S.w = Object.fromEntries(OBJ.map((t) => [t.key, o.w?.[t.key] ?? 1]));
   S.on = Object.fromEntries(OBJ.map((t) => [t.key, o.on?.[t.key] ?? !OPT_IN.includes(t.key)]));
   S.sel = null;
@@ -3042,23 +3042,24 @@ const contrastRatio = (a, b) => {
  * which is the check on the list itself.
  *
  * Nearest under this app's own metric rather than sRGB distance, so which name
- * you get moves with the space like everything else does.
+ * you get moves with the space, as every other distance here does.
+ *
  * Along the chord, not the geodesic: this is an argmin over 148 fixed anchors,
  * so the ranking is what matters and not the lengths. The geodesic costs 123ms
  * a lookup in CAM02-UCS against 2.8ms, a visible hitch on a click, and it does
- * not move the answer -- measured over a grid of sRGB in every space, the two
- * disagree on well under 1% of colors, and never in the chart, where the chord
- * IS the geodesic.
+ * not move the answer: over a grid of sRGB in every space the two pick a
+ * different name on 42 of 16000 colors, 0.26%, and never in the chart, where
+ * the chord IS the geodesic.
  *
  * Shown on the selected node and nowhere else, so it costs one lookup per
  * click rather than one per swatch per repaint.
  *
  * Display only, and worth saying why. The obvious next step is an objective
  * that spreads a palette out in name as well as in color, and the published
- * name-distance models will not carry one: c3's cosine distance reads about
+ * name-distance models will not support one: c3's cosine distance reads about
  * 1.0 for nearly every pair of colors people would name differently, so a
- * gradient through it points nowhere in particular. A tooltip can be
- * approximate where a descent direction cannot.
+ * gradient through it points nowhere in particular. That is tolerable for a
+ * label and not for a descent direction.
  */
 const CSS_NAMES = `
   aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown
@@ -3096,26 +3097,28 @@ const colorName = (p) => {
 };
 
 /**
- * APCA Lc, the perceptual contrast the WCAG 2 ratio is meant to be replaced by.
+ * APCA Lc, the perceptual contrast measure meant to replace the WCAG 2 ratio.
  *
  * Constants are SA98G / G-4g from apca-w3 0.1.9, the beta the W3C silver task
  * force works from. Copied from the package source rather than recalled.
  *
  * Two ways this is not the ratio above, both deliberate:
  *
- *   It is not symmetric. Dark on light and light on dark are different
+ *   Lc is not symmetric. Dark on light and light on dark are different
  *   exponents, so swapping the two colors changes the answer -- which is the
  *   point, since the eye does too. The sign says which case you are in:
  *   positive is dark text on a light ground, negative is the reverse.
  *
  *   It linearizes with a plain 2.4 power, NOT the piecewise sRGB curve wcagY
- *   uses. That is APCA's own choice -- it models what a display emits, not
- *   what the encoding says -- so it needs its own luminance, and reusing
- *   wcagY here would be a quiet few-percent error.
+ *   uses. APCA chose that deliberately, to model what a display emits rather
+ *   than what the encoding says, so it needs its own luminance. Reusing
+ *   wcagY here would be wrong by a few percent.
  *
- * Reference: Lc 90/75/60 replace 7:1/4.5:1/3:1 for body text at decreasing
- * weight; below Lc 15 is invisible. Reported, not enforced: the floor the
- * solver descends on is still the ratio, which is what standards ask for.
+ * For scale, from the package's own notes: Lc 60 is "sort of like" WCAG 2's
+ * 4.5:1, below Lc 30 is non-text only, and below Lc 15 is unusable.
+ *
+ * Reported, not enforced. The floor the solver descends on is still the
+ * ratio, which is what the standards require today.
  */
 const apcaY = (p) => {
   const [r, g, b] = toGamut(p, 'srgb').map(clamp01);
@@ -3331,9 +3334,9 @@ const OBJ = [
    * of two passes at different decimations.
    *
    * Reported as L * integral k^2 ds over 4*pi^2, which is dimensionless and
-   * scale invariant: a circle reads 1 at any radius, a straight ramp 0. So the
-   * number is a property of the SHAPE, and unlike the control-polygon version
-   * it does not move when you add a point.
+   * scale invariant: a circle reads 1 at any radius, a straight ramp 0. The
+   * number then depends on the shape alone, and unlike the control-polygon
+   * version it does not move when you add a point.
    */
   { key: 'bend', label: 'bending', mode: 'continuous', bad: true,
     f: (x) => {
