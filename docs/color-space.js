@@ -353,7 +353,10 @@ export const internals = {
  * not model, and ICtCp/Jzazbz, which are keyed to absolute luminance in nits.
  * Both would need a scene-referred story the rest of this file does not have.
  */
-                                                                                                                       
+                                                                   
+                                                   
+                                                                             
+                                     
 
 const D = 6 / 29;
 const labf = (t        ) => (t > D ** 3 ? Math.cbrt(t) : t / (3 * D * D) + 4 / 29);
@@ -549,6 +552,22 @@ export const SPACES                        = {
       const M = (Math.exp(0.0228 * Mp) - 1) / 0.0228;
       return cam02Inverse(J, M, (Math.atan2(bp, ap) * 180) / Math.PI);
     },
+    /**
+     * The metric differentiates the UNCOMPRESSED colourfulness.
+     *
+     * CAM02-UCS is defined with M' = ln(1 + 0.0228 M)/0.0228 — a logarithmic
+     * compression of colourfulness in exactly the form of f, with s0 = 1/0.0228
+     * = 43.9. Luo, Cui and Li applied diminishing returns to the chroma axis in
+     * 2006. Pulling a metric back through that and then handing the arc length
+     * to f compresses chroma twice and lightness once, which distorts the model
+     * rather than reporting a property of the space.
+     *
+     * So the view keeps M', which is what CAM02-UCS is, and the metric uses M.
+     */
+    metricFrom: (xyz) => {
+      const { J, M, h } = cam02Forward(xyz), hr = (h * Math.PI) / 180;
+      return [(1.7 * J) / (1 + 0.007 * J), M * Math.cos(hr), M * Math.sin(hr)];
+    },
   },
 
   xyz: {
@@ -638,12 +657,18 @@ export function weighted(wL = 1, wC = 1, wH = 1)         {
  * `perceive`, whose knee sits at a fixed ~18.7, would quietly start meaning
  * something else. One scalar per space, measured rather than assumed.
  */
+/** the map the metric differentiates, which is the space's own unless it names another */
+const metricSpace = (p      , k        )       => {
+  const f = SPACES[k].metricFrom;
+  return f ? f(toXYZ(p)) : toSpace(p, k);
+};
+
 const NEUTRAL_SCALE                         = {};
 function neutralScale(k        )         {
   if (NEUTRAL_SCALE[k] === undefined) {
     let len = 0;
     for (let i = 0; i < 128; i++) {
-      const a = toSpace([(i * 100) / 128, 0, 0], k), b = toSpace([((i + 1) * 100) / 128, 0, 0], k);
+      const a = metricSpace([(i * 100) / 128, 0, 0], k), b = metricSpace([((i + 1) * 100) / 128, 0, 0], k);
       len += Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     }
     NEUTRAL_SCALE[k] = 100 / len;
@@ -710,7 +735,7 @@ export function spaceMetric(k = params.space)         {
     for (let i = 0; i < 3; i++) {                      // central differences: J's columns
       const a = [...p]        , b = [...p]        ;
       a[i] -= h; b[i] += h;
-      const [sa, sb] = [toSpace(a, k), toSpace(b, k)];
+      const [sa, sb] = [metricSpace(a, k), metricSpace(b, k)];
       col.push(sb.map((v, j) => (v - sa[j]) / (2 * h))        );
     }
     return gram(col);
