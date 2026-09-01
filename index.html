@@ -299,6 +299,9 @@
   #aboutdlg ul.how { color:inherit; font-size:inherit; margin:0; }
   #aboutdlg ul.how li + li { margin-top:4px; }
   #aboutdlg a, .doc a { color:var(--link); }
+  #chromadlg { max-width:min(460px, calc(100vw - 32px)); }
+  #chroma { width:100%; height:auto; display:block; border-radius:4px; }
+  #chromacap { color:var(--dim); font-size:11px; margin:9px 0 0; line-height:1.5; }
   #aboutdlg .q { opacity:1; vertical-align:baseline; margin:0; font-size:inherit; color:var(--link); }
   #aboutclose { position:absolute; top:12px; right:12px; width:26px; height:26px; padding:0;
     background:none; border:0; color:var(--dim); font-size:19px; line-height:1; cursor:pointer; }
@@ -452,6 +455,7 @@
         <button id="spacebtn" title="what each space is" style="padding:4px 9px">?</button></div>
       <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select>
         <button id="iccbtn" style="padding:4px 7px">ICC…</button>
+        <button id="chromabtn" title="the gamut on a chromaticity diagram" style="padding:4px 8px">&#9651;</button>
         <input type="file" id="iccfile" accept=".icc,.icm,application/vnd.iccprofile" hidden></div>
       <div class="row"><label class="f">vision</label>
         <select id="cvd" style="flex:1">
@@ -546,6 +550,13 @@
   <div id="loadlist"></div>
 </dialog>
 
+<dialog id="chromadlg" class="doc">
+  <button class="x" id="chromaclose" title="close">&times;</button>
+  <h3>Chromaticity</h3>
+  <canvas id="chroma"></canvas>
+  <p id="chromacap" class="note"></p>
+</dialog>
+
 <dialog id="spacedlg" class="doc">
   <button class="x" id="spaceclose" title="close">&times;</button>
   <div id="spacebody"></div>
@@ -570,7 +581,7 @@ import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty, delta, lineDelta,
   obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, gamutFromICC, internals,
-  SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
+  SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES, SPECTRAL_LOCUS, toXYZ,
 } from './color-space.ts';
 
 // We do every color computation ourselves and hand three gamma-encoded sRGB
@@ -3832,6 +3843,152 @@ const paintHist = () => {
 };
 $('aboutbtn').onclick = () => $('aboutdlg').showModal();
 /**
+ * The gamut on a CIE 1931 chromaticity diagram.
+ *
+ * A chromaticity is a color with its brightness divided out, so the horseshoe
+ * is the whole of what the eye can see reduced to two numbers, and a set of
+ * three primaries is a triangle inside it. That is the one picture that says
+ * what a gamut is without saying anything about lightness, which is why it
+ * belongs beside the gamut menu rather than in the 3D view.
+ *
+ * The fill is sRGB, always, whatever gamut is selected. Chromaticities outside
+ * sRGB cannot be shown on an sRGB screen, so painting them through a wider
+ * matrix would draw colors the display then clips anyway, and the picture would
+ * change every time the menu did. Clamping instead makes the region beyond the
+ * sRGB triangle flatten toward its edge, which is honest about what is missing.
+ *
+ * The straight edge from the last locus point back to the first is the line of
+ * purples: those are mixtures of the two ends of the spectrum, not wavelengths.
+ */
+const chroma = $('chroma');
+const CH = { w: 420, h: 450, m: { l: 34, r: 10, t: 10, b: 26 }, xmax: 0.75, ymax: 0.85 };
+let locusFill = null;                              // sRGB, so it survives a gamut change
+
+const chX = (x) => CH.m.l + (x / CH.xmax) * (CH.w - CH.m.l - CH.m.r);
+const chY = (y) => CH.h - CH.m.b - (y / CH.ymax) * (CH.h - CH.m.t - CH.m.b);
+
+/** the locus as a closed path in canvas coordinates */
+const locusPath = (g) => {
+  g.beginPath();
+  SPECTRAL_LOCUS.forEach(([x, y], i) => (i ? g.lineTo(chX(x), chY(y)) : g.moveTo(chX(x), chY(y))));
+  g.closePath();
+};
+
+/**
+ * Every chromaticity inside the horseshoe, at the brightest sRGB that can carry
+ * it. Scaling each by its own largest channel is what makes the picture look
+ * like the familiar one: a chromaticity has no brightness of its own, so some
+ * choice has to be made, and the brightest is the one that shows the most hue.
+ */
+function paintLocus() {
+  const img = new ImageData(CH.w, CH.h), d = img.data;
+  const M = internals.rgbFromXYZ('srgb');
+  const pts = SPECTRAL_LOCUS.map(([x, y]) => [chX(x), chY(y)]);
+  for (let py = 0; py < CH.h; py++) {
+    // crossings of this scanline with the closed polygon, as x spans
+    const xs = [];
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xi, yi] = pts[i], [xj, yj] = pts[j];
+      if ((yi > py + 0.5) !== (yj > py + 0.5))
+        xs.push(xi + ((py + 0.5 - yi) * (xj - xi)) / (yj - yi));
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2)
+      for (let px = Math.ceil(xs[k]); px <= xs[k + 1]; px++) {
+        const x = ((px - CH.m.l) / (CH.w - CH.m.l - CH.m.r)) * CH.xmax;
+        const y = ((CH.h - CH.m.b - py) / (CH.h - CH.m.t - CH.m.b)) * CH.ymax;
+        if (y <= 0) continue;
+        const xyz = [x / y, 1, (1 - x - y) / y];
+        const rgb = [0, 1, 2].map((r) => M[r][0] * xyz[0] + M[r][1] * xyz[1] + M[r][2] * xyz[2]);
+        const mx = Math.max(...rgb);
+        if (!(mx > 0)) continue;
+        const o = 4 * (py * CH.w + px);
+        for (let c = 0; c < 3; c++)
+          d[o + c] = 255 * clamp01(Math.max(0, rgb[c] / mx) ** (1 / 2.2));
+        d[o + 3] = 255;
+      }
+  }
+  return img;
+}
+
+function drawChroma() {
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  chroma.width = CH.w * dpr; chroma.height = CH.h * dpr;
+  chroma.style.aspectRatio = `${CH.w} / ${CH.h}`;
+  const g = chroma.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = getComputedStyle(document.body).getPropertyValue('--panel') || '#1c1c1f';
+  g.fillRect(0, 0, CH.w, CH.h);
+
+  g.save();
+  locusPath(g); g.clip();
+  // through a canvas rather than putImageData, which writes device pixels and
+  // ignores the transform -- on a 2x display that put the fill at quarter size
+  // in the corner while the clip path, which IS transformed, stayed put
+  g.drawImage(locusFill ??= (() => {
+    const off = document.createElement('canvas');
+    off.width = CH.w; off.height = CH.h;
+    off.getContext('2d').putImageData(paintLocus(), 0, 0);
+    return off;
+  })(), 0, 0, CH.w, CH.h);
+  g.restore();
+
+  // axes, under everything that matters
+  g.strokeStyle = 'rgba(139,139,150,.35)'; g.fillStyle = 'rgba(139,139,150,.9)';
+  g.lineWidth = 1; g.font = '9px ui-monospace, monospace';
+  for (let t = 0; t <= 0.8; t += 0.1) {
+    if (t <= CH.xmax) { g.beginPath(); g.moveTo(chX(t), chY(0)); g.lineTo(chX(t), chY(0) + 3); g.stroke();
+      g.textAlign = 'center'; g.fillText(t.toFixed(1), chX(t), chY(0) + 13); }
+    if (t <= CH.ymax) { g.beginPath(); g.moveTo(chX(0), chY(t)); g.lineTo(chX(0) - 3, chY(t)); g.stroke();
+      g.textAlign = 'right'; g.fillText(t.toFixed(1), chX(0) - 6, chY(t) + 3); }
+  }
+  g.strokeStyle = 'rgba(139,139,150,.5)';
+  g.beginPath(); g.moveTo(chX(0), chY(CH.ymax)); g.lineTo(chX(0), chY(0)); g.lineTo(chX(CH.xmax), chY(0)); g.stroke();
+  g.textAlign = 'left'; g.fillText('x', chX(CH.xmax) - 8, chY(0) + 13);
+  g.fillText('y', chX(0) - 12, chY(CH.ymax) + 8);
+
+  locusPath(g);
+  g.strokeStyle = 'rgba(232,232,236,.55)'; g.lineWidth = 1; g.stroke();
+
+  /** a gamut's triangle, and its white point */
+  const triangle = (k, stroke, wide, dot) => {
+    const gm = GAMUTS[k];
+    if (!gm?.p) return;
+    g.beginPath();
+    gm.p.forEach(([x, y], i) => (i ? g.lineTo(chX(x), chY(y)) : g.moveTo(chX(x), chY(y))));
+    g.closePath();
+    g.strokeStyle = stroke; g.lineWidth = wide; g.stroke();
+    if (!dot) return;
+    g.fillStyle = stroke;
+    g.beginPath(); g.arc(chX(gm.w[0]), chY(gm.w[1]), 3, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(16,16,18,.8)'; g.lineWidth = 1; g.stroke();
+  };
+  // sRGB for reference whenever it is not the one selected
+  if (params.gamut !== 'srgb') triangle('srgb', 'rgba(232,232,236,.28)', 1, false);
+  triangle(params.gamut, '#e8e8ec', 1.6, true);
+
+  // where the palette actually sits
+  const pal = palette();
+  for (const p of pal) {
+    const [X, Y, Z] = toXYZ(p), s = X + Y + Z;
+    if (!(s > 0)) continue;
+    g.beginPath(); g.arc(chX(X / s), chY(Y / s), 3.4, 0, 7);
+    g.fillStyle = out(p); g.fill();
+    g.strokeStyle = 'rgba(16,16,18,.85)'; g.lineWidth = 1.2; g.stroke();
+  }
+
+  const gm = GAMUTS[params.gamut];
+  $('chromacap').textContent =
+    `${gm.name}, white at (${gm.w[0]}, ${gm.w[1]}). `
+    + `${pal.length} swatch${pal.length === 1 ? '' : 'es'} plotted. `
+    + (params.gamut === 'srgb' ? '' : 'The faint triangle is sRGB. ')
+    + 'Colors are drawn in sRGB, so anything outside that triangle is shown at the nearest it can manage.';
+}
+$('chromabtn').onclick = () => { $('chromadlg').showModal(); drawChroma(); };
+$('chromaclose').onclick = () => $('chromadlg').close();
+$('chromadlg').onclick = (e) => { if (e.target === $('chromadlg')) $('chromadlg').close(); };
+
+/**
  * The two prose dialogs live in about.md and formulation.md, and are rendered
  * here rather than written into this file.
  *
@@ -4690,7 +4847,7 @@ const HINTS = {
   mode: 'Ramp or swatch set.',
   loadbtn: 'Published palettes, as swatches. Click one to load it.',
   spacesel: 'Space the panels are drawn in and distances measured in.',
-  gamutsel: 'Which colors are reachable. ICC loads a matrix/TRC RGB profile.',
+  gamutsel: 'Which colors are reachable. ICC loads a matrix/TRC RGB profile, \u25b3 draws the gamut on a chromaticity diagram.',
   cvd: 'Simulate a color-vision deficiency.',
   sev: 'Below 1 is anomalous trichromacy; 1 is dichromacy.',
   shell: 'Opacity of the gamut solid.',
