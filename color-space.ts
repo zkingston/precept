@@ -57,11 +57,45 @@ export const params = {
 
   /** Which coordinates to view and edit in. Key of `SPACES`. */
   space: 'oklab',
+
+  /** How big the marks are that will carry these colors. Key of `MARKS`. */
+  mark: 'off',
 };
 
 /** The six faces of the unit RGB cube, as (axis u, axis v, fixed axis, value). */
 export const CUBE_FACES: [number, number, number, number][] =
   [[0, 1, 2, 0], [0, 1, 2, 1], [1, 2, 0, 0], [1, 2, 0, 1], [2, 0, 1, 0], [2, 0, 1, 1]];
+
+/**
+ * How a difference is discriminated depends on how big the thing carrying it is.
+ *
+ * Stone, Szafir & Setlur (CIC 2014) fit ND(p, s) = p(A + B/s) per axis, s in
+ * degrees of visual angle, from an Amazon Turk study: A = (10.16, 10.68, 10.70)
+ * and B = (1.50, 3.08, 5.74) for L*, a*, b*, at R² of 0.85, 0.94 and 0.97. The
+ * shape of that is the point. At one degree the three thresholds are 11.7, 13.8
+ * and 16.4; at a tenth of a degree they are 25.2, 41.5 and 68.1. Blue-yellow
+ * needs nearly three times the lightness tolerance on a thin line, which is why
+ * small marks have to be told apart by lightness.
+ *
+ * Only the SHAPE is used here. The returned scale has geometric mean one, so a
+ * mark size tilts the metric without resizing it and f's knee stays where it was
+ * calibrated. The discrimination probability p cancels in the ratio, so there is
+ * no second knob to guess at.
+ *
+ * The coefficients are CIELAB's and the chart is Oklab. The two agree in what
+ * their axes MEAN — lightness, green-red, blue-yellow — which is what an
+ * anisotropy ratio uses, and not in scale, which is what it discards.
+ */
+export const MARKS: Record<string, number> = { thin: 0.1, points: 0.5, blocks: 1.0 };
+const ND_A = [10.16, 10.68, 10.70], ND_B = [1.5, 3.08, 5.74];
+
+export function markScale(mark = params.mark): Vec3 | null {
+  const s = MARKS[mark];
+  if (!s) return null;
+  const nd = [0, 1, 2].map((i) => ND_A[i] + ND_B[i] / s);
+  const gm = Math.cbrt(nd[0] * nd[1] * nd[2]);
+  return nd.map((v) => gm / v) as Vec3;
+}
 
 // ─── f: diminishing returns ──────────────────────────────────────────────────
 
@@ -718,7 +752,19 @@ const D_SPACE: Record<string, (xyz: Vec3) => M3> = {
   },
 };
 
-export function spaceMetric(k = params.space): Metric {
+export function spaceMetric(k = params.space, mark = params.mark): Metric {
+  const base = baseMetric(k);
+  const t = markScale(mark);
+  if (!t) return base;
+  // length² = d' (T g T) d for T = diag(t), which is the metric of a space whose
+  // axes have been stretched by t — one more pullback, through a diagonal map
+  return (p) => {
+    const g = base(p);
+    return [0, 1, 2].map((i) => [0, 1, 2].map((j) => t[i] * g[i][j] * t[j])) as Mat3;
+  };
+}
+
+function baseMetric(k: string): Metric {
   if (k === 'oklab') return EUCLIDEAN;                 // the chart is its own space
   const w = neutralScale(k) ** 2, h = 0.05;
   const gram = (col: Vec3[]) => [0, 1, 2].map((i) => [0, 1, 2].map((j) =>

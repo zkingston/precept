@@ -449,6 +449,7 @@
     <section>
       <h2>View</h2>
       <div class="row"><label class="f">space</label><select id="spacesel" style="flex:1"></select></div>
+      <div class="row"><label class="f">marks</label><select id="marksel" style="flex:1"></select></div>
       <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select>
         <button id="iccbtn" style="padding:4px 7px">ICC…</button>
         <input type="file" id="iccfile" accept=".icc,.icm,application/vnd.iccprofile" hidden></div>
@@ -838,7 +839,7 @@ import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty, delta,
   obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, gamutFromICC, internals,
-  SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
+  SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES, MARKS, markScale,
 } from './color-space.js';
 
 // We do every color computation ourselves and hand three gamma-encoded sRGB
@@ -2391,7 +2392,7 @@ for (const [k, f] of Object.entries(FORMATS)) {
  * arrays the file also carries, and restoring it buys nothing.
  */
 const sceneJSON = () => JSON.stringify({
-  precept: 1, space: params.space, gamut: params.gamut,
+  precept: 1, space: params.space, gamut: params.gamut, mark: params.mark,
   // a profile is not one of the built-ins, so it has to travel with the scene
   icc: params.gamut.startsWith('icc-') ? GAMUTS[params.gamut] : undefined,
   ...S, sel: undefined, marks: undefined,
@@ -2435,6 +2436,7 @@ function loadScene(text) {
 
 function applyScene(o) {
   params.space = o.space; params.gamut = o.gamut;
+  params.mark = o.mark && MARKS[o.mark] ? o.mark : 'off';   // scenes written before marks existed
   for (const k of Object.keys(S)) if (k in o) S[k] = o[k];
   if (!('pin' in o)) S.pin = [];                 // a scene written before pins existed
   S.sel = null;
@@ -4743,12 +4745,20 @@ function mirror() {
   $('sevv').textContent = unit1(S.sev);
   $('shellv').textContent = unit1(S.shell);
   $('spacesel').value = params.space; $('gamutsel').value = params.gamut;
+  $('marksel').value = params.mark;
   ['sL', 'sA', 'sB'].forEach((id, k) => ($(id).value = S.slice[k]));
   for (const id of ['mode', 'tool'])
     for (const b of $(id).children) b.ariaPressed = b.dataset.v === S[id];
   paintBounds(); paintPlotButtons(); applyBg();
 }
 mirror();
+$('marksel').innerHTML = '<option value="off">off · same at every size</option>'
+  + Object.entries(MARKS).map(([k, s]) => `<option value="${k}">${k} · ${s}&deg;</option>`).join('');
+$('marksel').onchange = (e) => {
+  params.mark = e.target.value;
+  disturb();                                   // a different metric is a different problem
+  sync();
+};
 $('spacesel').innerHTML = Object.entries(SPACES)
   .map(([k, sp]) => `<option value="${k}"${k === params.space ? ' selected' : ''}>${sp.name}</option>`).join('');
 paintGamutList();
@@ -4776,6 +4786,7 @@ const HINTS = {
   mode: 'Ramp or swatch set.',
   loadbtn: 'Published palettes, as swatches. Click one to load it.',
   spacesel: 'Space the panels are drawn in and distances measured in.',
+  marksel: 'Tilt the metric for how big the marks will be. Small marks are told apart by lightness.',
   gamutsel: 'Which colors are reachable. ICC loads a matrix/TRC RGB profile.',
   cvd: 'Simulate a color-vision deficiency.',
   sev: 'Below 1 is anomalous trichromacy; 1 is dichromacy.',
