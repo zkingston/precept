@@ -1786,11 +1786,16 @@ function layout() {
   // the canvas and the three quads are given no box at all, which is also what
   // keeps frame() from setting a zero-width scissor on them.
   const A = w / h;
-  // Aspect alone cannot choose between the last two. A phone in portrait leaves
-  // a canvas near 412x380 and a laptop leaves one near 1060x900, which are the
-  // same shape and want opposite splits: three stacked cuts are readable at 350
-  // wide and useless at 100. So the column split also needs the width to run it.
-  const mode = A >= 1.6 ? 'squares' : (A <= 1.0 || w < 640) ? 'row' : 'columns';
+  // Aspect alone cannot choose any of these, because the same shape at two
+  // sizes wants opposite splits. A phone in portrait leaves a canvas near
+  // 412x380 and a laptop leaves one near 1060x900: three stacked cuts are
+  // readable at 350 wide and useless at 100, so columns needs the width. A
+  // maximized 1080p window leaves 1590x960 and a small landscape one leaves
+  // 760x432, both about 1.66 wide: three stacked cuts are 320 tall in the first
+  // and 144 in the second, so squares needs the canvas to be short as well as
+  // wide. Without that, taking a browser out of fullscreen was enough to swap
+  // the layout, since chrome is exactly what moves 1080 into the band.
+  const mode = A >= 1.6 && h < 720 ? 'squares' : (A <= 1.0 || w < 640) ? 'row' : 'columns';
   let RECTS, cell = null, stripH = 0;
   if (!S.panels) {
     RECTS = [null, null, null, { x: 0, y: 0, w, h }];
