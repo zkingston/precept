@@ -1292,15 +1292,23 @@ function buildShell() {
           pos.push(w.x, w.y, w.z);
         }
       }
-      // winding measured, not predicted: world() is an odd permutation of the
+      // Winding measured, not predicted: world() is an odd permutation of the
       // chart axes and mirrors every triangle, and BackSide culls whole faces
-      // away when this is wrong
+      // away when this is wrong — the solid then shows its near surface and the
+      // caps, which are only ever seen from inside, disappear.
+      //
+      // Measured off a REAL emitted triangle rather than off the fan's corners.
+      // Deriving it looks easy and is not: for a grid point at parameter t the
+      // two edges are (B-A) and (lerp(A,B,t)-O), whose cross product works out
+      // to MINUS (A-O)x(B-O), so taking the corners and trusting them inverts
+      // every face. Three vertices out of the buffer cannot be wrong that way.
       const mid = [0, 1, 2].map((m) => (poly[v0][m] + A[m] + B[m]) / 3);
       const wm = wpt(fromLinear(mid));
-      const wo = wpt(fromLinear(mid.map((x, m) => x + 1e-3 * outward[m])));
-      const e1 = wpt(fromLinear(A)).sub(wpt(fromLinear(poly[v0])));
-      const e2 = wpt(fromLinear(B)).sub(wpt(fromLinear(poly[v0])));
-      const flip = e1.cross(e2).dot(wo.sub(wm)) < 0;
+      const wo = wpt(fromLinear(mid.map((x, m) => x + 1e-3 * outward[m]))).sub(wm);
+      const o0 = base + (FACE_N - 1) * (FACE_N + 1) + (FACE_N >> 1);
+      const [P0, P1, P2] = [o0, o0 + 1, o0 + FACE_N + 1]
+        .map((k) => new T.Vector3(pos[3 * k], pos[3 * k + 1], pos[3 * k + 2]));
+      const flip = P1.sub(P0).cross(P2.sub(P0)).dot(wo) < 0;
       for (let a = 0; a < FACE_N; a++) for (let b = 0; b < FACE_N; b++) {
         const o = base + a * (FACE_N + 1) + b;
         idx.push(...(flip
