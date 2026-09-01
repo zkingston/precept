@@ -3822,21 +3822,29 @@ $('aboutbtn').onclick = () => $('aboutdlg').showModal();
  * here rather than written into this file.
  *
  * The one thing markdown cannot be handed raw is the math. TeX is full of the
- * characters markdown spends: every subscript in \(\ell_g\) is an emphasis
- * marker, and \[ is an escaped bracket. So each formula is lifted out for a
- * placeholder before the parser runs and put back after, which also means the
- * files can be written in ordinary TeX with no doubled backslashes.
+ * characters markdown spends: every subscript in $\ell_g$ is an emphasis
+ * marker. So each formula is lifted out for a placeholder before the parser
+ * runs and put back after, which also means the files can be written in
+ * ordinary TeX with no doubled backslashes.
  *
- * Restoring escapes the math, because \(i<j\) written into innerHTML would
- * otherwise open a tag. MathJax reads it back off the DOM as text either way.
+ * The files delimit with $ and $$, which is what VS Code's markdown preview
+ * reads, and restoring rewrites those to the \( and \[ MathJax takes by
+ * default. Both ends get the spelling they already understand and neither
+ * needs configuring. Restoring also escapes the math, because $i<j$ written
+ * into innerHTML would otherwise open a tag; MathJax reads it back off the DOM
+ * as text either way.
  *
  * Two conveniences on top of markdown, both one line: a {.name} on its own line
  * puts that class on the block after it, and external links get target and rel
  * so the files do not have to repeat them 30 times.
  */
-const MATH = /\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)/g;
+const MATH = /\$\$[\s\S]*?\$\$|\$[^$]*?\$/g;
 const escHTML = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const slot = (i) => `MJXSLOT${i}TOLSXJM`;
+/** $..$ and $$..$$ as written, in the delimiters MathJax reads by default */
+const asTeX = (m) => (m.startsWith('$$')
+  ? `\\[${m.slice(2, -2)}\\]`
+  : `\\(${m.slice(1, -1)}\\)`);
 
 async function renderDoc(url, into) {
   const res = await fetch(url);
@@ -3845,12 +3853,12 @@ async function renderDoc(url, into) {
   let html = marked.parse((await res.text()).replace(MATH, (m) => slot(math.push(m) - 1)));
   // a display formula is a block of its own, not a paragraph containing one
   math.forEach((m, i) => {
-    if (m.startsWith('\\[')) html = html.replaceAll(`<p>${slot(i)}</p>`, slot(i));
+    if (m.startsWith('$$')) html = html.replaceAll(`<p>${slot(i)}</p>`, slot(i));
   });
   html = html
     .replace(/<p>\{\.([\w-]+)\}<\/p>\s*<(\w+)/g, (_, cls, tag) => `<${tag} class="${cls}"`)
     .replace(/<a href="(https?:[^"]*)"/g, '<a href="$1" target="_blank" rel="noopener"');
-  math.forEach((m, i) => { html = html.replaceAll(slot(i), escHTML(m)); });
+  math.forEach((m, i) => { html = html.replaceAll(slot(i), escHTML(asTeX(m))); });
   $(into).innerHTML = html;
 }
 
