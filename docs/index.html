@@ -208,25 +208,25 @@
                 background:var(--ctl); color:var(--dim); border:1px solid var(--line); border-radius:3px;
                 cursor:pointer; text-transform:none; letter-spacing:0; }
   h2 #mathbtn:hover { color:var(--fg); }
-  #mathdlg { max-width:min(760px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto;
+  .doc { max-width:min(760px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto;
     overscroll-behavior:contain; padding:22px 26px; background:var(--panel); color:var(--fg);
     border:1px solid var(--line); border-radius:9px; font:13px/1.6 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
-  #mathdlg::backdrop { background:#000a; }
-  #mathdlg h3 { margin:0 0 14px; font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
-  #mathdlg h4 { margin:19px 0 6px; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
-  #mathdlg p { margin:0 0 8px; }
-  #mathdlg dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:3px 12px; align-items:baseline; }
-  #mathdlg dt { white-space:nowrap; }
-  #mathdlg dd { margin:0; color:var(--dim); }
-  #mathdlg .terms { margin:0; padding:0; list-style:none; }
-  #mathdlg .terms > li { margin:0 0 14px; }
-  #mathdlg .terms > li > p { margin:0; }
-  #mathdlg .terms .d { color:var(--dim); }
+  .doc::backdrop { background:#000a; }
+  .doc h3 { margin:0 0 14px; font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
+  .doc h4 { margin:19px 0 6px; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
+  .doc p { margin:0 0 8px; }
+  .doc dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:3px 12px; align-items:baseline; }
+  .doc dt { white-space:nowrap; }
+  .doc dd { margin:0; color:var(--dim); }
+  .doc .terms { margin:0; padding:0; list-style:none; }
+  .doc .terms > li { margin:0 0 14px; }
+  .doc .terms > li > p { margin:0; }
+  .doc .terms .d { color:var(--dim); }
   /* two columns need room for the widest set definition; below that the label
      column squeezes the gloss into a three-word ribbon, so stack them */
   @media (max-width: 560px) {
-    #mathdlg dl { grid-template-columns:1fr; gap:0; }
-    #mathdlg dd { margin:1px 0 7px 14px; }
+    .doc dl { grid-template-columns:1fr; gap:0; }
+    .doc dd { margin:1px 0 7px 14px; }
     /* The dock is one column at this width, so the preview takes the whole of
        it, and at its natural 2.06 that came back 180px tall — a third of the
        panel for the one thing there that is already legible small.
@@ -241,13 +241,13 @@
      its own height by a pixel or six, which with overflow-y hidden clips a
      descender and with overflow-y auto raises a scrollbar on a formula that
      fits. Six pixels of slack absorbs it. */
-  #mathdlg mjx-container[display="true"] { margin:0; padding:10px 0;
+  .doc mjx-container[display="true"] { margin:0; padding:10px 0;
                                            overflow-x:auto; overflow-y:hidden; }
   /* MathJax sizes math relative to its surroundings; the dialog runs small */
-  #mathdlg mjx-container { font-size:107%; }
-  #mathclose { position:absolute; top:12px; right:14px; width:26px; height:26px; padding:0;
+  .doc mjx-container { font-size:107%; }
+  .doc > button.x { position:absolute; top:12px; right:14px; width:26px; height:26px; padding:0;
     background:none; border:0; color:var(--dim); font-size:19px; line-height:1; cursor:pointer; }
-  #mathclose:hover { color:var(--fg); }
+  .doc > button.x:hover { color:var(--fg); }
   #aboutdlg { max-width:min(560px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto; overscroll-behavior:contain; padding:20px 22px;
     background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:9px;
     font:13px/1.55 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
@@ -298,7 +298,7 @@
   /* the citations are a footnote and read as one; instructions are not */
   #aboutdlg ul.how { color:inherit; font-size:inherit; margin:0; }
   #aboutdlg ul.how li + li { margin-top:4px; }
-  #aboutdlg a, #mathdlg a { color:var(--link); }
+  #aboutdlg a, .doc a { color:var(--link); }
   #aboutdlg .q { opacity:1; vertical-align:baseline; margin:0; font-size:inherit; color:var(--link); }
   #aboutclose { position:absolute; top:12px; right:12px; width:26px; height:26px; padding:0;
     background:none; border:0; color:var(--dim); font-size:19px; line-height:1; cursor:pointer; }
@@ -448,7 +448,8 @@
 
     <section>
       <h2>View</h2>
-      <div class="row"><label class="f">space</label><select id="spacesel" style="flex:1"></select></div>
+      <div class="row"><label class="f">space</label><select id="spacesel" style="flex:1"></select>
+        <button id="spacebtn" title="what each space is" style="padding:4px 9px">?</button></div>
       <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select>
         <button id="iccbtn" style="padding:4px 7px">ICC…</button>
         <input type="file" id="iccfile" accept=".icc,.icm,application/vnd.iccprofile" hidden></div>
@@ -545,8 +546,13 @@
   <div id="loadlist"></div>
 </dialog>
 
-<dialog id="mathdlg">
-  <button id="mathclose" title="close">&times;</button>
+<dialog id="spacedlg" class="doc">
+  <button class="x" id="spaceclose" title="close">&times;</button>
+  <div id="spacebody"></div>
+</dialog>
+
+<dialog id="mathdlg" class="doc">
+  <button class="x" id="mathclose" title="close">&times;</button>
   <div id="mathbody"></div>
 </dialog>
 
@@ -3870,9 +3876,9 @@ async function renderDoc(url, into) {
   $(into).innerHTML = html;
 }
 
-const docsReady = Promise.all([renderDoc('./about.md', 'aboutbody'),
-                               renderDoc('./formulation.md', 'mathbody')])
-  .catch((e) => { $('mathbody').textContent = $('aboutbody').textContent = String(e); });
+const DOCS = [['./about.md', 'aboutbody'], ['./formulation.md', 'mathbody'], ['./spaces.md', 'spacebody']];
+const docsReady = Promise.all(DOCS.map(([url, into]) => renderDoc(url, into)))
+  .catch((e) => DOCS.forEach(([, into]) => ($(into).textContent = String(e))));
 
 /**
  * The formulation is typeset at startup, laid out off-screen while it happens.
@@ -3887,23 +3893,29 @@ const docsReady = Promise.all([renderDoc('./about.md', 'aboutbody'),
  * formulation uses, and gives CHTML a real width to measure while it is at it.
  */
 window.MathJax?.startup?.promise.then(async () => {
-  await docsReady;                     // nothing to typeset until the file is in
-  const dlg = $('mathdlg');
-  Object.assign(dlg.style, { display: 'block', visibility: 'hidden', position: 'fixed', left: '-9999px' });
+  await docsReady;                     // nothing to typeset until the files are in
+  const dlgs = [$('mathdlg'), $('spacedlg')];
+  for (const d of dlgs)
+    Object.assign(d.style, { display: 'block', visibility: 'hidden', position: 'fixed', left: '-9999px' });
   try {
-    await MathJax.typesetPromise([dlg]);
+    await MathJax.typesetPromise(dlgs);
     await document.fonts.ready;
     // CHTML makes every expression focusable for the explorer. With the
     // explorer off there is nothing to explore, and 130 tab stops between the
     // dialog and its close button is worse than none.
-    dlg.querySelectorAll('mjx-container[tabindex]').forEach((c) => c.removeAttribute('tabindex'));
+    for (const d of dlgs)
+      d.querySelectorAll('mjx-container[tabindex]').forEach((c) => c.removeAttribute('tabindex'));
   } finally {
-    dlg.removeAttribute('style');
+    for (const d of dlgs) d.removeAttribute('style');
   }
 });
-$('mathbtn').onclick = () => $('mathdlg').showModal();
-$('mathclose').onclick = () => $('mathdlg').close();
-$('mathdlg').onclick = (e) => { if (e.target === $('mathdlg')) $('mathdlg').close(); };
+/** a ? button, its dialog, and its close: click the backdrop to dismiss */
+for (const [btn, dlg, close] of [['mathbtn', 'mathdlg', 'mathclose'],
+                                 ['spacebtn', 'spacedlg', 'spaceclose']]) {
+  $(btn).onclick = () => $(dlg).showModal();
+  $(close).onclick = () => $(dlg).close();
+  $(dlg).onclick = (e) => { if (e.target === $(dlg)) $(dlg).close(); };
+}
 $('aboutclose').onclick = () => $('aboutdlg').close();
 // clicking the backdrop closes it: the dialog's own box is the only child, so a
 // click whose target IS the dialog landed outside it

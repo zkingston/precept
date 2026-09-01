@@ -17,17 +17,9 @@ $$
 $g=J^{\top}AJ$, where $J$ is the Jacobian at $p$ of the map from $M$ to the working space selected in the panel and $A$ is that space's form on differences, scaled so the gray axis measures 100 in every space.
 Choosing Oklab gives $g=I$ and the ordinary Euclidean length, written $\ell_I$.
 
-$A$ is the identity for every space whose own coordinates are what a difference is measured in, which is all of them but one.
-CIEDE2000 is a weighting of CIELAB differences rather than a space to convert into, and for a small difference its formula
-
-$$
-\Delta E_{00}^2=\left(\frac{\Delta L}{S_L}\right)^2+\left(\frac{\Delta C'}{S_C}\right)^2
-   +\left(\frac{\Delta H'}{S_H}\right)^2+R_T\,\frac{\Delta C'}{S_C}\,\frac{\Delta H'}{S_H}
-$$
-
-is a quadratic form on $(\mathrm{d}L,\ \mathrm{d}C',\ C'\mathrm{d}h')$: the three weights are functions of the point, and $\Delta H'\to C'\mathrm{d}h'$ as the pair closes up.
-So it is a metric tensor and goes through the same machinery as the rest.
-The cross term $R_T$ is what makes $A$ necessary, since it puts $g$ beyond anything $J^{\top}J$ can produce.
+$A$ is the identity for every space whose own coordinates are what a difference is measured in.
+CIEDE2000 is the exception: it weights CIELAB differences, with a cross term between chroma and hue that puts $g$ beyond anything $J^{\top}J$ can produce.
+The **Spaces** dialog, beside the space dropdown, gives each one.
 
 Perceived difference is a concave function of length:
 

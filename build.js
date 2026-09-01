@@ -102,7 +102,7 @@ for (const f of ['fira-sans/files/fira-sans-latin-400-normal.woff2',
 // these at run time, so they are content rather than build input: they have to
 // exist next to index.html on the deployed site.
 await copyInto('node_modules/marked/lib/marked.esm.js', 'vendor/marked.esm.js');
-for (const doc of ['about.md', 'formulation.md']) await copyInto(doc, doc);
+for (const doc of ['about.md', 'formulation.md', 'spaces.md']) await copyInto(doc, doc);
 
 // Jekyll would otherwise skip anything beginning with an underscore
 await writeFile(join(OUT, '.nojekyll'), '');
