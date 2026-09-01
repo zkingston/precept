@@ -1021,16 +1021,35 @@ bool inBounds(vec3 lab) {
 
 /** the convex cone over the spectral locus: colors a light can actually make */
 bool visible(vec3 xyz) {
-  for (int i = 0; i < 27; i++) if (dot(uVis[i], xyz) < -1e-9) return false;
+  // against the chromaticity: the planes pass through the origin so the sign is
+  // scale free, but its size is not, and near black the dot products vanish with
+  // the color and the sign becomes rounding noise
+  // below this everything is black, whatever its chromaticity says, and the
+  // cone runs so nearly tangent to the cube's surface down there that the
+  // boundary between them serrated along the tessellation
+  float s = xyz.x + xyz.y + xyz.z;
+  if (s < 1e-5) return true;
+  for (int i = 0; i < 27; i++) if (dot(uVis[i], xyz) / s < -1e-7) return false;
   return true;
 }
 
-/** in the working gamut AND physically realisable — the feasible set's own test */
-bool reachable(vec3 xyz) {
+/** inside the working gamut's RGB box */
+bool inBox(vec3 xyz) {
   vec3 ling = uGamut * xyz;
-  if (any(lessThan(ling, vec3(-1e-9))) || any(greaterThan(ling, vec3(1.0 + 1e-9)))) return false;
-  return visible(xyz);
+  return !(any(lessThan(ling, vec3(-1e-9))) || any(greaterThan(ling, vec3(1.0 + 1e-9))));
 }
+
+/**
+ * The two halves of the gamut test do not get the same treatment.
+ *
+ * Outside the RGB box there is nothing: the fragment goes. Outside the visible
+ * cone there IS something — the encoding holds a value there, it just is not a
+ * color any light makes — and every surface this app draws through that region
+ * is equally unreal, so discarding leaves a hole that nothing can fill. A cap
+ * drawn across it would be discarded by the same test. Grey instead, once,
+ * everywhere, and the solid stays a solid.
+ */
+const vec4 GHOST = vec4(vec3(0.42), 0.8);
 
 /** XYZ, through the selected observer, to something a monitor can show */
 vec3 shown(vec3 xyz) {
@@ -1061,26 +1080,33 @@ void main() {
   else c = vec3(mix(uLo.x, uHi.x, vUv.y), mix(uLo.y, uHi.y, vUv.x), uT);
 
   vec3 xyz = spaceToXyz(c);
-  if (!reachable(xyz)) discard;
+  if (!inBox(xyz)) discard;
   // out of bounds is cut away rather than dimmed: what is left is exactly the
   // set you asked for, with nothing to read past
   if (!inBounds(chartOf(xyz))) discard;
+  if (!visible(xyz)) { gl_FragColor = vec4(GHOST.rgb, GHOST.a * uOpacity); return; }
   gl_FragColor = vec4(shown(xyz), uOpacity);
 }`;
 
-// The mesh is the RGB cube's surface, so the box needs no testing — but the
-// feasible set is that cube MET WITH the visible cone, and for a wide gamut the
-// cone cuts through it. Where it does, the fragment goes: what is left is the
-// part of the cube's surface that is real, and the opening is where the cone's
-// own surface would be. Per fragment rather than per vertex also means the color
-// stops being an interpolation across triangles that are large where the surface
-// curves most.
+// The solid is the gamut boundary, so there is nothing to test — every fragment
+// is reachable by construction. Per fragment rather than per vertex also means
+// the color stops being an interpolation across triangles that are large where
+// the surface curves most.
+//
+// It does NOT carry the visible-cone test the slices and caps carry, so for a
+// wide gamut this surface is the encoding's full cube and overstates what the
+// feasible set admits. That is deliberate and it is a gap. This mesh is the
+// cube's surface, and near black the cone runs so nearly tangent to it that the
+// boundary between kept and cut serrates along the tessellation whichever way
+// it is drawn — cut, ghosted, at 28 samples or at 56. Fixing it properly means
+// building the shell as the intersection itself: both bodies are convex, so it
+// is star-shaped about an interior point and a direction-parameterised mesh
+// would land on the true boundary instead of testing the wrong surface.
 const SHELL_FRAG = COLOR_GLSL + `
 varying vec3 vPos;
 void main() {
   vec3 c = vec3(vPos.y / uScale + uMid.x, vPos.x / uScale + uMid.y, vPos.z / uScale + uMid.z);
   vec3 xyz = spaceToXyz(c);
-  if (!visible(xyz)) discard;
   if (!inBounds(chartOf(xyz))) discard;
   gl_FragColor = vec4(shown(xyz), uOpacity);
 }`;
@@ -1102,7 +1128,7 @@ uniform int uCap;
 void main() {
   vec3 c = vec3(vPos.y / uScale + uMid.x, vPos.x / uScale + uMid.y, vPos.z / uScale + uMid.z);
   vec3 xyz = spaceToXyz(c);
-  if (!reachable(xyz)) discard;
+  if (!inBox(xyz)) discard;
   vec3 lab = chartOf(xyz);
   float chroma = length(lab.yz);
   float hue = degrees(atan(lab.z, lab.y));
@@ -1110,6 +1136,7 @@ void main() {
   if (uCap != 0 && (lab.x < uLB.x || lab.x > uLB.y)) discard;
   if (uCap != 1 && (chroma < uCB.x || chroma > uCB.y)) discard;
   if (uCap != 2 && chroma >= 1.0 && !inArc(hue)) discard;
+  if (!visible(xyz)) { gl_FragColor = vec4(GHOST.rgb, GHOST.a * uOpacity); return; }
   gl_FragColor = vec4(shown(xyz), uOpacity);
 }`;
 
@@ -1213,16 +1240,20 @@ function buildShell() {
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const c = []; c[u] = (i / N) ** 3; c[v] = (j / N) ** 3; c[w] = f;
       const chart = fromLinear(c);
-      // only the reachable part counts toward the slider's top, or the control
-      // would offer a chroma the feasible set has just stopped admitting —
-      // ProPhoto's cube reaches 148 and its visible part 52
-      if (visible(toXYZ(chart))) maxC = Math.max(maxC, Math.hypot(chart[1], chart[2]));
+      const C = Math.hypot(chart[1], chart[2]);
+      // Two reaches, and they used to be one number. The slider's top is what
+      // the feasible set will admit, so it counts only the realisable part —
+      // ProPhoto's cube goes to 148 and its visible part to 52. The caps still
+      // have to span the MESH, which is the whole cube either way.
+      cubeReach = Math.max(cubeReach, C);
+      if (visible(toXYZ(chart))) maxC = Math.max(maxC, C);
       const p = wpt(chart);
       pos.setXYZ(k++, p.x, p.y, p.z);
     }
   // the hull is already being walked, so the gamut's reach is free here
   gamutReach = maxC;
   retuneChroma();
+  capKey = null;                                   // capR moved with cubeReach
   pos.needsUpdate = true;
   shellGeo.computeBoundingSphere();
 }
@@ -1250,8 +1281,10 @@ const capGroup = new T.Group();
 capGroup.layers.set(1);                            // part of the solid, so 3D only
 scene.add(capGroup);
 const CAP_N = 36;
-/** caps span the chroma the gamut reaches, with margin — ProPhoto passes 148 */
-const capR = () => BOUND_MAX[1] * 1.35;
+/** caps span the chroma the MESH reaches, with margin — ProPhoto passes 148.
+ *  Not the slider's top: since that stops at the realisable reach, a cap sized
+ *  by it would fall short of the shell it is meant to close. */
+const capR = () => Math.max(BOUND_MAX[1], cubeReach) * 1.35;
 let capKey = null;
 
 /** a point on cap `kind` at value v, parameterized over the unit square */
@@ -1277,13 +1310,16 @@ const capOut = (kind, q, sign) => {
 };
 
 function buildCaps() {
-  const key = `${S.lo}|${S.hi}|${S.hue}|${params.space}|${params.gamut}`;
+  const key = `${S.lo}|${S.hi}|${S.hue}|${params.space}|${params.gamut}|${cubeReach}`;
   if (key === capKey) return;
   capKey = key;
   capGroup.clear();
   const wanted = [
     ...(S.lo[0] > 0 ? [[0, S.lo[0], -1]] : []), ...(S.hi[0] < 100 ? [[0, S.hi[0], 1]] : []),
-    ...(S.lo[1] > 0 ? [[1, S.lo[1], -1]] : []), ...(S.hi[1] < BOUND_MAX[1] - 1e-9 ? [[1, S.hi[1], 1]] : []),
+    // against the mesh's reach: with the ceiling now at the realisable chroma,
+    // a band sitting at its top still cuts a wide gamut's shell, and testing
+    // against the ceiling would have said there was nothing to close
+    ...(S.lo[1] > 0 ? [[1, S.lo[1], -1]] : []), ...(S.hi[1] < cubeReach - 1e-9 ? [[1, S.hi[1], 1]] : []),
     ...(S.hue[0] === 0 && S.hue[1] === 360 ? [] : [[2, S.hue[0], -1], [2, S.hue[1], 1]]),
   ];
   for (const [kind, v, sign] of wanted) {
@@ -4583,7 +4619,7 @@ addEventListener('keydown', (e) => {
  * ceiling was never narrowed on purpose, so it moves to the new one, while a
  * band the user set stays where it is and is only clamped down if it has to be.
  */
-let gamutReach = 0;
+let gamutReach = 0, cubeReach = 0;
 function retuneChroma() {
   const pal = S.pts.length ? palette() : [];
   const reach = pal.reduce((m, p) => Math.max(m, Math.hypot(p[1], p[2])), gamutReach);

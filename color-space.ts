@@ -356,17 +356,31 @@ const VISIBLE: Vec3[] = [
   [-0.3377185, 0.9388247, 0.067486],
 ];
 
-/** false for a color outside the spectral cone, whatever the gamut says */
-export const visible = (xyz: Vec3, eps = 1e-9): boolean =>
-  VISIBLE.every((n) => n[0] * xyz[0] + n[1] * xyz[1] + n[2] * xyz[2] >= -eps);
+/**
+ * False for a color outside the spectral cone, whatever the gamut says.
+ *
+ * Against the chromaticity, not the tristimulus. The planes pass through the
+ * origin, so the sign of the dot product is what decides and it is unchanged by
+ * scale — but its MAGNITUDE is not, and near black every component goes to zero
+ * together and takes the dot products with it. Tested absolutely, the sign there
+ * is whatever the rounding says, which drew a sawtooth down the dark edge of the
+ * solid. Dividing by X+Y+Z puts every color on the same footing.
+ */
+export const visible = (xyz: Vec3, eps = 1e-9): boolean => {
+  const s = xyz[0] + xyz[1] + xyz[2];
+  if (s < 1e-5) return true;                          // black, whatever its chromaticity
+  return VISIBLE.every((n) => (n[0] * xyz[0] + n[1] * xyz[1] + n[2] * xyz[2]) / s >= -eps);
+};
 
 /** Smooth, ≥0, zero inside the gamut. Penalty term for a trajectory optimizer. */
 export const gamutPenalty = (p: Vec3): number => {
   const box = toLinear(p).reduce((acc, c) => acc + (c < 0 ? c * c : c > 1 ? (c - 1) ** 2 : 0), 0);
   // the cone in the same units: XYZ and linear RGB are both on 0..1 here
   const xyz = toXYZ(p);
+  const s = xyz[0] + xyz[1] + xyz[2];
+  if (!(s > 0)) return box;
   return VISIBLE.reduce((acc, n) => {
-    const d = n[0] * xyz[0] + n[1] * xyz[1] + n[2] * xyz[2];
+    const d = (n[0] * xyz[0] + n[1] * xyz[1] + n[2] * xyz[2]) / s;
     return acc + (d < 0 ? d * d : 0);
   }, box);
 };
