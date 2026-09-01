@@ -1576,17 +1576,54 @@ function mergeParts(gs) {
   return out;
 }
 
+/**
+ * The trajectory as a tube, and the outline as the same tube grown a little.
+ *
+ * Two things this deliberately does not do, both of which it used to and both
+ * of which made it the whole cost of a frame while the solver runs.
+ *
+ * It does not sample twice as finely as the curve it is given. `c` is already
+ * the spline evaluated at PER_SPAN points a span; asking TubeGeometry for two
+ * segments per point buys nothing and TubeGeometry's cost is linear in them.
+ * One segment per curve point, capped, is the same picture.
+ *
+ * And it does not build the outline as a second TubeGeometry. That repeats the
+ * arc-length reparameterisation and the Frenet frames for a path already walked,
+ * to produce rings around the same centres at a different radius. Growing the
+ * first one does it directly: a ring is `radial` vertices around its centre, so
+ * the centre is their mean and every vertex moves out from it by the ratio.
+ */
 function tubeOf(c) {
-  const seg = Math.min(400, c.length * 2), radial = 8;
+  const seg = Math.min(200, c.length), radial = 8;
   const path = new T.CatmullRomCurve3(c.map(wpt));
   const body = new T.TubeGeometry(path, seg, 1.3, radial, false);
-  const edge = new T.TubeGeometry(path, seg, 1.75, radial, false);
+  const edge = body.clone();
+  {
+    const bp = body.attributes.position, ep = edge.attributes.position, k = 1.75 / 1.3;
+    for (let r = 0; r <= seg; r++) {
+      const o = r * (radial + 1);
+      let cx = 0, cy = 0, cz = 0;
+      for (let j = 0; j < radial; j++) { cx += bp.getX(o + j); cy += bp.getY(o + j); cz += bp.getZ(o + j); }
+      cx /= radial; cy /= radial; cz /= radial;
+      for (let j = 0; j <= radial; j++)
+        ep.setXYZ(o + j, cx + (bp.getX(o + j) - cx) * k,
+                         cy + (bp.getY(o + j) - cy) * k,
+                         cz + (bp.getZ(o + j) - cz) * k);
+    }
+    ep.needsUpdate = true;
+  }
   // TubeGeometry emits (seg+1) rings of (radial+1) vertices in order, so the
   // ring index recovers the curve parameter, and with it the color.
+  //
+  // Once per RING, not once per vertex. Every vertex of a ring takes the same
+  // color and rgb() is the whole display pipeline — gamut mapping, the observer,
+  // the transfer function — so doing it per vertex did nine times the work at
+  // eight radial segments, and that made it the largest single cost in a solver
+  // frame: 6.4 ms of a 7.3 ms tube on a twenty-point ramp.
   const col = new Float32Array(body.attributes.position.count * 3);
-  for (let i = 0; i < body.attributes.position.count; i++) {
-    const ring = Math.floor(i / (radial + 1));
-    col.set(rgb(c[Math.min(c.length - 1, Math.round((ring / seg) * (c.length - 1)))]), i * 3);
+  for (let r = 0; r <= seg; r++) {
+    const v = rgb(c[Math.min(c.length - 1, Math.round((r / seg) * (c.length - 1)))]);
+    for (let j = 0; j <= radial; j++) col.set(v, (r * (radial + 1) + j) * 3);
   }
   body.setAttribute('color', new T.Float32BufferAttribute(col, 3));
   // the edge mesh is drawn flat, but the merge needs both to carry the same
@@ -3188,7 +3225,20 @@ const OBJ = [
    * back out.
    */
   { key: 'feas', label: 'curve feasibility', mode: 'continuous', bad: true,
-    f: (x) => violations(x.probe).reduce((a, c, i) => a + (AL.lam[i] ?? 0) * c + 0.5 * c * c, 0) },
+    f: (x) => violations(x.probe).reduce((a, c, i) => a + (AL.lam[i] ?? 0) * c + 0.5 * c * c, 0),
+    // The same sum over part of the probe. A central difference on one control
+    // point cancels every sample the point did not move, so the gradient only
+    // ever needed the spans around it — see probeRanges.
+    part: (x, ranges) => {
+      const g = M(), v = primary();
+      let a = 0;
+      for (const [lo, hi] of ranges)
+        for (let i = lo; i < hi; i++) {
+          const c = violation(x.probe[i], g, v);
+          a += (AL.lam[i] ?? 0) * c + 0.5 * c * c;
+        }
+      return a;
+    } },
   /**
    * Uniformity over every PAIR, corrected for diminishing returns.
    *
@@ -3358,19 +3408,66 @@ S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
  * afterwards: its gradient is never formed, so it cannot skew the normalization
  * that sets the step size for everything else.
  */
+/**
+ * Which probe samples a control point can move, as [lo, hi) ranges.
+ *
+ * A Catmull-Rom span is a function of four consecutive control points, so
+ * moving point k changes spans k-2 through k+1 and nothing else. Everything
+ * outside that is identical in the two perturbed configurations of a central
+ * difference and cancels exactly, so a term summed over the probe only has to
+ * look at this window. It is exact, not an approximation.
+ *
+ * The window covers the phantom endpoints too: an open spline reflects its ends
+ * from the first and last two controls, and those reflections live in the spans
+ * this range already includes.
+ *
+ * Returns null when the point cannot be located, which makes the caller fall
+ * back to the whole probe rather than silently drop a term.
+ */
+function probeRanges(i) {
+  let off = 0;
+  for (const r of runs()) {
+    const m = r.nodes.length;
+    const len = m < 2 ? m : (r.closed ? m : m - 1) * PER_SPAN + 1;
+    const k = r.nodes.indexOf(i);
+    if (k < 0) { off += len; continue; }
+    if (m < 2) return [[off, off + len]];
+    const spans = r.closed ? m : m - 1;
+    const hit = new Array(spans).fill(false);
+    for (let d = -2; d <= 1; d++) {
+      let j = k + d;
+      if (r.closed) j = ((j % spans) + spans) % spans;
+      else if (j < 0 || j >= spans) continue;
+      hit[j] = true;
+    }
+    const out = [];
+    for (let j = 0, s = -1; j <= spans; j++) {
+      if (j < spans && hit[j]) { if (s < 0) s = j; }
+      else if (s >= 0) { out.push([off + s * PER_SPAN, off + j * PER_SPAN + 1]); s = -1; }
+    }
+    return out;
+  }
+  return null;
+}
+
 function gradientOf(terms) {
   const base = S.pts.map((p) => [...p]);
   const h = 0.25;
   // gated on the mode too, so a hidden checkbox cannot quietly hold points still
   const pinned = pinnedAt;
   const per = terms.map(() => base.map(() => [0, 0, 0]));
+  const wants = terms.some((t) => t.part);
   for (let i = 0; i < base.length; i++) {
     if (pinned(i)) continue;
+    const rng = wants ? probeRanges(i) : null;
     for (let k = 0; k < 3; k++) {
       const lo = base.map((q) => [...q]), hi = base.map((q) => [...q]);
       lo[i][k] -= h; hi[i][k] += h;
       const [cl, ch] = [ctxOf(lo), ctxOf(hi)];
-      terms.forEach((t, m) => { per[m][i][k] = (t.f(ch) - t.f(cl)) / (2 * h); });
+      terms.forEach((t, m) => {
+        const ev = t.part && rng ? (x) => t.part(x, rng) : t.f;
+        per[m][i][k] = (ev(ch) - ev(cl)) / (2 * h);
+      });
     }
   }
   const total = base.map(() => [0, 0, 0]);
@@ -5268,6 +5365,8 @@ applyBg();
 setView();
 
 frame();
+
+
 
 
 </script>
