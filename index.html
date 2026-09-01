@@ -785,16 +785,6 @@
          pulled those together would undo it. A closed run has no middle to be symmetric about, so it
          is skipped. Viridis scores 1862 against vik at 19.5 and roma at 3.0.</p></li>
 
-    <li><b>hue winding</b> <span class="d">a loop goes round once</span>
-      \[ F_{\text{wind}}=\frac{1}{|\mathcal{C}|}\sum_{r\in\mathcal{C}}
-         \left(\frac{|\Theta_r|-360}{360}\right)^2,\qquad
-         \Theta_r=\sum_k \delta\bigl(h_{k+1},\,h_k\bigr) \]
-      <p>\(\Theta_r\) is the signed hue turn around a closed run. The sum runs over its steps and
-         includes the wrap, and skips swatches below chroma 1, where hue is not a real quantity.</p>
-      <p>A loop whose hue runs out and comes back closes as neatly as one that goes round, and is a
-         diverging map joined end to end. The turn tells them apart. Of Crameri's two cyclic maps,
-         romaO turns \(360^\circ\) and vikO turns \(0^\circ\).</p></li>
-
     <li><b>contrast floor</b> <span class="d">nothing unreadable against a chosen background</span>
       \[ F_{\text{con}}=\sum_{q\in Q}\bigl[\kappa_{\min}-\kappa(q,\beta)\bigr]_+^2 \]
       <p>\(\kappa\) is the <a href="https://en.wikipedia.org/wiki/Web_Content_Accessibility_Guidelines" target="_blank" rel="noopener">WCAG 2</a>
@@ -2460,6 +2450,13 @@ function applyScene(o) {
   params.space = o.space; params.gamut = o.gamut;
   for (const k of Object.keys(S)) if (k in o) S[k] = o[k];
   if (!('pin' in o)) S.pin = [];                 // a scene written before pins existed
+  // The two term maps are keyed by objective, and which objectives exist changes
+  // between versions. Restoring them wholesale gives a scene written before a
+  // term the power to leave that term at undefined, which reads as off and
+  // cannot be switched on. Keep the keys OBJ defines and take the file's value
+  // only where it has one.
+  S.w = Object.fromEntries(OBJ.map((t) => [t.key, o.w?.[t.key] ?? 1]));
+  S.on = Object.fromEntries(OBJ.map((t) => [t.key, o.on?.[t.key] ?? !OPT_IN.includes(t.key)]));
   S.sel = null;
   reframe(); layout(); buildShell(); capKey = null;   // a new chart moves everything
   mirror();
@@ -3008,7 +3005,6 @@ const HELP = {
   lsep:     "Pairs closer in lightness than the palette could manage.",
   bend:     "Squared curvature along the ramp. A circle is 1, a straight line 0.",
   sym:      "Lightness asymmetry between a diverging map's two arms.",
-  wind:     "How far a loop's hue turn is from a full circle.",
   space:    "Uneven control point spacing.",
 };
 
@@ -3397,33 +3393,6 @@ const OBJ = [
       return k ? e / k : 0;
     } },
   /**
-   * What makes a cyclic map cyclic: hue goes round once and comes back, rather
-   * than doubling back on itself. The signed turns around the loop have to sum
-   * to a full circle — a map that runs out to a hue and returns the way it came
-   * closes just as neatly and reads as a diverging map wrapped end to end.
-   *
-   * Closed runs only, and swatches too near the neutral axis are skipped: hue
-   * is not a real quantity there and its turn is noise.
-   */
-  { key: 'wind', label: 'hue winding', mode: 'continuous', bad: true,
-    f: (x) => {
-      let e = 0, k = 0, at = 0;
-      for (const r of runs()) {
-        const m = r.nodes.length, P = x.pal.slice(at, at + m);
-        at += m;
-        if (!r.closed || m < 3) continue;
-        let turn = 0;
-        for (let i = 0; i < m; i++) {
-          const [a, b] = [P[i], P[(i + 1) % m]];
-          if (Math.hypot(a[1], a[2]) < 1 || Math.hypot(b[1], b[2]) < 1) continue;
-          turn += angDiff(hueOf(b), hueOf(a));
-        }
-        e += ((Math.abs(turn) - 360) / 360) ** 2;
-        k++;
-      }
-      return k ? e / k : 0;
-    } },
-  /**
    * Contrast against a chosen ground, as a hinge rather than something to
    * maximize. Maximizing it would drive every swatch to one lightness — the
    * ratio is a function of luminance alone — which is the opposite of what a
@@ -3463,7 +3432,7 @@ const OBJ = [
 
 /** Terms included in the combined step. Constraints on, shaping opt-in. */
 // Shaping terms that fight the rest of the palette unless you ask for them.
-const OPT_IN = ['repcvd', 'contr', 'lsep', 'sym', 'wind', 'bend'];
+const OPT_IN = ['repcvd', 'contr', 'lsep', 'sym', 'bend'];
 S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
 /** Relative pull of each term in the combined step. */
 S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
