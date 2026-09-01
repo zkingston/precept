@@ -1417,6 +1417,54 @@ function paintSlice(s) {
   u.uAxis.value = s.k; u.uT.value = t; u.uOpacity.value = S.sliceOp;
 }
 
+// ─── the frame box, on the far side only ─────────────────────────────────────
+/**
+ * The extent box the solid sits in, as a reference for where its axes run.
+ *
+ * Only the far nine of its twelve edges are drawn. The three meeting the corner
+ * nearest the camera are the ones that would cross in FRONT of the solid, and
+ * they are what turns a box into a cage — the same reason a 3D plot draws its
+ * back panes and not its front ones. Which corner that is changes as you orbit,
+ * so the choice is remade each frame; it is eight projections and 24 vertex
+ * writes.
+ *
+ * Drawn before the shell and left out of the depth buffer's way, so where an
+ * edge passes behind the solid it reads through the translucency rather than
+ * over it.
+ */
+const BOX_EDGES = [];
+for (let a = 0; a < 8; a++) for (const bit of [1, 2, 4]) if (!(a & bit)) BOX_EDGES.push([a, a | bit]);
+const boxGeo = new T.BufferGeometry();
+boxGeo.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(BOX_EDGES.length * 6), 3));
+const boxLines = new T.LineSegments(boxGeo,
+  new T.LineBasicMaterial({ color: 0x3a3a42, transparent: true, opacity: 0.5, depthWrite: false }));
+boxLines.layers.set(1);                            // part of the solid's view, so 3D only
+boxLines.renderOrder = 0;
+scene.add(boxLines);
+
+const boxTmp = new T.Vector3();
+function updateBox() {
+  if (!FRAME) return;
+  const { lo, hi } = FRAME;
+  const C = Array.from({ length: 8 }, (_, i) =>
+    world([i & 1 ? hi[0] : lo[0], i & 2 ? hi[1] : lo[1], i & 4 ? hi[2] : lo[2]]));
+  // nearest corner by projected depth, which is right for either projection
+  let near = 0, best = Infinity;
+  for (let i = 0; i < 8; i++) {
+    const z = boxTmp.copy(C[i]).project(cam3).z;
+    if (z < best) { best = z; near = i; }
+  }
+  const pos = boxGeo.attributes.position;
+  BOX_EDGES.forEach(([a, b], k) => {
+    // an edge at the near corner collapses to a point rather than being culled,
+    // which keeps the buffer a fixed size and the draw call a single one
+    const q = a === near || b === near ? C[a] : C[b];
+    pos.setXYZ(2 * k, C[a].x, C[a].y, C[a].z);
+    pos.setXYZ(2 * k + 1, q.x, q.y, q.z);
+  });
+  pos.needsUpdate = true;
+}
+
 // ─── trajectory, control points, obstacle spheres ────────────────────────────
 // transparent + depthTest off puts these in the pass that runs AFTER the slice
 // planes and exempts them from its depth, so the trajectory reads over the cut
@@ -1723,6 +1771,7 @@ function layout() {
 
 function frame() {
   controls.update();
+  updateBox();                                     // the near corner moves as you orbit
   const h = canvas.clientHeight;
   for (const q of QUADS) {
     if (!q.rect) continue;                            // hidden, so nothing to scissor
@@ -3724,6 +3773,7 @@ function applyBg() {
     '--ctl': light ? '#00000012' : '#ffffff12',
   })) v.setProperty(k, val);
   slices.forEach((s) => s.edge.material.color.set(light ? 0x3a3a42 : 0xc6c6d0));
+  boxLines.material.color.set(light ? 0x3a3a42 : 0xc6c6d0);
   drawPlots();
 }
 
