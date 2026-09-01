@@ -3120,7 +3120,20 @@ const OBJ = [
   { key: 'repcvd', label: () => `repulsion · ${S.cvd === 'none' ? 'all' : '+' + S.cvd}`,
     f: (x) => repulsion(x.pal, criteria()) },
   { key: 'arc', label: 'arc length', mode: 'continuous',
-    f: (x) => { const g = M(); return x.curves.reduce((a, c) => a + arcLength(c, g), 0); } },
+    f: (x) => { const g = M(); return x.curves.reduce((a, c) => a + arcLength(c, g), 0); },
+    // One metric evaluation per segment, and in a space that differentiates by
+    // central differences that is six color conversions each — which is why this
+    // term, four microseconds in the chart, is a millisecond in CAM02-UCS. Only
+    // the segments touching a moved span change; a segment counts if either of
+    // its ends did, so the window opens one earlier than the sample window.
+    part: (x, w) => {
+      const g = M(), c = x.curves[w.run];
+      let a = 0;
+      for (const [lo, hi] of w.ranges)
+        for (let i = Math.max(0, lo - 1); i < Math.min(hi, c.length - 1); i++)
+          a += segLength(c[i], c[i + 1], g);
+      return a;
+    } },
   /**
    * Perceptual uniformity: equal perceived steps between consecutive swatches.
    * Measured with the CHART metric, deliberately, not the active space's — the
@@ -3229,11 +3242,12 @@ const OBJ = [
     // The same sum over part of the probe. A central difference on one control
     // point cancels every sample the point did not move, so the gradient only
     // ever needed the spans around it — see probeRanges.
-    part: (x, ranges) => {
+    part: (x, w) => {
       const g = M(), v = primary();
       let a = 0;
-      for (const [lo, hi] of ranges)
-        for (let i = lo; i < hi; i++) {
+      for (const [lo, hi] of w.ranges)
+        for (let j = lo; j < hi; j++) {
+          const i = w.off + j;                     // AL.lam is indexed on the whole probe
           const c = violation(x.probe[i], g, v);
           a += (AL.lam[i] ?? 0) * c + 0.5 * c * c;
         }
@@ -3426,12 +3440,12 @@ S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
  */
 function probeRanges(i) {
   let off = 0;
-  for (const r of runs()) {
+  for (const [ri, r] of runs().entries()) {
     const m = r.nodes.length;
     const len = m < 2 ? m : (r.closed ? m : m - 1) * PER_SPAN + 1;
     const k = r.nodes.indexOf(i);
     if (k < 0) { off += len; continue; }
-    if (m < 2) return [[off, off + len]];
+    if (m < 2) return { run: ri, off, len, ranges: [[0, len]] };
     const spans = r.closed ? m : m - 1;
     const hit = new Array(spans).fill(false);
     for (let d = -2; d <= 1; d++) {
@@ -3440,12 +3454,12 @@ function probeRanges(i) {
       else if (j < 0 || j >= spans) continue;
       hit[j] = true;
     }
-    const out = [];
-    for (let j = 0, s = -1; j <= spans; j++) {
-      if (j < spans && hit[j]) { if (s < 0) s = j; }
-      else if (s >= 0) { out.push([off + s * PER_SPAN, off + j * PER_SPAN + 1]); s = -1; }
+    const ranges = [];
+    for (let j = 0, a = -1; j <= spans; j++) {
+      if (j < spans && hit[j]) { if (a < 0) a = j; }
+      else if (a >= 0) { ranges.push([a * PER_SPAN, j * PER_SPAN + 1]); a = -1; }
     }
-    return out;
+    return { run: ri, off, len, ranges };
   }
   return null;
 }
@@ -5365,6 +5379,8 @@ applyBg();
 setView();
 
 frame();
+
+
 
 
 
