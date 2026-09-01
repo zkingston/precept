@@ -543,6 +543,8 @@
 
   <h4>Getting around</h4>
   <ul class="how">
+    <li>Start from a published palette: <b>load…</b> opens a grid of them, grouped by what shape
+        they are. Or start from the one on screen.</li>
     <li>Double-click empty space to add a node. In a cut panel it lands on that cut; in the 3D view it
         takes the color you clicked on. Drag a node to move it.</li>
     <li>Right-click a node, or press and hold on a touchscreen, to pin or delete it. A pinned node is
@@ -551,10 +553,21 @@
         the one under the cursor.</li>
     <li>With two marked, that menu also offers connect and disconnect. Disconnecting splits the ramp
         into separate runs; connecting the two ends of one run closes it into a loop.</li>
+    <li>The two plots are target profiles for lightness and hue against position along the ramp. Drag
+        a knot to shape one. <b>fit</b> sets the target to the ramp you already have, and the buttons
+        beside it fit a straight ramp or a tent, a steady turn or two plateaus, each of which
+        double-clicks to its reverse. The matching term measures the distance from the target, so
+        drawing the curve you want is how you ask for it.</li>
+    <li>The lightness and chroma sliders and the hue wheel bound where a color may go. They shade the
+        views to show what is left, and they are enforced rather than encouraged: a node outside them
+        is projected back. Double-click the wheel, or the arrow at its center, to allow every hue
+        again.</li>
     <li>The tools switch between nodes, keep-out spheres and halfplanes. A sphere is placed by
         double-clicking a cut panel and resized by dragging the small handle beside it; a halfplane is
         cut the same way, then slid by its center or turned by its tip.</li>
-    <li>Run Adam to optimize against the enabled terms.</li>
+    <li>Under <b>Optimize</b>, tick the terms to include and set how hard each one pulls in the
+        <b>&times;</b> column. A weight of 2 against a weight of 1 moves the step twice as far,
+        whatever the two terms measure. Then run Adam.</li>
     <li>Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole
         palette.</li>
     <li>Every control and every metric has a <span class="q">?</span> beside it: hover one for what it
