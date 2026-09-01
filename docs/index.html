@@ -1201,7 +1201,8 @@ function buildShell() {
       pos.setXYZ(k++, p.x, p.y, p.z);
     }
   // the hull is already being walked, so the gamut's reach is free here
-  setChromaCeiling(Math.ceil(maxC * 1.02));
+  gamutReach = maxC;
+  retuneChroma();
   pos.needsUpdate = true;
   shellGeo.computeBoundingSphere();
 }
@@ -4549,6 +4550,26 @@ addEventListener('keydown', (e) => {
  * meant "no bound", so it follows the ceiling up or down rather than staying at
  * a number that now means something; anything else is just clamped.
  */
+/**
+ * The chroma slider's top, from the gamut's reach and the palette's own.
+ *
+ * The gamut alone is not enough. A palette can sit outside the gamut on screen
+ * — one loaded from a link written under a wider one, or a node dragged past
+ * the hull — and with the ceiling set only by the gamut the band would cut it
+ * off at a value the slider could not even express. Taking the larger of the
+ * two means the loaded palette always fits inside the band it arrives in.
+ *
+ * setChromaCeiling then does the following through: a band sitting at the old
+ * ceiling was never narrowed on purpose, so it moves to the new one, while a
+ * band the user set stays where it is and is only clamped down if it has to be.
+ */
+let gamutReach = 0;
+function retuneChroma() {
+  const pal = S.pts.length ? palette() : [];
+  const reach = pal.reduce((m, p) => Math.max(m, Math.hypot(p[1], p[2])), gamutReach);
+  setChromaCeiling(Math.ceil(reach * 1.02));
+}
+
 function setChromaCeiling(max) {
   const was = BOUND_MAX[1];
   if (max === was) return;
@@ -4750,6 +4771,7 @@ $('loadlist').onclick = (e) => {
   S.loop = [preset.kind === 'cyclic'];           // the cyclic maps load as the loops they are
   S.sel = null;
   syncProfiles(); lprofFit(); hprofFit();          // sized first, then both start as the ramp
+  retuneChroma();                                  // a band left at the top follows the new palette
   for (const b of $('mode').children) b.ariaPressed = b.dataset.v === S.mode;
   $('loaddlg').close();
   sync();
@@ -5070,6 +5092,8 @@ reflow();
 applyBg();
 setView();
 
+Object.assign(window,{__S4:()=>S,__B:()=>BOUND_MAX,__pal:()=>palette()});
+Object.assign(window,{__S4:()=>S,__B:()=>BOUND_MAX,__pal:()=>palette(),__G:()=>GAMUTS,__sync4:()=>sync()});
 frame();
 </script>
 </html>
