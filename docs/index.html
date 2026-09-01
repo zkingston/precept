@@ -526,99 +526,7 @@
 
 <dialog id="aboutdlg">
   <button id="aboutclose" title="close">&times;</button>
-  <h3>Precept</h3>
-  <p class="lede">Palette design as trajectory optimization.</p>
-  <p>A color is a point in a <a href="https://en.wikipedia.org/wiki/Color_space" target="_blank" rel="noopener">color space</a>,
-     which is determined by parameters like the
-     <a href="https://en.wikipedia.org/wiki/RGB_color_model" target="_blank" rel="noopener">red, green, and blue</a> values, the
-     <a href="https://en.wikipedia.org/wiki/HSL_and_HSV" target="_blank" rel="noopener">hue, saturation, and lightness</a>, or
-     <a href="https://en.wikipedia.org/wiki/CIELAB_color_space" target="_blank" rel="noopener">chroma, lightness</a>, etc.,
-     where the <a href="https://en.wikipedia.org/wiki/Gamut" target="_blank" rel="noopener">gamut</a> is the set of
-     representable colors (your monitor is probably a gamut called
-     <a href="https://en.wikipedia.org/wiki/SRGB" target="_blank" rel="noopener">sRGB</a>). Many people also have a
-     <a href="https://en.wikipedia.org/wiki/Color_blindness" target="_blank" rel="noopener">color vision deficiency</a>, which
-     affects the distinctness of colors in this space. A colormap is either a continuous path
-     through that space or a set of points for categorical data, subject to some constraints that
-     you'd like to enforce, like uniform perception, maximal distinctness, and so on. This tool
-     solves that palette generation problem with optimization, and provides a number of metrics to
-     help design pleasing and scientifically validated palettes.</p>
-
-  <h4>Getting around</h4>
-  <ul class="how">
-    <li>Start from a published palette: <b>load…</b> opens a grid of them.
-        Or start from the one on screen.</li>
-    <li>Double-click empty space to add a node. In a cut panel it lands on that cut; in the 3D view it
-        takes the color you clicked on. Drag a node to move it.</li>
-    <li>Right-click a node, or press and hold on a touchscreen, to pin or delete it. A pinned node is
-        held still by the solver.</li>
-    <li>Ctrl-click nodes to mark them. Pin and delete then apply to every marked node rather than to
-        the one under the cursor.</li>
-    <li>With two marked, that menu also offers connect and disconnect. Disconnecting splits the ramp
-        into separate runs; connecting the two ends of one run closes it into a loop.</li>
-    <li>The two plots are target profiles for lightness and hue against position along the ramp. Drag
-        a knot to shape one. <b>fit</b> sets the target to the ramp you already have, and the buttons
-        beside it fit a straight ramp or a tent, a steady turn or two plateaus, each of which
-        double-clicks to its reverse. The matching term measures the distance from the target, so
-        drawing the curve you want is how you ask for it.</li>
-    <li>The lightness and chroma sliders and the hue wheel bound the allowable colors. Double-click
-        the wheel, or the arrow at its center, to allow every hue again.</li>
-    <li>The tools switch between nodes, keep-out spheres and halfplanes. A sphere is placed by
-        double-clicking a cut panel and resized by dragging the small handle beside it; a halfplane is
-        cut the same way, then slid by its center or turned by its tip.</li>
-    <li>Under <b>Optimize</b>, tick the terms to include and set how hard each one pulls in the
-        <b>&times;</b> column. Then run Adam.</li>
-    <li>Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole
-        palette.</li>
-    <li>Every control and every metric has a <span class="q">?</span> beside it: hover one for what it
-        does.</li>
-  </ul>
-
-  <h4>Motivation (personal)</h4>
-  <p>Color palettes have been on my mind for quite some time as someone who creates plots, charts,
-     data visualization, etc. for my work (normally, a figure in some paper). I recall very early on
-     having a discussion with a mentor (I believe it was <a href="https://moll.ai/" target="_blank" rel="noopener">Mark Moll</a>) who mentioned that I should be
-     concerned with red-green colorblindness (protanopia and deuteranopia, more precisely) after
-     seeing a plot I had made which had bright red and green as part of a categorical palette.</p>
-  <p>At that point in my life I was relatively unaware of the many concerns of graphic design, and
-     after some research on color palettes (e.g., the great
-     <a href="https://www.youtube.com/watch?v=xAoljeRJ3lU" target="_blank" rel="noopener">talk on
-     viridis for matplotlib</a>) I was quickly sent down a rabbit hole as I learned about color
-     perception and how to scientifically design palettes. I was always a bit frustrated by the lack
-     of flexibility and visualization available in tools like
-     <a href="https://people.phy.cam.ac.uk/dag9/CUBEHELIX/" target="_blank" rel="noopener">cubehelix
-     palettes</a> or other offerings like
-     <a href="https://seaborn.pydata.org/tutorial/color_palettes.html" target="_blank" rel="noopener">Seaborn</a>.
-     This led to a custom viridis-like palette I used for
-     <a href="https://kavrakilab.org/publications/kingston2019exploring-implicit-spaces-for-constrained.pdf"
-        target="_blank" rel="noopener">many of my papers</a>, and eventually this weekend project you
-     see now.</p>
-
-  <h4>Motivation (professional)</h4>
-  <p>Perceptual color space is not Riemannian, i.e., a large color difference is perceived as
-     <em>less</em> than the sum of steps that make it up. This tool was an exercise in trajectory
-     optimization in a non-Riemannian space, to hopefully provide better palettes than many other
-     colormap generating tools do.</p>
-  <ul>
-    <li>Bujack, Teti, Miller, Caffrey &amp; Turton. <em>The non-Riemannian nature of perceptual
-        color space.</em> PNAS 2022.
-        <a href="https://doi.org/10.1073/pnas.2119753119" target="_blank" rel="noopener">10.1073/pnas.2119753119</a></li>
-    <li>Bujack, Stark, Turton, Miller &amp; Rogers. <em>The Geometry of Color in the Light of a
-        Non-Riemannian Space.</em> CGF 2025.
-        <a href="https://doi.org/10.1111/cgf.70136" target="_blank" rel="noopener">10.1111/cgf.70136</a></li>
-  </ul>
-
-  <h4>Palettes</h4>
-  <p>The picker contains matplotlib's ramps, Okabe and Ito's categorical set, the qualitative sets from
-     <a href="https://colorbrewer2.org/" target="_blank" rel="noopener">ColorBrewer</a> by Cynthia Brewer
-     and Mark Harrower, four from
-     <a href="https://seaborn.pydata.org/" target="_blank" rel="noopener">seaborn</a>, and
-     <a href="https://www.fabiocrameri.ch/colourmaps/" target="_blank" rel="noopener">Fabio Crameri's Scientific colour maps</a>
-     (v8, MIT).</p>
-
-  <h4>Credit</h4>
-  <p>Built by Zachary Kingston, using Claude Opus 5.</p>
-  <p><a href="https://zkingston.com" target="_blank" rel="noopener">zkingston.com</a> /
-     <a href="mailto:zkingston@purdue.edu">zkingston@purdue.edu</a></p>
+  <div id="aboutbody"></div>
 </dialog>
 
 <!-- Shelved, not deleted: the report and its styling are still below, and the
@@ -639,199 +547,19 @@
 
 <dialog id="mathdlg">
   <button id="mathclose" title="close">&times;</button>
-  <h3>Formulation</h3>
-
-  <h4>Space</h4>
-  <p>Colors are the points of \(M=\mathbb{R}^3\), <a href="https://en.wikipedia.org/wiki/Oklab_color_space" target="_blank" rel="noopener">Oklab</a>
-     coordinates scaled by 100. A color is \(p=(L,a,b)\) with lightness \(L\in[0,100]\), chroma
-     \(C(p)=\sqrt{a^2+b^2}\), and hue \(h(p)=\operatorname{atan2}(b,a)\).</p>
-  <p>A symmetric positive definite \(g(p)\in\mathbb{R}^{3\times3}\) sets the cost of a short step at
-     \(p\). Segment lengths use the midpoint rule. Path length is the sum over segments:</p>
-  \[ \ell_g(p,q)=\sqrt{(q-p)^{\top}g\!\left(\tfrac{p+q}{2}\right)(q-p)},\qquad
-     \ell_g(\gamma)=\sum_{k}\ell_g(\gamma_k,\gamma_{k+1}) \]
-  <p>\(g=J^{\top}J\), where \(J\) is the Jacobian at \(p\) of the map from \(M\) to the working
-     space selected in the panel, scaled so the gray axis measures 100 in every space. Choosing Oklab
-     gives \(g=I\) and the ordinary Euclidean length, written \(\ell_I\).</p>
-  <p>Perceived difference is a concave function of length:</p>
-  \[ d(p,q)=f\bigl(\ell_g(p,q)\bigr),\qquad f(s)=s_0\ln\left(1+\frac{s}{s_0}\right),\qquad
-     s_0=\frac{100}{5.34}\approx 18.7,\qquad f'(0)=1 \]
-  <p>Concavity of \(f\) makes \(d\) <a href="https://en.wikipedia.org/wiki/Subadditivity" target="_blank" rel="noopener">subadditive</a>:
-     \(d(p,r)\le d(p,q)+d(q,r)\), strictly in general.
-     Accumulate along a path with \(\ell_g\); compare two colors with \(d\). Write \(d_I\) for \(d\) taken with \(g=I\).</p>
-
-  <h4>Variables</h4>
-  <p>The variables are the control points \(P=(p_1,\dots,p_n)\in M^n\). The points indexed by
-     \(\mathcal{P}\subseteq\{1,\dots,n\}\) are held fixed.</p>
-  <p>The points are partitioned into runs. Every point has at most two neighbours, so a run is a path
-     or a cycle, and \(P\) is ordered with each run consecutive. Write \(\mathcal{R}\) for the runs,
-     \(|r|\) for the number of points in run \(r\), and \(\mathcal{C}\subseteq\mathcal{R}\) for the
-     closed ones.</p>
-  <p>In continuous mode each run has its own spline \(\gamma_r\), the
-     <a href="https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline" target="_blank" rel="noopener">centripetal
-     Catmull–Rom spline</a> through its points, closed when the run is, with length
-     \(\ell_r=\ell_g(\gamma_r)\). Run \(r\) contributes \(|r|\) swatches, resampled from
-     \(\gamma_r\) at equal \(g\)-arc length, so the palette \(\Pi(P)=(\pi_1,\dots,\pi_n)\) has one
-     swatch per control point. In discrete mode \(\Pi(P)=P\) and there are no curves.</p>
-  <p>Write \(t_i=(i-1)/(n-1)\) for the position of swatch \(i\) along the palette, and \(Q\) for the
-     probe set where constraints and contrast are evaluated: every curve sample in continuous mode,
-     the palette in discrete mode.</p>
-
-  <h4>Feasible set</h4>
-  \[ \mathcal{F}=G\cap\Lambda\cap X\cap H\cap\textstyle\bigcap_j B_j^{\,c}\cap\bigcap_m E_m \]
-  <dl>
-    <dt>\(G=\{p:\operatorname{rgb}_\Gamma(p)\in[0,1]^3\}\)</dt><dd><a href="https://en.wikipedia.org/wiki/Gamut" target="_blank" rel="noopener">gamut</a> of primaries \(\Gamma\)</dd>
-    <dt>\(\Lambda=\{p: L_-\le L\le L_+\}\)</dt><dd>lightness band</dd>
-    <dt>\(X=\{p: C_-\le C(p)\le C_+\}\)</dt><dd>chroma band</dd>
-    <dt>\(H=\{p: C(p)&lt;1 \ \vee\ h(p)\in[h_-,h_+]\}\)</dt><dd>hue arc, mod \(360\)</dd>
-    <dt>\(B_j=\{p: d(p,c_j)&lt;r_j\}\)</dt><dd>excluded balls, radius in perceived units</dd>
-    <dt>\(E_m=\{p: n_m^{\top}\sigma(p)\le d_m\}\)</dt><dd>halfplanes, \(\sigma\) the map to the working space</dd>
-  </dl>
-  <p>The violation \(c(p)\) measures how far \(p\) lies outside \(\mathcal{F}\). It is zero on
-     \(\mathcal{F}\) and differentiable off it. Each \(\phi\) is a squared distance outside its set, so
-     each root is a length in units of \(M\). \(\Delta h\) is the angle to the nearest edge of
-     the hue arc. With \([x]_+=\max(x,0)\),</p>
-  \[ c(p)=\sqrt{\phi_G(p)}+[L_--L]_++[L-L_+]_++[C_--C]_++[C-C_+]_+
-        +\frac{\pi}{180}\,C\,\Delta h(p)+\sqrt{\phi_B(p)}+\sqrt{\phi_E(p)} \]
-  <p>A control point is put back into \(\mathcal{F}\) by projection,
-     \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\), onto \(G,\Lambda,X,H,E,B\) in turn, repeating until
-     \(c(p_i)\) falls below \(10^{-4}\) or twelve rounds pass. The projection does not return the
-     nearest point of \(\mathcal{F}\): the set is not convex.</p>
-
-  <h4>Objectives</h4>
-  <p>Each term is written for the palette \(\Pi(P)\). Each is a row in the panel behind this
-     dialog, under the name given here. The observer set \(V\) is the identity alone, or the identity
-     together with the three <a href="https://en.wikipedia.org/wiki/Color_blindness" target="_blank" rel="noopener">color
-     vision deficiencies</a>; every \(v\in V\) acts on \(M\).</p>
-  <ul class="terms">
-    <li><b>repulsion</b> <span class="d">separates every pair</span>
-      \[ F_{\text{rep}}=\sum_{v\in V}\ \sum_{i&lt;j}\ \frac{1}{\max\left(\tfrac12,\ d(v\pi_i,\,v\pi_j)\right)} \]
-      <p>The floor of \(\tfrac12\) keeps the sum finite when two colors coincide. Since \(d\) saturates, far pairs
-         contribute almost nothing and the near pairs drive the step. The panel lists it
-         twice: once for the observer on screen, once for all four observers together.</p></li>
-
-    <li><b>arc length</b>
-      \[ F_{\text{arc}}=\sum_{r\in\mathcal{R}}\ell_r \]</li>
-
-    <li><b>bending</b> <span class="d">how sharply the ramp curves</span>
-      \[ F_{\text{bend}}=\frac1{|\mathcal{R}|}\sum_{r\in\mathcal{R}}
-         \frac{\ell_r}{4\pi^2}\int_{\gamma_r}\kappa^2\,ds \]
-      <p>\(\kappa\) is the <a href="https://en.wikipedia.org/wiki/Curvature" target="_blank" rel="noopener">curvature</a>
-         of the run, and the integral is its
-         <a href="https://en.wikipedia.org/wiki/Elastica_theory" target="_blank" rel="noopener">bending energy</a>.
-         On the sampled curve the turn \(\theta_i\) at a sample is divided by the arc length that
-         sample owns, so the sum is \(\int\kappa^2ds\) and does not change when you add a control
-         point. The factor \(\ell_r/4\pi^2\) makes it dimensionless: a circle is 1 at any radius,
-         a straight ramp is 0.</p>
-      <p>Squared rather than absolute. Total turning alone cannot separate a kink from a sweep:
-         a ramp that turns 180° at one point and a smooth half-circle both total 180°. Squaring
-         divides the turn by the length it happens over, so a tight bend costs far more than the
-         same rotation spread out.</p></li>
-
-    <li><b>lightness profile</b> and <b>hue profile</b>
-      <span class="d">distance from the curves drawn in the plots</span>
-      \[ F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \]
-      \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
-         \delta\bigl(h_i,\ \widehat h(t_i)\bigr)\right)^2 \]
-      <p>Both terms are the squared distance from the swatches to a curve you draw, and
-         \(\widehat L\) and \(\widehat h\) are those curves. Lightness is a plain
-         difference. Hue is an angle, so \(\delta\) takes the signed shortest one and the wrap at
-         \(0^\circ\) costs nothing, and chroma weights it because a \(40^\circ\) error matters at
-         chroma 20 and not at chroma 2. Swatches below chroma 1 have no usable hue and are skipped
-         by the hue term.</p></li>
-
-    <li><b>chroma target</b> <span class="d">aims at the middle of the chroma band</span>
-      \[ F_{\text{chr}}=\frac1n\sum_i\left(C(\pi_i)-\frac{C_-+C_+}{2}\right)^2 \]</li>
-
-    <li><b>control point spacing</b> <span class="d">keeps consecutive control points evenly spaced</span>
-      \[ F_{\text{sp}}=\sum_{i=1}^{m}\frac{\bar\ell}{\ell_i}-m,\qquad
-         \ell_i=\max\left(\tfrac{1}{20},\ \ell_g(\cdot,\cdot)\right),\qquad
-         \bar\ell=\frac1m\sum_i\ell_i \]
-      <p>The \(\ell_i\) are the gaps between neighbouring control points, over every run. \(m\) is how many
-         there are. A closed run has one more gap than it has points, the one that wraps.
-         The space across a break is not a gap and is not counted.</p>
-      <p>The spacing term is the ratio of the arithmetic mean of the \(\ell_i\) to their harmonic mean, less one.
-         It is zero exactly when the \(\ell_i\) are equal, and grows without bound as any one of them shrinks toward zero.
-         It is also scale invariant, so shrinking every segment by the same factor leaves it at zero.
-         The scale comes from the pinned control points, or from leaving <b>arc length</b> off.</p></li>
-
-    <li><b>pairwise uniformity</b> <span class="d">equal perceived steps, corrected for saturation</span>
-      \[ F_{\text{pair}}=\frac{1}{|\mathcal{K}|}\sum_{(i,j)\in\mathcal{K}}
-         \bigl(d_I(\pi_i,\pi_j)-\tau_{ij}\bigr)^2,\qquad
-         \tau_{ij}=f\left(\frac{s_{ij}}{S_r}\,\ell_r\right) \]
-      <p>\(\mathcal{K}\) is the pairs that are part of the same continuous run.
-         Along an open run the two swatches are \(s_{ij}=j-i\) steps apart out of \(S_r=|r|-1\).
-         Around a closed one the walk goes the short way, \(s_{ij}=\min(j-i,\,|r|-(j-i))\) out of
-         \(S_r=|r|\): an index difference is the distance along an open ramp, and a loop has no such
-         thing. \(\tau_{ij}\) is \(f\) of the arc a uniform traversal covers in that many steps. In
-         an additive space the target would be proportional to the step count instead. Both distances
-         are taken with \(g=I\), where \(f\) is calibrated.</p></li>
-
-    <li><b>diverging symmetry</b> <span class="d">the two arms mirror each other in lightness</span>
-      \[ F_{\text{sym}}=\frac{1}{|\mathcal{S}|}\sum_{(i,j)\in\mathcal{S}}\bigl(L(\pi_i)-L(\pi_j)\bigr)^2 \]
-      <p>\(\mathcal{S}\) pairs swatch \(k\) of an open run with swatch \(|r|-1-k\) of the same one.
-         A diverging map depends on that mirroring: equal magnitudes either side of the center read
-         as equal. In lightness only.</p></li>
-
-    <li><b>contrast floor</b> <span class="d">nothing unreadable against a chosen background</span>
-      \[ F_{\text{con}}=\sum_{q\in Q}\bigl[\kappa_{\min}-\kappa(q,\beta)\bigr]_+^2 \]
-      <p>\(\kappa\) is the <a href="https://en.wikipedia.org/wiki/Web_Content_Accessibility_Guidelines" target="_blank" rel="noopener">WCAG 2</a>
-         contrast ratio against a background \(\beta\). A hinge, so the term stops once the floor
-         is met rather than trading against the rest of the palette.</p></li>
-
-    <li><b>lightness spread</b> <span class="d">every pair separable in grayscale</span>
-      \[ F_{\text{lsep}}=\sum_{i&lt;j}\bigl[\Delta_L-|L_i-L_j|\bigr]_+^2,\qquad
-         \Delta_L=\frac{L_+-L_-}{n-1} \]
-      <p>A hinge again. \(\Delta_L\) is derived
-         rather than set by hand: \(n\) swatches spread over the lightness band are at best
-         \((L_+-L_-)/(n-1)\) apart.</p></li>
-  </ul>
-
-  <h4>Optimization</h4>
-  \[ \min_{P}\ \sum_k w_k F_k(P)\qquad\text{s.t.}\qquad p_i\in\mathcal{F}\ \ \forall i,
-     \qquad \gamma_r(t)\in\mathcal{F}\ \ \forall r\in\mathcal{R},\ \forall t \]
-  <p>We solve using an
-     <a href="https://en.wikipedia.org/wiki/Augmented_Lagrangian_method" target="_blank" rel="noopener">augmented Lagrangian</a>
-     formulation. The curve enters the objective as one more term. With \(c_k=c(\gamma_k)\) and multipliers
-     \(\lambda\in\mathbb{R}_{\ge0}^{K}\),</p>
-  \[ F_{\text{feas}}=\sum_k\left(\lambda_k c_k+\tfrac12 c_k^2\right),\qquad
-     \lambda_k\leftarrow\min(\lambda_{\max},\ \lambda_k+\rho\,c_k) \]
-  <p>The multipliers update every \(T=25\) inner iterations. \(\rho\) doubles whenever
-     \(\max_k c_k\) fails to fall below \(\tfrac34\) of its previous value. Both are capped. The
-     multipliers absorb the violation that persists at a given \(\rho\), so a finite \(\rho\)
-     suffices for feasibility. A plain penalty has only \(\rho\) to escalate. A \(\rho\) large
-     enough to enforce the constraint also flattens every other term.</p>
-  <p>Gradients are central differences over the \(3n\) coordinates, skipping the pinned ones. Each
-     term is normalized to unit max before it is weighted.</p>
-  \[ \widehat G_k=\frac{\nabla F_k}{\lVert\nabla F_k\rVert_\infty},\qquad
-     D=\sum_k u_k\,\widehat G_k,\qquad
-     u_k=\begin{cases}\rho\,w_k & k=\text{feas}\\ w_k & \text{otherwise}\end{cases} \]
-  <p>The terms span four orders of magnitude, so an unnormalized sum would be the largest term's
-     gradient plus rounding noise. Normalizing first makes each \(w_k\) a relative pull: weight 2
-     against weight 1 moves the step twice as far, whatever the two terms measure. The feasibility
-     term is multiplied by \(\rho\) here rather than inside \(F_{\text{feas}}\), because the
-     normalization would otherwise divide it back out.</p>
-  <p><a href="https://en.wikipedia.org/wiki/Stochastic_gradient_descent#Adam" target="_blank" rel="noopener">Adam</a>
-     then runs on \(D\) with \(\beta_1=0.9\), \(\beta_2=0.999\), and step \(\eta=1.2\,r\), where
-     \(r\) is the rate slider.</p>
-  <p>The normalizer depends on \(P\), so \(D\) is not the gradient of any fixed function. There is no
-     descent guarantee.</p>
-  <p>Restarts are optional. A stall is no improvement of \(5\times10^{-4}\) for \(8T=200\)
-     iterations. On a stall, every free coordinate takes uniform noise on \([-5,5]\) and the run
-     continues. The stream is seeded and reset when a run starts, so a scene optimizes to the same
-     palette twice and a link reproduces the one that made it. The best iterate is kept under the
-     lexicographic order
-     \(\bigl(\max_k c_k,\ \sum_k w_k F_k\bigr)\), so a feasible palette always beats an
-     infeasible one.</p>
+  <div id="mathbody"></div>
 </dialog>
 
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js",
-               "three/addons/": "./vendor/jsm/" } }
+               "three/addons/": "./vendor/jsm/",
+               "marked": "./vendor/marked.esm.js" } }
 </script>
 
 <script type="module">
 import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { marked } from 'marked';
 import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty, delta, lineDelta,
@@ -4090,6 +3818,47 @@ const paintHist = () => {
 };
 $('aboutbtn').onclick = () => $('aboutdlg').showModal();
 /**
+ * The two prose dialogs live in about.md and formulation.md, and are rendered
+ * here rather than written into this file.
+ *
+ * The one thing markdown cannot be handed raw is the math. TeX is full of the
+ * characters markdown spends: every subscript in \(\ell_g\) is an emphasis
+ * marker, and \[ is an escaped bracket. So each formula is lifted out for a
+ * placeholder before the parser runs and put back after, which also means the
+ * files can be written in ordinary TeX with no doubled backslashes.
+ *
+ * Restoring escapes the math, because \(i<j\) written into innerHTML would
+ * otherwise open a tag. MathJax reads it back off the DOM as text either way.
+ *
+ * Two conveniences on top of markdown, both one line: a {.name} on its own line
+ * puts that class on the block after it, and external links get target and rel
+ * so the files do not have to repeat them 30 times.
+ */
+const MATH = /\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)/g;
+const escHTML = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const slot = (i) => `MJXSLOT${i}TOLSXJM`;
+
+async function renderDoc(url, into) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  const math = [];
+  let html = marked.parse((await res.text()).replace(MATH, (m) => slot(math.push(m) - 1)));
+  // a display formula is a block of its own, not a paragraph containing one
+  math.forEach((m, i) => {
+    if (m.startsWith('\\[')) html = html.replaceAll(`<p>${slot(i)}</p>`, slot(i));
+  });
+  html = html
+    .replace(/<p>\{\.([\w-]+)\}<\/p>\s*<(\w+)/g, (_, cls, tag) => `<${tag} class="${cls}"`)
+    .replace(/<a href="(https?:[^"]*)"/g, '<a href="$1" target="_blank" rel="noopener"');
+  math.forEach((m, i) => { html = html.replaceAll(slot(i), escHTML(m)); });
+  $(into).innerHTML = html;
+}
+
+const docsReady = Promise.all([renderDoc('./about.md', 'aboutbody'),
+                               renderDoc('./formulation.md', 'mathbody')])
+  .catch((e) => { $('mathbody').textContent = $('aboutbody').textContent = String(e); });
+
+/**
  * The formulation is typeset at startup, laid out off-screen while it happens.
  *
  * Typesetting on the click was wrong twice over. It is what pulls the math
@@ -4102,6 +3871,7 @@ $('aboutbtn').onclick = () => $('aboutdlg').showModal();
  * formulation uses, and gives CHTML a real width to measure while it is at it.
  */
 window.MathJax?.startup?.promise.then(async () => {
+  await docsReady;                     // nothing to typeset until the file is in
   const dlg = $('mathdlg');
   Object.assign(dlg.style, { display: 'block', visibility: 'hidden', position: 'fixed', left: '-9999px' });
   try {

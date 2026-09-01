@@ -11,7 +11,8 @@ import { extname, join, normalize } from 'node:path';
 // real size. The browser then rejects the font and falls back silently, which
 // on MathJax output means correct layout filled with the wrong glyphs.
 const TYPE = { '.html': 'text/html', '.js': 'text/javascript', '.ts': 'text/javascript', '.css': 'text/css',
-               '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
+               '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff',
+               '.md': 'text/markdown' };
 
 createServer(async (req, res) => {
   const rel = normalize(decodeURI(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');

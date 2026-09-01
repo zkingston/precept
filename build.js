@@ -27,11 +27,13 @@ const html = (await readFile('index.html', 'utf8'))
   .replace("'./color-space.ts'", "'./color-space.js'")
   .replace('"/node_modules/three/build/three.module.js"', '"./vendor/three.module.js"')
   .replace('"/node_modules/three/examples/jsm/"', '"./vendor/jsm/"')
+  .replace('"/node_modules/marked/lib/marked.esm.js"', '"./vendor/marked.esm.js"')
   .replaceAll('/node_modules/@mathjax/mathjax-fira-font', './vendor/mathjax-fira')
   .replaceAll('/node_modules/mathjax', './vendor/mathjax')
   .replaceAll('/node_modules/@fontsource/', './vendor/fontsource/');
 for (const [what, pat] of [['color-space.js', /'\.\/color-space\.js'/], ['three', /"\.\/vendor\/three\.module\.js"/],
                            ['three/addons', /"\.\/vendor\/jsm\/"/], ['mathjax', /\.\/vendor\/mathjax-fira\//],
+                           ['marked', /"\.\/vendor\/marked\.esm\.js"/],
                            ['mathjax paths', /\.\/vendor\/mathjax'/], ['fonts', /\.\/vendor\/fontsource\//]])
   if (!pat.test(html)) throw new Error(`rewrite for ${what} did not match — check index.html`);
 await writeFile(join(OUT, 'index.html'), html);
@@ -95,6 +97,12 @@ for (const f of ['fira-sans/files/fira-sans-latin-400-normal.woff2',
                  'fira-sans/files/fira-sans-greek-400-normal.woff2',
                  'fira-mono/files/fira-mono-latin-400-normal.woff2'])
   await copyInto(`node_modules/@fontsource/${f}`, `vendor/fontsource/${f}`);
+
+// The markdown renderer, and the two documents it renders. The dialogs fetch
+// these at run time, so they are content rather than build input: they have to
+// exist next to index.html on the deployed site.
+await copyInto('node_modules/marked/lib/marked.esm.js', 'vendor/marked.esm.js');
+for (const doc of ['about.md', 'formulation.md']) await copyInto(doc, doc);
 
 // Jekyll would otherwise skip anything beginning with an underscore
 await writeFile(join(OUT, '.nojekyll'), '');
