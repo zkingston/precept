@@ -341,6 +341,10 @@ export const internals = {
  * every spline and every metric below is untouched by what you are looking at.
  * A palette must not silently change because you switched to CIELAB.
  *
+ * Listed newest first, which is the order the dropdown shows and the reverse of
+ * the Spaces dialog's. Oklab leads either way, being both the newest and the
+ * chart itself.
+ *
  * Classic: CIE XYZ (1931, the substrate everything else is defined against),
  * sRGB (the device cube — Euclidean distance in it means nothing perceptually,
  * which is the point of being able to see it), CIELAB and CIELUV (1976, the
@@ -540,56 +544,6 @@ export const de2000Form = ([L, a, b]      )       => {
 export const SPACES                        = {
   oklab: { name: 'Oklab (2020)', axes: ['L', 'a', 'b'], from: fromXYZ, to: toXYZ },
 
-  cielab: {
-    name: 'CIELAB (1976)', axes: ['L*', 'a*', 'b*'],
-    from: (xyz) => {
-      const [fx, fy, fz] = xyz.map((v, i) => labf(v / CHART_WHITE[i]));
-      return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
-    },
-    to: ([L, a, b]) => {
-      const fy = (L + 16) / 116;
-      return [labfi(fy + a / 500), labfi(fy), labfi(fy - b / 200)].map((v, i) => v * CHART_WHITE[i])        ;
-    },
-  },
-
-  de2000: {
-    name: 'CIEDE2000 (2001)', axes: ['L*', 'a*', 'b*'],
-    from: (xyz) => SPACES.cielab.from(xyz),
-    to: (c) => SPACES.cielab.to(c),
-    form: de2000Form,
-  },
-
-  cieluv: {
-    name: 'CIELUV (1976)', axes: ['L*', 'u*', 'v*'],
-    from: (xyz) => {
-      const d = xyz[0] + 15 * xyz[1] + 3 * xyz[2];
-      const wd = CHART_WHITE[0] + 15 * CHART_WHITE[1] + 3 * CHART_WHITE[2];
-      const L = 116 * labf(xyz[1] / CHART_WHITE[1]) - 16;
-      if (d === 0) return [L, 0, 0];
-      return [L, 13 * L * (4 * xyz[0] / d - 4 * CHART_WHITE[0] / wd),
-                 13 * L * (9 * xyz[1] / d - 9 * CHART_WHITE[1] / wd)];
-    },
-    to: ([L, u, v]) => {
-      if (L === 0) return [0, 0, 0];
-      const wd = CHART_WHITE[0] + 15 * CHART_WHITE[1] + 3 * CHART_WHITE[2];
-      const up = u / (13 * L) + 4 * CHART_WHITE[0] / wd, vp = v / (13 * L) + 9 * CHART_WHITE[1] / wd;
-      const Y = labfi((L + 16) / 116) * CHART_WHITE[1];
-      return [(Y * 9 * up) / (4 * vp), Y, (Y * (12 - 3 * up - 20 * vp)) / (4 * vp)];
-    },
-  },
-
-  ipt: {
-    name: 'IPT (1998)', axes: ['I', 'P', 'T'],
-    from: (xyz) => apply(IPT_OPP, apply(IPT_LMS, xyz).map((v, i) => spow(v / IPT_W[i], 0.43))        ).map((v) => v * 100)        ,
-    to: (c) => apply(IPT_LMS_I, apply(IPT_OPP_I, c.map((v) => v / 100)        ).map((v, i) => spow(v, 1 / 0.43) * IPT_W[i])        ),
-  },
-
-  /**
-   * ICtCp (ITU-R BT.2100). LMS crosstalk, the ST 2084 PQ curve, then an
-   * opponent matrix. PQ is absolute, so the chart's Y = 1 is taken as 100 nits
-   * of the 10000 the curve spans; that choice only scales I, and the chart is
-   * relative colorimetry, which has no absolute level to offer.
-   */
   ictcp: {
     name: 'ICtCp (BT.2100)', axes: ['I', 'Ct', 'Cp'],
     from: (xyz) => ictcpRaw(xyz).map((v) => v * ICTCP_K)        ,
@@ -602,6 +556,7 @@ export const SPACES                        = {
    * under. J' a' b' rather than J C h, because the UCS is the form where a
    * Euclidean distance means something.
    */
+
   cam02: {
     name: 'CAM02-UCS (2006)', axes: ['J′', 'a′', 'b′'],
     from: (xyz) => {
@@ -633,16 +588,67 @@ export const SPACES                        = {
     },
   },
 
-  xyz: {
-    name: 'CIE XYZ (1931)', axes: ['X', 'Y', 'Z'],
-    from: (xyz) => xyz.map((v) => v * 100)        ,
-    to: (c) => c.map((v) => v / 100)        ,
+  de2000: {
+    name: 'CIEDE2000 (2001)', axes: ['L*', 'a*', 'b*'],
+    from: (xyz) => SPACES.cielab.from(xyz),
+    to: (c) => SPACES.cielab.to(c),
+    form: de2000Form,
   },
+
+  ipt: {
+    name: 'IPT (1998)', axes: ['I', 'P', 'T'],
+    from: (xyz) => apply(IPT_OPP, apply(IPT_LMS, xyz).map((v, i) => spow(v / IPT_W[i], 0.43))        ).map((v) => v * 100)        ,
+    to: (c) => apply(IPT_LMS_I, apply(IPT_OPP_I, c.map((v) => v / 100)        ).map((v, i) => spow(v, 1 / 0.43) * IPT_W[i])        ),
+  },
+
+  /**
+   * ICtCp (ITU-R BT.2100). LMS crosstalk, the ST 2084 PQ curve, then an
+   * opponent matrix. PQ is absolute, so the chart's Y = 1 is taken as 100 nits
+   * of the 10000 the curve spans; that choice only scales I, and the chart is
+   * relative colorimetry, which has no absolute level to offer.
+   */
 
   srgb: {
     name: 'sRGB cube', axes: ['R', 'G', 'B'],
     from: (xyz) => rgb01(xyz).map((v) => v * 100)        ,
     to: (c) => unrgb01(c.map((v) => v / 100)        ),
+  },
+
+  cielab: {
+    name: 'CIELAB (1976)', axes: ['L*', 'a*', 'b*'],
+    from: (xyz) => {
+      const [fx, fy, fz] = xyz.map((v, i) => labf(v / CHART_WHITE[i]));
+      return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+    },
+    to: ([L, a, b]) => {
+      const fy = (L + 16) / 116;
+      return [labfi(fy + a / 500), labfi(fy), labfi(fy - b / 200)].map((v, i) => v * CHART_WHITE[i])        ;
+    },
+  },
+
+  cieluv: {
+    name: 'CIELUV (1976)', axes: ['L*', 'u*', 'v*'],
+    from: (xyz) => {
+      const d = xyz[0] + 15 * xyz[1] + 3 * xyz[2];
+      const wd = CHART_WHITE[0] + 15 * CHART_WHITE[1] + 3 * CHART_WHITE[2];
+      const L = 116 * labf(xyz[1] / CHART_WHITE[1]) - 16;
+      if (d === 0) return [L, 0, 0];
+      return [L, 13 * L * (4 * xyz[0] / d - 4 * CHART_WHITE[0] / wd),
+                 13 * L * (9 * xyz[1] / d - 9 * CHART_WHITE[1] / wd)];
+    },
+    to: ([L, u, v]) => {
+      if (L === 0) return [0, 0, 0];
+      const wd = CHART_WHITE[0] + 15 * CHART_WHITE[1] + 3 * CHART_WHITE[2];
+      const up = u / (13 * L) + 4 * CHART_WHITE[0] / wd, vp = v / (13 * L) + 9 * CHART_WHITE[1] / wd;
+      const Y = labfi((L + 16) / 116) * CHART_WHITE[1];
+      return [(Y * 9 * up) / (4 * vp), Y, (Y * (12 - 3 * up - 20 * vp)) / (4 * vp)];
+    },
+  },
+
+  xyz: {
+    name: 'CIE XYZ (1931)', axes: ['X', 'Y', 'Z'],
+    from: (xyz) => xyz.map((v) => v * 100)        ,
+    to: (c) => c.map((v) => v / 100)        ,
   },
 
 };
@@ -1244,9 +1250,14 @@ function demo() {
         col.push(sb.map((v, j) => (v - sa[j]) / (2 * h))        );
       }
       const A = ga(p);
+      // the reference has to carry the space's form too, or this asserts the
+      // metric is J'J — true of every space until CIEDE2000, whose form is not
+      // the identity and which would fail a test about the wrong thing
+      const fm = SPACES[k].form;
+      const Ac = fm ? col.map((v) => apply(fm(metricSpace(p, k)), v)) : col;
       let num = 0, den = 0;
       for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
-        const f = w * (col[i][0] * col[j][0] + col[i][1] * col[j][1] + col[i][2] * col[j][2]);
+        const f = w * (col[i][0] * Ac[j][0] + col[i][1] * Ac[j][1] + col[i][2] * Ac[j][2]);
         num += (A[i][j] - f) ** 2; den += f * f;
       }
       ok(Math.sqrt(num / den) < 1e-4, `${k} analytic jacobian matches central differences at ${p}`);
