@@ -498,6 +498,23 @@ const pq = (v        )         => {
   const y = Math.max(0, v) ** PQ.m1;
   return ((PQ.c1 + PQ.c2 * y) / (1 + PQ.c3 * y)) ** PQ.m2;
 };
+/**
+ * d/dv of pq.
+ *
+ * Zero below zero, because pq clamps there and a clamped function is flat: the
+ * ICtCp cone responses do go negative on a saturated color, and returning the
+ * unclamped slope for them put the Jacobian orders out. The floor above zero is
+ * the same idea as IPT's, since v^(m1-1) has no value at 0.
+ */
+const dPq = (v        )         => {
+  if (v <= 0) return 0;
+  const x = Math.max(v, 1e-9);
+  const y = x ** PQ.m1;
+  const den = 1 + PQ.c3 * y;
+  const A = (PQ.c1 + PQ.c2 * y) / den;
+  return PQ.m2 * A ** (PQ.m2 - 1) * ((PQ.c2 - PQ.c1 * PQ.c3) / (den * den)) * PQ.m1 * x ** (PQ.m1 - 1);
+};
+
 const pqi = (e        )         => {
   const p = Math.max(0, e) ** (1 / PQ.m2);
   return (Math.max(0, p - PQ.c1) / (PQ.c2 - PQ.c3 * p)) ** (1 / PQ.m1);
@@ -889,6 +906,42 @@ const D_SPACE                                    = {
     // f' of each ratio, with the 1/Wn from the ratio itself folded in
     const [fx, fy, fz] = [0, 1, 2].map((i) => dLabf(xyz[i] / CHART_WHITE[i]) / CHART_WHITE[i]);
     return [[0, 116 * fy, 0], [500 * fx, -500 * fy, 0], [0, 200 * fy, -200 * fz]];
+  },
+
+  /**
+   * CIELUV. L* depends on Y alone, and u*,v* are 13L times a displacement in
+   * the u'v' chromaticity diagram, so each one is a product rule over the
+   * lightness and the chromaticity — and the chromaticity is a quotient by
+   * d = X + 15Y + 3Z, which is where every off-diagonal term comes from.
+   */
+  cieluv: (xyz) => {
+    const [X, Y, Z] = xyz;
+    const d = X + 15 * Y + 3 * Z;
+    const Ly = (116 * dLabf(Y / CHART_WHITE[1])) / CHART_WHITE[1];
+    if (!(Math.abs(d) > 1e-12)) return [[0, Ly, 0], [0, 0, 0], [0, 0, 0]];
+    const wd = CHART_WHITE[0] + 15 * CHART_WHITE[1] + 3 * CHART_WHITE[2];
+    const L = 116 * labf(Y / CHART_WHITE[1]) - 16;
+    const up = (4 * X) / d, vp = (9 * Y) / d;
+    const un = (4 * CHART_WHITE[0]) / wd, vn = (9 * CHART_WHITE[1]) / wd;
+    const d2 = d * d;
+    const dU       = [(4 * (d - X)) / d2, (-60 * X) / d2, (-12 * X) / d2];
+    const dV       = [(-9 * Y) / d2, (9 * d - 135 * Y) / d2, (-27 * Y) / d2];
+    return [
+      [0, Ly, 0],
+      [13 * L * dU[0], 13 * (Ly * (up - un) + L * dU[1]), 13 * L * dU[2]],
+      [13 * L * dV[0], 13 * (Ly * (vp - vn) + L * dV[1]), 13 * L * dV[2]],
+    ];
+  },
+
+  /**
+   * ICtCp. Cone responses, PQ per channel, then a fixed opponent matrix, so the
+   * Jacobian is that same chain with the transfer function's slope on the
+   * diagonal between the two matrices.
+   */
+  ictcp: (xyz) => {
+    const lms = apply(ICTCP_LMS, xyz);
+    const d = lms.map((v) => (ICTCP_K * dPq(v / 100)) / 100);
+    return mm(ICTCP_OPP.map((r) => [r[0] * d[0], r[1] * d[1], r[2] * d[2]]), ICTCP_LMS);
   },
 
   ipt: (xyz) => {
@@ -1429,16 +1482,54 @@ function demo() {
   // replace. Away from black they do, to five digits; at black they disagree
   // completely and the analytic one is right, because chart→XYZ cubes its
   // input and the true derivative there is zero, which no finite h can see.
+  // Four fixed points plus a seeded spread, because an analytic Jacobian can be
+  // right in the middle of the space and wrong at a kink: ICtCp's PQ curve
+  // clamps at zero and its cone responses go negative on saturated colors, and
+  // four points did not happen to land there.
+  let seed = 20260901;
+  const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const probes         = [[50, 0, 0], [72, -18, 40], [30, 25, -30], [88, 6, 12]];
+  for (let i = 0; i < 120; i++) probes.push([4 + rand() * 92, (rand() - 0.5) * 90, (rand() - 0.5) * 90]);
+  let checked = 0, skipped = 0;
   for (const k of Object.keys(D_SPACE)) {
-    const ga = spaceMetric(k), h = 0.05, w = neutralScale(k) ** 2;
-    for (const p of [[50, 0, 0], [72, -18, 40], [30, 25, -30], [88, 6, 12]]          ) {
-      const col         = [];
+    // Much smaller than the solver's own step. A central difference carries
+    // O(h^2) truncation, and where these maps curve hardest — ICtCp just above
+    // PQ's singularity, say — 0.05 leaves more than a percent of it, a hundred
+    // times the tolerance. The old four points passed only because they sat
+    // where the curvature is low. At 1e-3 the worst probe is at 3e-5, checked by
+    // watching the error fall as h^2 all the way to 3e-9.
+    const ga = spaceMetric(k), h = 1e-3, w = neutralScale(k) ** 2;
+    const cols = (p      , step        ) => {
+      const c         = [];
       for (let i = 0; i < 3; i++) {
         const a = [...p]        , b = [...p]        ;
-        a[i] -= h; b[i] += h;
+        a[i] -= step; b[i] += step;
         const [sa, sb] = [toSpace(a, k), toSpace(b, k)];
-        col.push(sb.map((v, j) => (v - sa[j]) / (2 * h))        );
+        c.push(sb.map((v, j) => (v - sa[j]) / (2 * step))        );
       }
+      return c;
+    };
+    for (const p of probes) {
+      // Every one of these maps misbehaves somewhere — sRGB's transfer kinks at
+      // 0.0031308, CIELAB's toe at (6/29)^3, and PQ both clamps at zero and has
+      // an unbounded slope just above it, which the ICtCp cone responses do
+      // reach. A central difference is worth comparing against only where it is
+      // actually converging, so take it at three widths and check it is: the
+      // error is O(h^2), so halving the step should quarter the gap. Where the
+      // ratio is not near four the point is on a kink or a singularity and the
+      // difference is not approximating anything. Skip it rather than assert
+      // through it, which would test finite differences and not the Jacobian.
+      const [c1, c2, c4] = [cols(p, h), cols(p, h / 2), cols(p, h / 4)];
+      let g12 = 0, g24 = 0, m = 0;
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+        g12 = Math.max(g12, Math.abs(c1[i][j] - c2[i][j]));
+        g24 = Math.max(g24, Math.abs(c2[i][j] - c4[i][j]));
+        m = Math.max(m, Math.abs(c4[i][j]));
+      }
+      const converging = g12 < 1e-9 * Math.max(m, 1) || (g24 > 0 && g12 / g24 > 2.5 && g12 / g24 < 6);
+      if (!converging) { skipped++; continue; }
+      const col = c4;
+      checked++;
       const A = ga(p);
       // the reference has to carry the space's form too, or this asserts the
       // metric is J'J — true of every space until CIEDE2000, whose form is not
@@ -1453,6 +1544,7 @@ function demo() {
       ok(Math.sqrt(num / den) < 1e-4, `${k} analytic jacobian matches central differences at ${p}`);
     }
   }
+  ok(checked > 500, `the Jacobian check has enough smooth points (${checked} checked, ${skipped} on a kink)`);
   params.space = 'oklab';
 
   console.log('ok — white→black arc length', arcLength([fromHex('#000000'), fromHex('#ffffff')]).toFixed(1),
