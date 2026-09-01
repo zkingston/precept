@@ -1178,91 +1178,125 @@ function setColorUniforms(u) {
 
 // ─── the solid, as the boundary of the feasible set ──────────────────────────
 /**
- * The body is the RGB cube MET WITH the cone of colors a light can make, and
- * both are convex in LINEAR RGB — the cube by definition, the cone because it
- * is a set of half-spaces through the origin of XYZ and XYZ is a linear image
- * of linear RGB. A convex body is star-shaped about any interior point, so its
- * boundary is one distance per direction and a sphere of directions meshes it
- * exactly.
+ * The body is a convex POLYTOPE in linear RGB, and meshing it as one is the
+ * only way its corners survive.
  *
- * This used to be the cube's six faces, which is the same surface only while
- * the cone takes nothing away. Once it does, testing the cube's surface per
- * fragment asks the wrong question: near black the cone runs almost tangent to
- * it, and the kept/cut boundary serrated along the tessellation however it was
- * drawn. Meshing the intersection has nothing to test — every vertex is ON the
- * boundary, by construction.
+ * Six half-spaces for the cube and one per visible plane, all of them linear in
+ * linear RGB, so the boundary is a set of flat polygons meeting at straight
+ * edges and sharp corners. Two earlier meshes each lost something. The cube's
+ * six faces are exact only while the cone takes nothing away. A sphere of
+ * directions is exact for neither: a lat/long grid cannot land on a corner
+ * unless one happens to fall on a row, and for the RGB cube six of the eight do
+ * not — measured, the red corner was cut by 2.56% of its radius while the faces
+ * were within 0.023%. That is what truncated the cube, and no row count fixes
+ * it, since acos(1/3) is not a rational part of the range.
  *
- * The pole is the neutral axis, so the two degenerate rows land exactly on
- * black and on white, which are corners of the body either way.
+ * Clipping each plane against all the others gives the true faces. Nothing is
+ * approximated: a corner is a corner because three planes meet there.
  */
-const SHELL_LAT = 64, SHELL_LON = 128;
-const shellGeo = (() => {
-  const idx = [], nv = (SHELL_LAT + 1) * (SHELL_LON + 1);
-  for (let a = 0; a < SHELL_LAT; a++) for (let b = 0; b < SHELL_LON; b++) {
-    const o = a * (SHELL_LON + 1) + b;
-    idx.push(o, o + 1, o + SHELL_LON + 1, o + 1, o + SHELL_LON + 2, o + SHELL_LON + 1);
-  }
-  const g = new T.BufferGeometry();
-  g.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(nv * 3), 3));
-  g.setIndex(idx);
-  return g;
-})();
+const FACE_S = 24, FACE_U = 12;
 
-/**
- * How far the body reaches from mid gray along a direction in linear RGB.
- *
- * Exact rather than bisected: every constraint is linear along the ray, so each
- * one gives a bound on t directly and the answer is the smallest. The cube
- * contributes the usual slab clipping; each visible plane contributes
- * n·(M(c+td)) >= 0, which is a bound whenever the ray is heading out through it.
- */
-function shellReach(c, d, M, planes) {
-  let t = Infinity;
-  for (let i = 0; i < 3; i++) {
-    if (d[i] > 1e-12) t = Math.min(t, (1 - c[i]) / d[i]);
-    else if (d[i] < -1e-12) t = Math.min(t, (0 - c[i]) / d[i]);
-  }
-  const mv = (v) => [0, 1, 2].map((r) => M[r][0] * v[0] + M[r][1] * v[1] + M[r][2] * v[2]);
-  const xc = mv(c), xd = mv(d);
-  for (const n of planes) {
-    const a = n[0] * xc[0] + n[1] * xc[1] + n[2] * xc[2];
-    const b = n[0] * xd[0] + n[1] * xd[1] + n[2] * xd[2];
-    if (b < -1e-12) t = Math.min(t, -a / b);
-  }
-  return Math.max(0, t);
-}
-
-/** Positions depend on the active gamut, so this reruns when the gamut changes. */
-function buildShell() {
-  const pos = shellGeo.attributes.position;
-  const M = internals.xyzFromRGB(params.gamut), planes = internals.VISIBLE;
-  const c0 = [0.5, 0.5, 0.5];                      // mid gray: inside both bodies
-  const ax = 1 / Math.sqrt(3), w = [ax, ax, ax];   // pole on the neutral axis
-  const e1 = [1 / Math.sqrt(2), -1 / Math.sqrt(2), 0];
-  const e2 = [1 / Math.sqrt(6), 1 / Math.sqrt(6), -2 / Math.sqrt(6)];
-  let k = 0, maxC = 0;
-  for (let a = 0; a <= SHELL_LAT; a++) {
-    // even in cos, so the rows are evenly spread over the sphere rather than
-    // bunched at the poles
-    const cp = 1 - (2 * a) / SHELL_LAT, sp = Math.sqrt(Math.max(0, 1 - cp * cp));
-    for (let b = 0; b <= SHELL_LON; b++) {
-      const th = (2 * Math.PI * b) / SHELL_LON, ct = Math.cos(th), st = Math.sin(th);
-      const d = [0, 1, 2].map((i) => cp * w[i] + sp * (ct * e1[i] + st * e2[i]));
-      const t = shellReach(c0, d, M, planes);
-      const chart = fromLinear(c0.map((v, i) => v + t * d[i]));
-      maxC = Math.max(maxC, Math.hypot(chart[1], chart[2]));
-      const q = wpt(chart);
-      pos.setXYZ(k++, q.x, q.y, q.z);
+/** Sutherland–Hodgman against one half-space n·x >= d */
+function clipPoly(poly, n, d) {
+  const out = [];
+  const side = (P) => n[0] * P[0] + n[1] * P[1] + n[2] * P[2] - d;
+  for (let i = 0; i < poly.length; i++) {
+    const A = poly[i], B = poly[(i + 1) % poly.length];
+    const a = side(A), b = side(B);
+    if (a >= -1e-12) out.push(A);
+    if ((a > 1e-12 && b < -1e-12) || (a < -1e-12 && b > 1e-12)) {
+      const t = a / (a - b);
+      out.push([0, 1, 2].map((k) => A[k] + t * (B[k] - A[k])));
     }
   }
-  // the boundary is already being walked, so the body's reach is free here —
-  // and it is the reach of the FEASIBLE set now, not of the cube around it
+  return out;
+}
+
+/** the half-spaces whose intersection is the feasible body, in linear RGB */
+function bodyPlanes() {
+  const H = [];
+  for (let i = 0; i < 3; i++) {
+    H.push({ n: [0, 1, 2].map((k) => (k === i ? 1 : 0)), d: 0 });      // channel >= 0
+    H.push({ n: [0, 1, 2].map((k) => (k === i ? -1 : 0)), d: -1 });    // channel <= 1
+  }
+  // n·(M·rgb) >= 0 is (Mᵀn)·rgb >= 0
+  const M = internals.xyzFromRGB(params.gamut);
+  for (const v of internals.VISIBLE) {
+    const g = [0, 1, 2].map((c) => M[0][c] * v[0] + M[1][c] * v[1] + M[2][c] * v[2]);
+    const len = Math.hypot(...g);
+    if (len > 1e-12) H.push({ n: g.map((x) => x / len), d: 0 });
+  }
+  return H;
+}
+
+function buildShell() {
+  const H = bodyPlanes();
+  const pos = [], idx = [];
+  let maxC = 0;
+  for (let f = 0; f < H.length; f++) {
+    const { n, d } = H[f];
+    // a square in the plane, big enough to contain the body, then cut down
+    const t1 = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const u = [n[1] * t1[2] - n[2] * t1[1], n[2] * t1[0] - n[0] * t1[2], n[0] * t1[1] - n[1] * t1[0]];
+    const ul = Math.hypot(...u); if (ul < 1e-12) continue;
+    const U = u.map((x) => x / ul);
+    const V = [n[1] * U[2] - n[2] * U[1], n[2] * U[0] - n[0] * U[2], n[0] * U[1] - n[1] * U[0]];
+    const R = 4, c = n.map((x) => x * d);
+    let poly = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
+      .map(([a, b]) => [0, 1, 2].map((k) => c[k] + R * (a * U[k] + b * V[k])));
+    for (let g = 0; g < H.length && poly.length; g++) if (g !== f) poly = clipPoly(poly, H[g].n, H[g].d);
+    if (poly.length < 3) continue;                 // this plane does not bound the body
+
+    // fan from the darkest corner, and crowd the samples toward it: chart
+    // lightness goes as the cube root of intensity, so an even split in linear
+    // RGB leaves the dark end a spike that fails to enclose what is in gamut
+    const chart = poly.map((q) => fromLinear(q));
+    let v0 = 0;
+    for (let i = 1; i < poly.length; i++) if (chart[i][0] < chart[v0][0]) v0 = i;
+    const warp = chart[v0][0] < 5 ? 3 : 1;
+    const outward = n.map((x) => -x);              // n·x >= d is the inside
+
+    for (let k = 1; k + 1 < poly.length; k++) {
+      const A = poly[(v0 + k) % poly.length], B = poly[(v0 + k + 1) % poly.length];
+      const base = pos.length / 3;
+      for (let a = 0; a <= FACE_S; a++) {
+        const sc = (a / FACE_S) ** warp;
+        for (let b = 0; b <= FACE_U; b++) {
+          const t = b / FACE_U;
+          const q = [0, 1, 2].map((m) =>
+            poly[v0][m] + sc * ((1 - t) * (A[m] - poly[v0][m]) + t * (B[m] - poly[v0][m])));
+          const ch = fromLinear(q);
+          maxC = Math.max(maxC, Math.hypot(ch[1], ch[2]));
+          const w = wpt(ch);
+          pos.push(w.x, w.y, w.z);
+        }
+      }
+      // winding measured, not predicted: world() is an odd permutation of the
+      // chart axes and mirrors every triangle, and BackSide culls whole faces
+      // away when this is wrong
+      const mid = [0, 1, 2].map((m) => (poly[v0][m] + A[m] + B[m]) / 3);
+      const wm = wpt(fromLinear(mid));
+      const wo = wpt(fromLinear(mid.map((x, m) => x + 1e-3 * outward[m])));
+      const e1 = wpt(fromLinear(A)).sub(wpt(fromLinear(poly[v0])));
+      const e2 = wpt(fromLinear(B)).sub(wpt(fromLinear(poly[v0])));
+      const flip = e1.cross(e2).dot(wo.sub(wm)) < 0;
+      for (let a = 0; a < FACE_S; a++) for (let b = 0; b < FACE_U; b++) {
+        const o = base + a * (FACE_U + 1) + b;
+        idx.push(...(flip
+          ? [o, o + FACE_U + 1, o + 1, o + 1, o + FACE_U + 1, o + FACE_U + 2]
+          : [o, o + 1, o + FACE_U + 1, o + 1, o + FACE_U + 2, o + FACE_U + 1]));
+      }
+    }
+  }
+  shellGeo.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(pos), 3));
+  shellGeo.setIndex(idx);
+  shellGeo.computeBoundingSphere();
   gamutReach = maxC;
   retuneChroma();
   capKey = null;
-  pos.needsUpdate = true;
-  shellGeo.computeBoundingSphere();
 }
+const shellGeo = new T.BufferGeometry();
+
 // BackSide, not DoubleSide: drawing only the far faces gives one clean layer of
 // translucency instead of six stacked ones, and leaves the interior readable.
 const shell = new T.Mesh(shellGeo, new T.ShaderMaterial({
