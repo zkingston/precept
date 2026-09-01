@@ -9,7 +9,24 @@ Every space is a map out of the chart, and $g$ is that map's Jacobian squared: $
 Four of them are differentiated analytically and the rest by central differences, which costs about three times as much per metric evaluation.
 The **Formulation** dialog, under Optimize, gives the metric itself.
 
-They are listed oldest first.
+#### What a color space is
+
+Light arriving at the eye is a spectrum: a power at every wavelength.
+The eye does not report it.
+Three kinds of cone each respond across a broad band, so what leaves the retina is three numbers, each of them that spectrum weighted by one cone's sensitivity and summed over all wavelengths.
+Two lights built from quite different spectra can produce the same three numbers, and then nothing distinguishes them.
+Such a pair are [metamers](https://en.wikipedia.org/wiki/Metamerism_%28color%29), and they are the reason a screen with three primaries can stand in for a world of spectra.
+
+Color is therefore three-dimensional, and the CIE fixed coordinates for it in 1931.
+The [tristimulus values](https://en.wikipedia.org/wiki/CIE_1931_color_space) $X$, $Y$ and $Z$ are the spectrum integrated against three color matching functions.
+Those functions are a linear recombination of the cone responses, arranged so that $Y$ comes out as luminance and none of the three ever goes negative.
+Keeping them positive is what left $X$ and $Z$ answering to nothing you can see.
+
+A color space is a set of coordinates on those same three dimensions, and the choice of coordinates is what decides whether a distance means anything.
+CIELAB, Oklab and the rest were built so that the distance between two colors says something about how far apart they look.
+They disagree about it, which is why this is a control and not a constant.
+
+The ones below are listed oldest first.
 
 #### CIE XYZ (1931)
 
