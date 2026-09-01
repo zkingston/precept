@@ -551,15 +551,14 @@ const CAM = (() => {
     const d = v - 0.1, t = (27.13 * Math.abs(d)) / (400 - Math.abs(d));
     return Math.sign(d) * (100 / FL) * t ** (1 / 0.42);
   };
-  const Aw = (2 * nl(apply(HPE, apply(inv3(CAT02), apply(CAT02, CHART_WHITE.map((v) => v * 100) as Vec3)
-    .map((v, i) => v * Dr[i]) as Vec3))[0]) + nl(apply(HPE, apply(inv3(CAT02),
-    apply(CAT02, CHART_WHITE.map((v) => v * 100) as Vec3).map((v, i) => v * Dr[i]) as Vec3))[1]) / 20
-    + nl(apply(HPE, apply(inv3(CAT02), apply(CAT02, CHART_WHITE.map((v) => v * 100) as Vec3)
-      .map((v, i) => v * Dr[i]) as Vec3))[2]) / 20 - 0.305) * Nbb;
+  // The achromatic response. Aw is this same expression at the white, and must
+  // stay that way: J = 100 (A/Aw)^cz is 100 at the white only because it is.
+  const achromatic = (c: Vec3) => (2 * c[0] + c[1] + c[2] / 20 - 0.305) * Nbb;
+  const Aw = achromatic(adapt(CHART_WHITE).map(nl) as Vec3);
   const D2 = (d: Vec3): M3 => [[d[0], 0, 0], [0, d[1], 0], [0, 0, d[2]]];
   const FWD = mm(HPE, mm(inv3(CAT02), mm(D2(Dr), CAT02)));      // xyz*100 -> hpe cone space
   const BACK = inv3(FWD);
-  return { CAT02, HPE, adapt, nl, nli, Aw, Nbb, Ncb, c, Nc, z, n, FL, Dr, Yw, FWD, BACK };
+  return { CAT02, HPE, adapt, nl, nli, achromatic, Aw, Nbb, Ncb, c, Nc, z, n, FL, Dr, Yw, FWD, BACK };
 })();
 
 function cam02Forward(xyz: Vec3): { J: number; M: number; h: number } {
@@ -567,7 +566,7 @@ function cam02Forward(xyz: Vec3): { J: number; M: number; h: number } {
   const a = ra - (12 * ga) / 11 + ba / 11;
   const b = (ra + ga - 2 * ba) / 9;
   const h = (((Math.atan2(b, a) * 180) / Math.PI) + 360) % 360;
-  const A = (2 * ra + ga + ba / 20 - 0.305) * CAM.Nbb;
+  const A = CAM.achromatic([ra, ga, ba]);
   const J = 100 * (A / CAM.Aw) ** (CAM.c * CAM.z);
   const hr = (h * Math.PI) / 180;
   const et = 0.25 * (Math.cos(hr + 2) + 3.8);
@@ -886,6 +885,13 @@ function dXyzDChart(p: Vec3): M3 {
   return mm(XYZ_LMS.map((r) => [r[0] * d[0], r[1] * d[1], r[2] * d[2]]), LMS_LAB);
 }
 
+// ∂nl/∂v. nl is odd about its +0.1 offset, so one expression serves both signs.
+const dNl = (v: number): number => {
+  const m = Math.max(Math.abs(v), 1e-12);
+  const t = ((CAM.FL * m) / 100) ** 0.42;
+  return (400 * 27.13 * 0.42 * t) / ((27.13 + t) ** 2 * m);
+};
+
 const dLabf = (t: number) => (t > D ** 3 ? 1 / (3 * Math.cbrt(t) ** 2) : 1 / (3 * D * D));
 const dEnc = (c: number) => (c <= 0.0031308 ? 12.92 : (1.055 / 2.4) * c ** (1 / 2.4 - 1));
 
@@ -942,6 +948,47 @@ const D_SPACE: Record<string, (xyz: Vec3) => M3> = {
     const lms = apply(ICTCP_LMS, xyz);
     const d = lms.map((v) => (ICTCP_K * dPq(v / 100)) / 100);
     return mm(ICTCP_OPP.map((r) => [r[0] * d[0], r[1] * d[1], r[2] * d[2]]), ICTCP_LMS);
+  },
+
+  /**
+   * CIECAM02 is a chain, so this is the chain rule down it: a linear adaptation
+   * into cone space, the compressive nonlinearity, then J, the hue angle and
+   * the colourfulness that the UCS axes are built from.
+   *
+   * Two places want a floor rather than a special case. nl has infinite slope
+   * at zero cone response, exactly as IPT's 0.43 power does, and the hue origin
+   * is a cusp because M goes as t^0.9 and t as hypot(a, b) -- but only as
+   * R^-0.1, which is 10 at R = 1e-10, so flooring R is enough to keep it finite.
+   */
+  cam02: (xyz) => {
+    const cone = apply(CAM.FWD, xyz.map((v) => v * 100) as Vec3);
+    const [ra, ga, ba] = cone.map(CAM.nl);
+    const a = ra - (12 * ga) / 11 + ba / 11, b = (ra + ga - 2 * ba) / 9;
+    const A = CAM.achromatic([ra, ga, ba]), P = ra + ga + (21 * ba) / 20;
+    const J = 100 * (A / CAM.Aw) ** (CAM.c * CAM.z);
+    const hr = Math.atan2(b, a), et = 0.25 * (Math.cos(hr + 2) + 3.8);
+    const R = Math.max(Math.hypot(a, b), 1e-12);
+    const t = ((50000 / 13) * CAM.Nc * CAM.Ncb * et * R) / P;
+    const M = t ** 0.9 * Math.sqrt(J / 100) * (1.64 - 0.29 ** CAM.n) ** 0.73 * CAM.FL ** 0.25;
+
+    // ∂(a, b, A, P)/∂(cone response), the four linear combinations above
+    const da = [1, -12 / 11, 1 / 11], db = [1 / 9, 1 / 9, -2 / 9];
+    const dA = [2 * CAM.Nbb, CAM.Nbb, CAM.Nbb / 20], dP = [1, 1, 21 / 20];
+    const cs = Math.cos(hr), sn = Math.sin(hr), dJp = 1.7 / (1 + 0.007 * J) ** 2;
+    const rows: M3 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    for (let i = 0; i < 3; i++) {
+      const dR = (a * da[i] + b * db[i]) / R;
+      const dh = (a * db[i] - b * da[i]) / (R * R);
+      const dJ = ((CAM.c * CAM.z * J) / A) * dA[i];
+      const dt = t * ((-0.25 * Math.sin(hr + 2) * dh) / et + dR / R - dP[i] / P);
+      const dM = M * ((0.9 * dt) / t + dJ / (2 * J));
+      const s = dNl(cone[i]);
+      rows[0][i] = dJp * dJ * s;
+      rows[1][i] = (cs * dM - M * sn * dh) * s;
+      rows[2][i] = (sn * dM + M * cs * dh) * s;
+    }
+    // rows hold ∂(J′, a′, b′)/∂(cone); chain the adaptation and its *100
+    return mm(rows, CAM.FWD).map((r) => r.map((v) => v * 100)) as M3;
   },
 
   ipt: (xyz) => {
@@ -1498,13 +1545,17 @@ function demo() {
     // times the tolerance. The old four points passed only because they sat
     // where the curvature is low. At 1e-3 the worst probe is at 3e-5, checked by
     // watching the error fall as h^2 all the way to 3e-9.
+    //
+    // Differentiate metricSpace, not toSpace: they are the same map everywhere
+    // but CAM02-UCS, whose view compresses colourfulness and whose metric does
+    // not, and it is the metric's map that spaceMetric's Jacobian is for.
     const ga = spaceMetric(k), h = 1e-3, w = neutralScale(k) ** 2;
     const cols = (p: Vec3, step: number) => {
       const c: Vec3[] = [];
       for (let i = 0; i < 3; i++) {
         const a = [...p] as Vec3, b = [...p] as Vec3;
         a[i] -= step; b[i] += step;
-        const [sa, sb] = [toSpace(a, k), toSpace(b, k)];
+        const [sa, sb] = [metricSpace(a, k), metricSpace(b, k)];
         c.push(sb.map((v, j) => (v - sa[j]) / (2 * step)) as Vec3);
       }
       return c;
