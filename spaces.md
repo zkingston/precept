@@ -2,19 +2,22 @@
 
 The panels are drawn in the space chosen here, and every distance is measured in it.
 Changing it does not move a single color.
-It changes the coordinates you see and edit, and the metric $g$ that says what a step costs, which is what the rest of the formulation rests on.
+It changes the coordinates you see and edit, and the metric $g$ that says what a step costs.
+The rest of the formulation is built on that metric.
 
 Every space is a map out of the chart, and $g$ is that map's Jacobian squared: $g=J^{\top}AJ$, with $A$ the identity except where noted.
-Four of them differentiate analytically and the rest by central differences, which costs about three times as much per metric evaluation.
+Four of them are differentiated analytically and the rest by central differences, which costs about three times as much per metric evaluation.
 The **Formulation** dialog, under Optimize, gives the metric itself.
 
 They are listed oldest first.
 
 #### CIE XYZ (1931)
 
-The tristimulus values, scaled by 100, and the substrate every other space here is defined against.
+The tristimulus values, scaled by 100.
+Every other space here is defined against them.
 $Y$ is luminance; $X$ and $Z$ have no perceptual reading at all.
-Equal steps in it are nowhere near equal to look at, which is the reason the rest of this list exists: seeing a gamut in XYZ shows how much work a uniform space is doing.
+Equal steps in it are nowhere near equal to look at.
+Everything after it on this list exists for that reason: seeing a gamut in XYZ shows how much a uniform space is correcting.
 Its Jacobian is a constant, so it is the cheapest space after the chart itself.
 
 #### CIELAB (1976)
@@ -22,7 +25,8 @@ Its Jacobian is a constant, so it is the cheapest space after the chart itself.
 The CIE's first uniform space and still the reference for industrial color difference.
 $L^*$ is a cube root of luminance relative to white, with a linear toe below $(6/29)^3$ so the slope stays finite at black; $a^*$ and $b^*$ are differences of the same cube root along the other two axes, scaled by 500 and 200.
 Distance is $\Delta E_{ab}^*$, the plain Euclidean one.
-Its known failure is chroma: a step far from the neutral axis reads as much larger than it looks, which is the defect every formula after it was written to repair.
+Its known failure is chroma: a step far from the neutral axis reads as much larger than it looks.
+Every formula after it was written to repair that defect.
 Differentiated analytically.
 
 #### CIELUV (1976)
@@ -30,13 +34,14 @@ Differentiated analytically.
 CIELAB's twin, recommended in the same year and kept for additive mixture.
 It shares $L^*$ exactly and replaces the opponent axes with $13L^*$ times a displacement in the $u'v'$ chromaticity diagram.
 A mixture of two lights lies on the straight line between them there, which is true of displays and not true in CIELAB.
-Its chroma behaviour is no better than CIELAB's, and it is differentiated by central differences.
+Its chroma behaviour is no better than CIELAB's.
+Differentiated by central differences.
 
 #### sRGB cube (1996)
 
 The encoded channel values, scaled by 100, gamma and all.
 Rec.709 primaries and the piecewise transfer that is linear below 0.0031308 and a $1/2.4$ power above it, from the [HP and Microsoft proposal](https://www.w3.org/Graphics/Color/sRGB.html) later standardised as IEC 61966-2-1.
-The gamut is a cube by construction, which makes it the one space where the boundary is trivial to see and the distances mean nothing whatever.
+The gamut is a cube by construction, which makes it the one space where the boundary is trivial to see and the distances mean nothing.
 Distance here is what a tool measures when it interpolates between two hex codes.
 Differentiated analytically.
 
@@ -44,14 +49,15 @@ Differentiated analytically.
 
 Ebner and Fairchild, and the ancestor of every opponent space after it.
 Cone responses, a $0.43$ power on each, then a fixed opponent matrix.
-It was built for one property the others lack: lines of constant hue stay straight, where CIELAB bends them most visibly in the blues, so a ramp at fixed hue angle there drifts toward purple.
-Worth choosing when hue is the thing being controlled.
+It was built for one property: lines of constant hue stay straight, where CIELAB bends them most visibly in the blues, so a ramp at fixed hue angle there drifts toward purple.
+Worth choosing when you are controlling hue.
 Differentiated analytically.
 
 #### CIEDE2000 (2001)
 
 CIELAB's coordinates, measured with [CIEDE2000](https://en.wikipedia.org/wiki/Color_difference#CIEDE2000) rather than the straight line.
-It weights CIELAB differences rather than being a space to convert into, and for a small difference its formula
+It weights CIELAB differences; it is not a space to convert into.
+For a small difference its formula
 
 $$
 \Delta E_{00}^2=\left(\frac{\Delta L}{S_L}\right)^2+\left(\frac{\Delta C'}{S_C}\right)^2
@@ -59,19 +65,21 @@ $$
 $$
 
 is a quadratic form on $(\mathrm{d}L,\ \mathrm{d}C',\ C'\mathrm{d}h')$.
-The weights are functions of the point, and $\Delta H'\to C'\mathrm{d}h'$ as the pair closes up, so the whole thing is a metric tensor and goes through the same machinery as everything else.
+The weights are functions of the point, and $\Delta H'\to C'\mathrm{d}h'$ as the pair closes up.
+$\Delta E_{00}^2$ is therefore a metric tensor, and goes through the same code as the other spaces.
 
 $S_C=1+0.045C'$ and $S_H=1+0.015C'T$ grow with chroma, which is the repair of CIELAB: the same step costs less the further out it happens.
-$R_T$ rotates between chroma and hue and only bites in the blue, within about $25^\circ$ of $h'=275^\circ$, where CIELAB's error is worst.
-That cross term is also what stops $g$ being $J^{\top}J$ for any map, so this is the one space here whose $A$ is not the identity.
-The coordinates are CIELAB's, so it borrows that analytic Jacobian.
+$R_T$ rotates between chroma and hue and is active only in the blue, within about $25^\circ$ of $h'=275^\circ$, where CIELAB's error is worst.
+That cross term also stops $g$ being $J^{\top}J$ for any map, so CIEDE2000 is the one space here whose $A$ is not the identity.
+The coordinates are CIELAB's, so it reuses that analytic Jacobian.
 
 #### CAM02-UCS (2006)
 
-The most elaborate of them: a full appearance model, then a uniform space fitted on top of it.
-CIECAM02 is evaluated under the average surround the fit was made for, which fixes the adapting luminance and the background, and Luo, Cui and Li then compress its lightness and colourfulness into $J'$ and $M'$.
+The most elaborate of them, a full appearance model with a uniform space fitted on top of it.
+CIECAM02 is evaluated under the average surround the fit was made for, which fixes the adapting luminance and the background.
+Luo, Cui and Li then compress its lightness and colourfulness into $J'$ and $M'$.
 It performs best of these on the difference data, and it is the slowest, at about five times CIELAB per metric evaluation with no analytic Jacobian to fall back on.
-It and CIEDE2000 are the two entries here that agree: viridis measures 154 under one and 160 under the other, where the rest of the list spans 67 to 257.
+CAM02-UCS and CIEDE2000 are the two entries here that agree: viridis measures 154 under one and 160 under the other, where the rest of the list spans 67 to 257.
 
 The $M'=\ln(1+0.0228M)/0.0228$ compression is the same logarithmic shape as this tool's own $f$, with $s_0=1/0.0228\approx 43.9$.
 Pulling a metric back through it and then handing the result to $f$ would compress chroma twice, so the view keeps $M'$ and the metric differentiates the uncompressed $M$.
@@ -79,8 +87,10 @@ Pulling a metric back through it and then handing the result to $f$ would compre
 #### ICtCp (BT.2100, 2016)
 
 The broadcast space, IPT reworked for high dynamic range.
-Cone responses again, but through the [PQ](https://en.wikipedia.org/wiki/Perceptual_quantizer) transfer function of ST 2084 rather than a power, then a fixed opponent matrix, with $I$ scaled here so white reads 100 like every other lightness on this list.
-It keeps IPT's straight hue lines, but PQ is scaled for a luminance range an sRGB gamut never approaches, so inside that gamut it is mostly rescaling what IPT already says: viridis measures 116 here against IPT's 134.
+Cone responses again, but through the [PQ](https://en.wikipedia.org/wiki/Perceptual_quantizer) transfer function of ST 2084 rather than a power, then a fixed opponent matrix.
+$I$ is scaled here so white reads 100, like every other lightness on this list.
+It keeps IPT's straight hue lines.
+But PQ is scaled for a luminance range an sRGB gamut never approaches, so inside that gamut it is mostly rescaling what IPT already says: viridis measures 116 here against IPT's 134.
 Differentiated by central differences.
 
 #### Oklab (2020)
@@ -88,6 +98,7 @@ Differentiated by central differences.
 [Ottosson's](https://bottosson.github.io/posts/oklab/) space, scaled by 100, and the chart every color in this tool is stored in.
 Cone responses, a cube root, then an opponent matrix, with the matrices fitted to the CAM16-UCS and IPT difference data rather than derived.
 Choosing it makes $J$ the identity, so the metric is $I$ and lengths are ordinary Euclidean ones.
-It is the cheapest option and the default, and it is a fair stand-in for the rest of this list, having been fitted to much the same data they were.
-What it does not carry is an appearance model: no adapting luminance, no surround, nothing to say how a color shifts when the room does.
+Oklab is the cheapest option and the default.
+It is also a fair stand-in for the rest of this list, since it was fitted to much the same data they were.
+It has no appearance model: no adapting luminance, no surround, and nothing to say how a color shifts when the room does.
 CAM02-UCS is the entry here that does.
