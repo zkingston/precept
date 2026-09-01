@@ -869,7 +869,7 @@ export const delta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
  * the path. They differ by at most the 2% the two lengths differ by, and by
  * nothing at all in the chart, where the line IS the path.
  */
-const lineDelta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
+export const lineDelta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
   perceive(arcLength(Array.from({ length: n + 1 }, (_, i) => lerp(p, q, i / n)), g));
 
 // ─── color vision deficiency: a projection on M ──────────────────────────────
