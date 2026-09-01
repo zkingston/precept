@@ -1039,17 +1039,7 @@ bool inBox(vec3 xyz) {
   return !(any(lessThan(ling, vec3(-1e-9))) || any(greaterThan(ling, vec3(1.0 + 1e-9))));
 }
 
-/**
- * The two halves of the gamut test do not get the same treatment.
- *
- * Outside the RGB box there is nothing: the fragment goes. Outside the visible
- * cone there IS something — the encoding holds a value there, it just is not a
- * color any light makes — and every surface this app draws through that region
- * is equally unreal, so discarding leaves a hole that nothing can fill. A cap
- * drawn across it would be discarded by the same test. Grey instead, once,
- * everywhere, and the solid stays a solid.
- */
-const vec4 GHOST = vec4(vec3(0.42), 0.8);
+
 
 /** XYZ, through the selected observer, to something a monitor can show */
 vec3 shown(vec3 xyz) {
@@ -1084,24 +1074,15 @@ void main() {
   // out of bounds is cut away rather than dimmed: what is left is exactly the
   // set you asked for, with nothing to read past
   if (!inBounds(chartOf(xyz))) discard;
-  if (!visible(xyz)) { gl_FragColor = vec4(GHOST.rgb, GHOST.a * uOpacity); return; }
+  if (!visible(xyz)) discard;
   gl_FragColor = vec4(shown(xyz), uOpacity);
 }`;
 
-// The solid is the gamut boundary, so there is nothing to test — every fragment
-// is reachable by construction. Per fragment rather than per vertex also means
-// the color stops being an interpolation across triangles that are large where
-// the surface curves most.
-//
-// It does NOT carry the visible-cone test the slices and caps carry, so for a
-// wide gamut this surface is the encoding's full cube and overstates what the
-// feasible set admits. That is deliberate and it is a gap. This mesh is the
-// cube's surface, and near black the cone runs so nearly tangent to it that the
-// boundary between kept and cut serrates along the tessellation whichever way
-// it is drawn — cut, ghosted, at 28 samples or at 56. Fixing it properly means
-// building the shell as the intersection itself: both bodies are convex, so it
-// is star-shaped about an interior point and a direction-parameterised mesh
-// would land on the true boundary instead of testing the wrong surface.
+// The mesh IS the feasible set's boundary, so there is nothing to test — every
+// fragment is on it by construction, which is the whole reason the shell is
+// meshed by direction rather than as the cube's six faces. Per fragment rather
+// than per vertex also means the color stops being an interpolation across
+// triangles that are large where the surface curves most.
 const SHELL_FRAG = COLOR_GLSL + `
 varying vec3 vPos;
 void main() {
@@ -1136,7 +1117,7 @@ void main() {
   if (uCap != 0 && (lab.x < uLB.x || lab.x > uLB.y)) discard;
   if (uCap != 1 && (chroma < uCB.x || chroma > uCB.y)) discard;
   if (uCap != 2 && chroma >= 1.0 && !inArc(hue)) discard;
-  if (!visible(xyz)) { gl_FragColor = vec4(GHOST.rgb, GHOST.a * uOpacity); return; }
+  if (!visible(xyz)) discard;
   gl_FragColor = vec4(shown(xyz), uOpacity);
 }`;
 
@@ -1195,65 +1176,90 @@ function setColorUniforms(u) {
   }
 }
 
-// ─── the sRGB solid, as its actual boundary ──────────────────────────────────
-// The gamut is the image of the RGB cube, so its boundary is the image of the
-// cube's six faces. Exact, and 6N² quads instead of a volume of samples.
-const SHELL_N = 28;
+// ─── the solid, as the boundary of the feasible set ──────────────────────────
+/**
+ * The body is the RGB cube MET WITH the cone of colors a light can make, and
+ * both are convex in LINEAR RGB — the cube by definition, the cone because it
+ * is a set of half-spaces through the origin of XYZ and XYZ is a linear image
+ * of linear RGB. A convex body is star-shaped about any interior point, so its
+ * boundary is one distance per direction and a sphere of directions meshes it
+ * exactly.
+ *
+ * This used to be the cube's six faces, which is the same surface only while
+ * the cone takes nothing away. Once it does, testing the cube's surface per
+ * fragment asks the wrong question: near black the cone runs almost tangent to
+ * it, and the kept/cut boundary serrated along the tessellation however it was
+ * drawn. Meshing the intersection has nothing to test — every vertex is ON the
+ * boundary, by construction.
+ *
+ * The pole is the neutral axis, so the two degenerate rows land exactly on
+ * black and on white, which are corners of the body either way.
+ */
+const SHELL_LAT = 64, SHELL_LON = 128;
 const shellGeo = (() => {
-  const N = SHELL_N, idx = [], count = 6 * (N + 1) ** 2;
-  for (let f = 0; f < 6; f++) {
-    const base = f * (N + 1) ** 2;
-    // Half the cube's faces have to wind the other way. The u×v normal of the
-    // grid points along +w, which is outward only on the far face — and on top
-    // of that world() is an odd permutation of the chart axes, so it mirrors
-    // every triangle. Get this wrong and BackSide culls whole faces away: the
-    // solid loses entire sides depending on where you orbit to.
-    const flip = CUBE_FACES[f][3] === 1;
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      const o = base + j * (N + 1) + i;
-      idx.push(...(flip
-        ? [o, o + N + 1, o + 1, o + 1, o + N + 1, o + N + 2]
-        : [o, o + 1, o + N + 1, o + 1, o + N + 2, o + N + 1]));
-    }
+  const idx = [], nv = (SHELL_LAT + 1) * (SHELL_LON + 1);
+  for (let a = 0; a < SHELL_LAT; a++) for (let b = 0; b < SHELL_LON; b++) {
+    const o = a * (SHELL_LON + 1) + b;
+    idx.push(o, o + 1, o + SHELL_LON + 1, o + 1, o + SHELL_LON + 2, o + SHELL_LON + 1);
   }
   const g = new T.BufferGeometry();
-  g.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(count * 3), 3));
+  g.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(nv * 3), 3));
   g.setIndex(idx);
   return g;
 })();
 
 /**
- * Positions depend on the active gamut, so this reruns when the gamut changes.
+ * How far the body reaches from mid gray along a direction in linear RGB.
  *
- * The cube on the parameter is not arbitrary. Oklab lightness goes as the CUBE
- * ROOT of linear intensity, so sampling linear = t³ lands the vertices at even
- * lightness steps. Sampling evenly in t — or with a display gamma, which was
- * the first thing I reached for — spends nearly every vertex on the bright half
- * and leaves the dark end a two-triangle spike that visibly fails to enclose
- * what the slices show is in gamut down there. The warp only moves vertices
- * around the surface; it never changes which surface they are on.
+ * Exact rather than bisected: every constraint is linear along the ray, so each
+ * one gives a bound on t directly and the answer is the smallest. The cube
+ * contributes the usual slab clipping; each visible plane contributes
+ * n·(M(c+td)) >= 0, which is a bound whenever the ray is heading out through it.
  */
+function shellReach(c, d, M, planes) {
+  let t = Infinity;
+  for (let i = 0; i < 3; i++) {
+    if (d[i] > 1e-12) t = Math.min(t, (1 - c[i]) / d[i]);
+    else if (d[i] < -1e-12) t = Math.min(t, (0 - c[i]) / d[i]);
+  }
+  const mv = (v) => [0, 1, 2].map((r) => M[r][0] * v[0] + M[r][1] * v[1] + M[r][2] * v[2]);
+  const xc = mv(c), xd = mv(d);
+  for (const n of planes) {
+    const a = n[0] * xc[0] + n[1] * xc[1] + n[2] * xc[2];
+    const b = n[0] * xd[0] + n[1] * xd[1] + n[2] * xd[2];
+    if (b < -1e-12) t = Math.min(t, -a / b);
+  }
+  return Math.max(0, t);
+}
+
+/** Positions depend on the active gamut, so this reruns when the gamut changes. */
 function buildShell() {
-  const N = SHELL_N, pos = shellGeo.attributes.position;
+  const pos = shellGeo.attributes.position;
+  const M = internals.xyzFromRGB(params.gamut), planes = internals.VISIBLE;
+  const c0 = [0.5, 0.5, 0.5];                      // mid gray: inside both bodies
+  const ax = 1 / Math.sqrt(3), w = [ax, ax, ax];   // pole on the neutral axis
+  const e1 = [1 / Math.sqrt(2), -1 / Math.sqrt(2), 0];
+  const e2 = [1 / Math.sqrt(6), 1 / Math.sqrt(6), -2 / Math.sqrt(6)];
   let k = 0, maxC = 0;
-  for (const [u, v, w, f] of CUBE_FACES)
-    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
-      const c = []; c[u] = (i / N) ** 3; c[v] = (j / N) ** 3; c[w] = f;
-      const chart = fromLinear(c);
-      const C = Math.hypot(chart[1], chart[2]);
-      // Two reaches, and they used to be one number. The slider's top is what
-      // the feasible set will admit, so it counts only the realisable part —
-      // ProPhoto's cube goes to 148 and its visible part to 52. The caps still
-      // have to span the MESH, which is the whole cube either way.
-      cubeReach = Math.max(cubeReach, C);
-      if (visible(toXYZ(chart))) maxC = Math.max(maxC, C);
-      const p = wpt(chart);
-      pos.setXYZ(k++, p.x, p.y, p.z);
+  for (let a = 0; a <= SHELL_LAT; a++) {
+    // even in cos, so the rows are evenly spread over the sphere rather than
+    // bunched at the poles
+    const cp = 1 - (2 * a) / SHELL_LAT, sp = Math.sqrt(Math.max(0, 1 - cp * cp));
+    for (let b = 0; b <= SHELL_LON; b++) {
+      const th = (2 * Math.PI * b) / SHELL_LON, ct = Math.cos(th), st = Math.sin(th);
+      const d = [0, 1, 2].map((i) => cp * w[i] + sp * (ct * e1[i] + st * e2[i]));
+      const t = shellReach(c0, d, M, planes);
+      const chart = fromLinear(c0.map((v, i) => v + t * d[i]));
+      maxC = Math.max(maxC, Math.hypot(chart[1], chart[2]));
+      const q = wpt(chart);
+      pos.setXYZ(k++, q.x, q.y, q.z);
     }
-  // the hull is already being walked, so the gamut's reach is free here
+  }
+  // the boundary is already being walked, so the body's reach is free here —
+  // and it is the reach of the FEASIBLE set now, not of the cube around it
   gamutReach = maxC;
   retuneChroma();
-  capKey = null;                                   // capR moved with cubeReach
+  capKey = null;
   pos.needsUpdate = true;
   shellGeo.computeBoundingSphere();
 }
@@ -1281,10 +1287,8 @@ const capGroup = new T.Group();
 capGroup.layers.set(1);                            // part of the solid, so 3D only
 scene.add(capGroup);
 const CAP_N = 36;
-/** caps span the chroma the MESH reaches, with margin — ProPhoto passes 148.
- *  Not the slider's top: since that stops at the realisable reach, a cap sized
- *  by it would fall short of the shell it is meant to close. */
-const capR = () => Math.max(BOUND_MAX[1], cubeReach) * 1.35;
+/** caps span the chroma the body reaches, with margin */
+const capR = () => BOUND_MAX[1] * 1.35;
 let capKey = null;
 
 /** a point on cap `kind` at value v, parameterized over the unit square */
@@ -1310,16 +1314,13 @@ const capOut = (kind, q, sign) => {
 };
 
 function buildCaps() {
-  const key = `${S.lo}|${S.hi}|${S.hue}|${params.space}|${params.gamut}|${cubeReach}`;
+  const key = `${S.lo}|${S.hi}|${S.hue}|${params.space}|${params.gamut}`;
   if (key === capKey) return;
   capKey = key;
   capGroup.clear();
   const wanted = [
     ...(S.lo[0] > 0 ? [[0, S.lo[0], -1]] : []), ...(S.hi[0] < 100 ? [[0, S.hi[0], 1]] : []),
-    // against the mesh's reach: with the ceiling now at the realisable chroma,
-    // a band sitting at its top still cuts a wide gamut's shell, and testing
-    // against the ceiling would have said there was nothing to close
-    ...(S.lo[1] > 0 ? [[1, S.lo[1], -1]] : []), ...(S.hi[1] < cubeReach - 1e-9 ? [[1, S.hi[1], 1]] : []),
+    ...(S.lo[1] > 0 ? [[1, S.lo[1], -1]] : []), ...(S.hi[1] < BOUND_MAX[1] - 1e-9 ? [[1, S.hi[1], 1]] : []),
     ...(S.hue[0] === 0 && S.hue[1] === 360 ? [] : [[2, S.hue[0], -1], [2, S.hue[1], 1]]),
   ];
   for (const [kind, v, sign] of wanted) {
@@ -4619,7 +4620,7 @@ addEventListener('keydown', (e) => {
  * ceiling was never narrowed on purpose, so it moves to the new one, while a
  * band the user set stays where it is and is only clamped down if it has to be.
  */
-let gamutReach = 0, cubeReach = 0;
+let gamutReach = 0;
 function retuneChroma() {
   const pal = S.pts.length ? palette() : [];
   const reach = pal.reduce((m, p) => Math.max(m, Math.hypot(p[1], p[2])), gamutReach);
