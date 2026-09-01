@@ -652,7 +652,7 @@
   <p>\(g=J^{\top}J\), where \(J\) is the Jacobian at \(p\) of the map from \(M\) to the working
      space selected in the panel, scaled so the gray axis measures 100 in every space. Choosing Oklab
      gives \(g=I\) and the ordinary Euclidean length, written \(\ell_I\).</p>
-  <p>Lengths add; perceived differences do not. Perceived difference is a concave function of length:</p>
+  <p>Perceived difference is a concave function of length:</p>
   \[ d(p,q)=f\bigl(\ell_g(p,q)\bigr),\qquad f(s)=s_0\ln\left(1+\frac{s}{s_0}\right),\qquad
      s_0=\frac{100}{5.34}\approx 18.7,\qquad f'(0)=1 \]
   <p>Concavity of \(f\) makes \(d\) <a href="https://en.wikipedia.org/wiki/Subadditivity" target="_blank" rel="noopener">subadditive</a>:
@@ -695,17 +695,7 @@
   <p>A control point is put back into \(\mathcal{F}\) by projection,
      \(p_i\leftarrow\Pi_{\mathcal{F}}(p_i)\), onto \(G,\Lambda,X,H,E,B\) in turn, repeating until
      \(c(p_i)\) falls below \(10^{-4}\) or twelve rounds pass. This is not the nearest point of
-     \(\mathcal{F}\): the set is not convex, since \(G\) is nonconvex in places and the complement
-     of a ball never is. It is a feasible point near the input, which is all a projected step uses.</p>
-
-  <h4>Program</h4>
-  \[ \min_{P}\ \sum_k w_k F_k(P)\qquad\text{s.t.}\qquad p_i\in\mathcal{F}\ \ \forall i,
-     \qquad \gamma_r(t)\in\mathcal{F}\ \ \forall r\in\mathcal{R},\ \forall t \]
-  <p>We enforce the constraint on the control points exactly, by projection. The constraint along the
-     curve cannot be enforced the same way, because the curve samples are functions of \(P\) rather
-     than variables. It enters as an
-     <a href="https://en.wikipedia.org/wiki/Augmented_Lagrangian_method" target="_blank" rel="noopener">augmented Lagrangian</a>
-     instead.</p>
+     \(\mathcal{F}\): the set is not convex.</p>
 
   <h4>Objectives</h4>
   <p>Each term is written for the palette \(\Pi(P)\). Each is a row in the panel behind this
@@ -713,13 +703,13 @@
      together with the three <a href="https://en.wikipedia.org/wiki/Color_blindness" target="_blank" rel="noopener">color
      vision deficiencies</a>; every \(v\in V\) acts on \(M\).</p>
   <ul class="terms">
-    <li><b>repulsion</b> <span class="d">separates every pair, hardest where they are confusable</span>
+    <li><b>repulsion</b> <span class="d">separates every pair</span>
       \[ F_{\text{rep}}=\sum_{v\in V}\ \sum_{i&lt;j}\ \frac{1}{\max\left(\tfrac12,\ d(v\pi_i,\,v\pi_j)\right)} \]
       <p>The floor of \(\tfrac12\) keeps the sum finite when two colors coincide. Since \(d\) saturates, far pairs
          contribute almost nothing and the near pairs drive the step. The panel lists it
          twice: once for the observer on screen, once for all four observers together.</p></li>
 
-    <li><b>arc length</b> <span class="d">every run's length, added up</span>
+    <li><b>arc length</b>
       \[ F_{\text{arc}}=\sum_{r\in\mathcal{R}}\ell_r \]</li>
 
     <li><b>bending</b> <span class="d">how sharply the ramp curves, along the curve itself</span>
@@ -737,19 +727,20 @@
          both total 180°. Squaring divides the turn by the length it happens over, so a tight bend
          costs far more than the same rotation spread out.</p></li>
 
-    <li><b>lightness profile</b> <span class="d">distance from the curve drawn in the plot</span>
-      \[ F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \]</li>
+    <li><b>lightness profile</b> and <b>hue profile</b>
+      <span class="d">distance from the curves drawn in the plots</span>
+      \[ F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \]
+      \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
+         \delta\bigl(h_i,\ \widehat h(t_i)\bigr)\right)^2 \]
+      <p>Two rows in the panel, one shape: the squared distance from the swatches to a curve you
+         draw. \(\widehat L\) and \(\widehat h\) are those curves. Lightness is a plain
+         difference. Hue is an angle, so \(\delta\) takes the signed shortest one and the wrap at
+         \(0^\circ\) costs nothing, and chroma weights it because a \(40^\circ\) error matters at
+         chroma 20 and not at chroma 2. Swatches below chroma 1 have no usable hue and are skipped
+         by the hue term.</p></li>
 
     <li><b>chroma target</b> <span class="d">aims at the middle of the chroma band</span>
       \[ F_{\text{chr}}=\frac1n\sum_i\left(C(\pi_i)-\frac{C_-+C_+}{2}\right)^2 \]</li>
-
-    <li><b>hue profile</b> <span class="d">distance from the hue curve drawn in the plot</span>
-      \[ F_{\text{hue}}=\frac1n\sum_{i\,:\,C_i\ge 1}\left(\frac{\pi}{180}\,C_i\,
-         \delta\bigl(h_i,\ \widehat h(t_i)\bigr)\right)^2 \]
-      <p>\(\widehat L\) and \(\widehat h\) are the profiles drawn in the plots. \(\delta\) is
-         the signed shortest angle, so the wrap at \(0^\circ\) costs nothing. Chroma weights the
-         angle because a \(40^\circ\) error matters at chroma 20 and not at chroma 2. Swatches below
-         chroma 1 have no usable hue and are skipped.</p></li>
 
     <li><b>control point spacing</b> <span class="d">keeps consecutive control points evenly spaced</span>
       \[ F_{\text{sp}}=\sum_{i=1}^{m}\frac{\bar\ell}{\ell_i}-m,\qquad
@@ -767,9 +758,8 @@
       \[ F_{\text{pair}}=\frac{1}{|\mathcal{K}|}\sum_{(i,j)\in\mathcal{K}}
          \bigl(d_I(\pi_i,\pi_j)-\tau_{ij}\bigr)^2,\qquad
          \tau_{ij}=f\left(\frac{s_{ij}}{S_r}\,\ell_r\right) \]
-      <p>\(\mathcal{K}\) is the pairs that fall in the same run. Across a break there is no
-         traversal, so the target this term measures a residual against does not exist there.</p>
-      <p>Along an open run the two swatches are \(s_{ij}=j-i\) steps apart out of \(S_r=|r|-1\).
+      <p>\(\mathcal{K}\) is the pairs that are part of the same continuous run.
+         Along an open run the two swatches are \(s_{ij}=j-i\) steps apart out of \(S_r=|r|-1\).
          Around a closed one the walk goes the short way, \(s_{ij}=\min(j-i,\,|r|-(j-i))\) out of
          \(S_r=|r|\): an index difference is the distance along an open ramp, and a loop has no such
          thing. \(\tau_{ij}\) is \(f\) of the arc a uniform traversal covers in that many steps. In
@@ -780,10 +770,7 @@
       \[ F_{\text{sym}}=\frac{1}{|\mathcal{S}|}\sum_{(i,j)\in\mathcal{S}}\bigl(L(\pi_i)-L(\pi_j)\bigr)^2 \]
       <p>\(\mathcal{S}\) pairs swatch \(k\) of an open run with swatch \(|r|-1-k\) of the same one.
          A diverging map depends on that mirroring: equal magnitudes either side of the center read
-         as equal.</p>
-      <p>In lightness only. The arms being different hues is the point of the map, and a term that
-         pulled those together would undo it. A closed run has no middle to be symmetric about, so it
-         is skipped. Viridis scores 1862 against vik at 19.5 and roma at 3.0.</p></li>
+         as equal. In lightness only.</p></li>
 
     <li><b>contrast floor</b> <span class="d">nothing unreadable against a chosen background</span>
       \[ F_{\text{con}}=\sum_{q\in Q}\bigl[\kappa_{\min}-\kappa(q,\beta)\bigr]_+^2 \]
@@ -796,11 +783,15 @@
          \Delta_L=\frac{L_+-L_-}{n-1} \]
       <p>A hinge again. \(\Delta_L\) is derived
          rather than set by hand: \(n\) swatches spread over the lightness band are at best
-         \((L_+-L_-)/(n-1)\) apart, so a larger floor could never be met.</p></li>
+         \((L_+-L_-)/(n-1)\) apart.</p></li>
   </ul>
 
-  <h4>Descent</h4>
-  <p>The curve enters the objective as one more term. With \(c_k=c(\gamma_k)\) and multipliers
+  <h4>Optimization</h4>
+  \[ \min_{P}\ \sum_k w_k F_k(P)\qquad\text{s.t.}\qquad p_i\in\mathcal{F}\ \ \forall i,
+     \qquad \gamma_r(t)\in\mathcal{F}\ \ \forall r\in\mathcal{R},\ \forall t \]
+  <p>We solve using an
+     <a href="https://en.wikipedia.org/wiki/Augmented_Lagrangian_method" target="_blank" rel="noopener">augmented Lagrangian</a>
+     formulation. The curve enters the objective as one more term. With \(c_k=c(\gamma_k)\) and multipliers
      \(\lambda\in\mathbb{R}_{\ge0}^{K}\),</p>
   \[ F_{\text{feas}}=\sum_k\left(\lambda_k c_k+\tfrac12 c_k^2\right),\qquad
      \lambda_k\leftarrow\min(\lambda_{\max},\ \lambda_k+\rho\,c_k) \]
