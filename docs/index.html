@@ -1194,7 +1194,22 @@ function setColorUniforms(u) {
  * Clipping each plane against all the others gives the true faces. Nothing is
  * approximated: a corner is a corner because three planes meet there.
  */
-const FACE_S = 24, FACE_U = 12;
+/**
+ * One count for both directions of the face grid, and they have to be equal.
+ *
+ * A polytope edge is shared by two faces, and each meshes it from its own fan:
+ * for one it may be a leg, walked in s, and for the other an arc, walked in t.
+ * The edge is straight in linear RGB and curved in the chart, so two different
+ * samplings of it chord that curve differently and leave a crack between the
+ * faces. With 24 against 12 that was six of the cube's eighteen shared edges;
+ * equal, it is none of them.
+ *
+ * The warp does not break this. Every edge running into black is a fan leg on
+ * both of its faces, since black is the darkest vertex of all three faces that
+ * meet there, so both warp it identically. Every other edge has no dark apex to
+ * warp toward and is uniform on both sides.
+ */
+const FACE_N = 24;
 
 /** Sutherland–Hodgman against one half-space n·x >= d */
 function clipPoly(poly, n, d) {
@@ -1257,12 +1272,18 @@ function buildShell() {
     const outward = n.map((x) => -x);              // n·x >= d is the inside
 
     for (let k = 1; k + 1 < poly.length; k++) {
-      const A = poly[(v0 + k) % poly.length], B = poly[(v0 + k + 1) % poly.length];
+      const iA = (v0 + k) % poly.length, iB = (v0 + k + 1) % poly.length;
+      const A = poly[iA], B = poly[iB];
+      // The far edge gets the same treatment as a leg would, because on the
+      // neighbouring face it IS a leg. Crowd it toward whichever end is dark,
+      // and it matches that face's warp from the same vertex.
+      const dA = chart[iA][0] < 5, dB = chart[iB][0] < 5;
+      const tOf = (u) => (dA && !dB ? u ** 3 : dB && !dA ? 1 - (1 - u) ** 3 : u);
       const base = pos.length / 3;
-      for (let a = 0; a <= FACE_S; a++) {
-        const sc = (a / FACE_S) ** warp;
-        for (let b = 0; b <= FACE_U; b++) {
-          const t = b / FACE_U;
+      for (let a = 0; a <= FACE_N; a++) {
+        const sc = (a / FACE_N) ** warp;
+        for (let b = 0; b <= FACE_N; b++) {
+          const t = tOf(b / FACE_N);
           const q = [0, 1, 2].map((m) =>
             poly[v0][m] + sc * ((1 - t) * (A[m] - poly[v0][m]) + t * (B[m] - poly[v0][m])));
           const ch = fromLinear(q);
@@ -1280,11 +1301,11 @@ function buildShell() {
       const e1 = wpt(fromLinear(A)).sub(wpt(fromLinear(poly[v0])));
       const e2 = wpt(fromLinear(B)).sub(wpt(fromLinear(poly[v0])));
       const flip = e1.cross(e2).dot(wo.sub(wm)) < 0;
-      for (let a = 0; a < FACE_S; a++) for (let b = 0; b < FACE_U; b++) {
-        const o = base + a * (FACE_U + 1) + b;
+      for (let a = 0; a < FACE_N; a++) for (let b = 0; b < FACE_N; b++) {
+        const o = base + a * (FACE_N + 1) + b;
         idx.push(...(flip
-          ? [o, o + FACE_U + 1, o + 1, o + 1, o + FACE_U + 1, o + FACE_U + 2]
-          : [o, o + 1, o + FACE_U + 1, o + 1, o + FACE_U + 2, o + FACE_U + 1]));
+          ? [o, o + FACE_N + 1, o + 1, o + 1, o + FACE_N + 1, o + FACE_N + 2]
+          : [o, o + 1, o + FACE_N + 1, o + 1, o + FACE_N + 2, o + FACE_N + 1]));
       }
     }
   }
