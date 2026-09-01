@@ -1966,34 +1966,6 @@ function sidebar() {
   }
 
   const rows = [];
-  if (S.mode === 'continuous' && S.pts.length >= 2) {
-    const c = curve();
-    // one count, not two: the gamut is part of the feasible set, so an
-    // out-of-gamut sample was always also an off-set one and the second row
-    // only ever repeated the first with a longer reach
-    const bad = violations(c).filter((x) => x > 1e-4).length;
-    rows.push(['perceived end-to-end', perceive(arcLength(c, M())).toFixed(1), false, null,
-      'Arc length after diminishing returns.'],
-      ['invalid samples', `${bad}/${c.length}`, bad > 0, null,
-      'Curve samples outside the gamut, the bounds or a keep-out.']);
-    /**
-     * Neighbor differences summed, over the true end-to-end one. This is a
-     * reading about the SPACE, not about the palette: it tracks arc length and
-     * swatch count, so a flawless colormap does not score 1 and a palette
-     * spanning nothing scores exactly 1. Nothing optimizes it, and nothing
-     * should — the way to make differences add up is to have no range.
-     *
-     * Dividing by what an even split of the same total would give does NOT
-     * turn it into a quality measure, which was worth checking: palette() is
-     * resampled uniformly in arc length, so its perceived steps are already
-     * equal by construction and that ratio is 1.000 for every colormap.
-     */
-    if (pal.length >= 3) {
-      const steps = pal.reduce((a, p, i) => (i ? a + pd(pal[i - 1], p, EUCLIDEAN) : 0), 0);
-      rows.push(['additivity gap', `${(steps / perceive(arcLength(c, EUCLIDEAN))).toFixed(2)}×`, false, null,
-        'Summed neighbor steps over the true difference.']);
-    }
-  }
   if (S.obs.length) {
     const probe = S.mode === 'continuous' && S.pts.length >= 2 ? curve() : pal;
     const hit = probe.reduce((a, p) => a + obstaclePenalty(p, S.obs, M(), primary()), 0);
