@@ -2,21 +2,32 @@
 
 #### Space
 
-Colors are the points of $M=\mathbb{R}^3$, [Oklab](https://en.wikipedia.org/wiki/Oklab_color_space)
-coordinates scaled by 100. A color is $p=(L,a,b)$ with lightness $L\in[0,100]$, chroma
-$C(p)=\sqrt{a^2+b^2}$, and hue $h(p)=\operatorname{atan2}(b,a)$.
+Colors are the points of $M=\mathbb{R}^3$, [Oklab](https://en.wikipedia.org/wiki/Oklab_color_space) coordinates scaled by 100.
+A color is $p=(L,a,b)$ with lightness $L\in[0,100]$, chroma $C(p)=\sqrt{a^2+b^2}$, and hue $h(p)=\operatorname{atan2}(b,a)$.
 
-A symmetric positive definite $g(p)\in\mathbb{R}^{3\times3}$ sets the cost of a short step at
-$p$. Segment lengths use the midpoint rule. Path length is the sum over segments:
+A symmetric positive definite $g(p)\in\mathbb{R}^{3\times3}$ sets the cost of a short step at $p$.
+Segment lengths use the midpoint rule.
+Path length is the sum over segments:
 
 $$
 \ell_g(p,q)=\sqrt{(q-p)^{\top}g\!\left(\tfrac{p+q}{2}\right)(q-p)},\qquad
    \ell_g(\gamma)=\sum_{k}\ell_g(\gamma_k,\gamma_{k+1})
 $$
 
-$g=J^{\top}J$, where $J$ is the Jacobian at $p$ of the map from $M$ to the working space
-selected in the panel, scaled so the gray axis measures 100 in every space. Choosing Oklab gives
-$g=I$ and the ordinary Euclidean length, written $\ell_I$.
+$g=J^{\top}AJ$, where $J$ is the Jacobian at $p$ of the map from $M$ to the working space selected in the panel and $A$ is that space's form on differences, scaled so the gray axis measures 100 in every space.
+Choosing Oklab gives $g=I$ and the ordinary Euclidean length, written $\ell_I$.
+
+$A$ is the identity for every space whose own coordinates are what a difference is measured in, which is all of them but one.
+CIEDE2000 is a weighting of CIELAB differences rather than a space to convert into, and for a small difference its formula
+
+$$
+\Delta E_{00}^2=\left(\frac{\Delta L}{S_L}\right)^2+\left(\frac{\Delta C'}{S_C}\right)^2
+   +\left(\frac{\Delta H'}{S_H}\right)^2+R_T\,\frac{\Delta C'}{S_C}\,\frac{\Delta H'}{S_H}
+$$
+
+is a quadratic form on $(\mathrm{d}L,\ \mathrm{d}C',\ C'\mathrm{d}h')$: the three weights are functions of the point, and $\Delta H'\to C'\mathrm{d}h'$ as the pair closes up.
+So it is a metric tensor and goes through the same machinery as the rest.
+The cross term $R_T$ is what makes $A$ necessary, since it puts $g$ beyond anything $J^{\top}J$ can produce.
 
 Perceived difference is a concave function of length:
 
@@ -25,9 +36,9 @@ d(p,q)=f\bigl(\ell_g(p,q)\bigr),\qquad f(s)=s_0\ln\left(1+\frac{s}{s_0}\right),\
    s_0=\frac{100}{5.34}\approx 18.7,\qquad f'(0)=1
 $$
 
-Concavity of $f$ makes $d$ [subadditive](https://en.wikipedia.org/wiki/Subadditivity):
-$d(p,r)\le d(p,q)+d(q,r)$, strictly in general. Accumulate along a path with $\ell_g$; compare
-two colors with $d$. Write $d_I$ for $d$ taken with $g=I$.
+Concavity of $f$ makes $d$ [subadditive](https://en.wikipedia.org/wiki/Subadditivity): $d(p,r)\le d(p,q)+d(q,r)$, strictly in general.
+Accumulate along a path with $\ell_g$; compare two colors with $d$.
+Write $d_I$ for $d$ taken with $g=I$.
 
 #### Variables
 

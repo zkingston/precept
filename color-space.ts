@@ -356,7 +356,9 @@ export const internals = {
 export type Space = { name: string; axes: [string, string, string];
   from: (xyz: Vec3) => Vec3; to: (c: Vec3) => Vec3;
   /** what the METRIC differentiates, when that is not the space's own map */
-  metricFrom?: (xyz: Vec3) => Vec3 };
+  metricFrom?: (xyz: Vec3) => Vec3;
+  /** quadratic form on differences IN THIS SPACE, when it is not the identity */
+  form?: (c: Vec3) => Mat3 };
 
 const D = 6 / 29;
 const labf = (t: number) => (t > D ** 3 ? Math.cbrt(t) : t / (3 * D * D) + 4 / 29);
@@ -481,6 +483,60 @@ function cam02Inverse(J: number, M: number, h: number): Vec3 {
 const rgb01 = (xyz: Vec3): Vec3 => apply(mats('srgb').from, xyz).map(enc) as Vec3;
 const unrgb01 = (c: Vec3): Vec3 => apply(mats('srgb').to, c.map(dec) as Vec3);
 
+/**
+ * CIEDE2000 (CIE 142:2001) as a metric, which is what its line element is.
+ *
+ * The formula weights a difference already expressed in CIELAB, so it is not a
+ * space to convert into. Written for two colors it is
+ *
+ *   dE00^2 = (dL/SL)^2 + (dC'/SC)^2 + (dH'/SH)^2 + RT (dC'/SC)(dH'/SH)
+ *
+ * which for a SMALL difference is a quadratic form on (dL, dC', C' dh'): the
+ * three weights and the rotation term are functions of the point, and dH'
+ * -> C' dh' as the pair closes up. That is a metric tensor, so it drops
+ * straight into the same machinery as every other space here.
+ *
+ * Two details are what make it a form rather than a distance function. The
+ * a-axis stretch a' = a(1+G) uses the MEAN chroma of the pair, which in the
+ * limit is the chroma at the point, so it is the constant 1+G on da. And RT is
+ * a genuine cross term between chroma and hue -- the reason dE00 cannot be
+ * written as J'J for any map, and the reason this needs `form` at all.
+ *
+ * Positive definite everywhere: the 2x2 chroma-hue block has determinant
+ * (1 - RT^2/4)/(SC SH)^2, and |RT| <= 2 sin(60 deg) = 1.73 by construction.
+ */
+const P25_7 = 25 ** 7;
+const DEG = Math.PI / 180;
+
+export const de2000Form = ([L, a, b]: Vec3): Mat3 => {
+  const C7 = Math.hypot(a, b) ** 7;
+  const G = 0.5 * (1 - Math.sqrt(C7 / (C7 + P25_7)));
+  const k = 1 + G, ap = a * k;                         // the a-axis stretch
+  const Cp = Math.hypot(ap, b);
+  const hp = Cp < 1e-12 ? 0 : Math.atan2(b, ap);
+  const hd = ((hp / DEG) % 360 + 360) % 360;
+
+  const dl = L - 50;
+  const SL = 1 + (0.015 * dl * dl) / Math.sqrt(20 + dl * dl);
+  const SC = 1 + 0.045 * Cp;
+  const T = 1 - 0.17 * Math.cos((hd - 30) * DEG) + 0.24 * Math.cos(2 * hd * DEG)
+              + 0.32 * Math.cos((3 * hd + 6) * DEG) - 0.2 * Math.cos((4 * hd - 63) * DEG);
+  const SH = 1 + 0.015 * Cp * T;
+  const Cp7 = Cp ** 7;
+  const RT = -Math.sin(2 * (30 * Math.exp(-(((hd - 275) / 25) ** 2))) * DEG)
+             * 2 * Math.sqrt(Cp7 / (Cp7 + P25_7));
+
+  // (dL, da, db) -> (dL, dC', C' dh'): stretch a, then rotate by the hue angle
+  const c = Math.cos(hp), sn = Math.sin(hp);
+  const R: Mat3 = [[1, 0, 0], [0, k * c, sn], [0, -k * sn, c]];
+  const x = RT / (2 * SC * SH);
+  const M: Mat3 = [[1 / (SL * SL), 0, 0], [0, 1 / (SC * SC), x], [0, x, 1 / (SH * SH)]];
+  // R' M R
+  return [0, 1, 2].map((i) => [0, 1, 2].map((j) =>
+    [0, 1, 2].reduce((acc, u) => acc + [0, 1, 2].reduce(
+      (t, v) => t + R[u][i] * M[u][v] * R[v][j], 0), 0))) as Mat3;
+};
+
 export const SPACES: Record<string, Space> = {
   oklab: { name: 'Oklab (2020)', axes: ['L', 'a', 'b'], from: fromXYZ, to: toXYZ },
 
@@ -494,6 +550,13 @@ export const SPACES: Record<string, Space> = {
       const fy = (L + 16) / 116;
       return [labfi(fy + a / 500), labfi(fy), labfi(fy - b / 200)].map((v, i) => v * CHART_WHITE[i]) as Vec3;
     },
+  },
+
+  de2000: {
+    name: 'CIEDE2000 (2001)', axes: ['L*', 'a*', 'b*'],
+    from: (xyz) => SPACES.cielab.from(xyz),
+    to: (c) => SPACES.cielab.to(c),
+    form: de2000Form,
   },
 
   cieluv: {
@@ -666,10 +729,14 @@ const metricSpace = (p: Vec3, k: string): Vec3 => {
 const NEUTRAL_SCALE: Record<string, number> = {};
 function neutralScale(k: string): number {
   if (NEUTRAL_SCALE[k] === undefined) {
+    const form = SPACES[k].form;
     let len = 0;
     for (let i = 0; i < 128; i++) {
       const a = metricSpace([(i * 100) / 128, 0, 0], k), b = metricSpace([((i + 1) * 100) / 128, 0, 0], k);
-      len += Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const d: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      // measured with the space's own form, so the gray axis is 100 under the
+      // distance that space actually uses and not under a stand-in for it
+      len += form ? Math.sqrt(quad(form(a.map((v, j) => (v + b[j]) / 2) as Vec3), d)) : Math.hypot(...d);
     }
     NEUTRAL_SCALE[k] = 100 / len;
   }
@@ -716,18 +783,29 @@ const D_SPACE: Record<string, (xyz: Vec3) => M3> = {
     const d = lms.map((v, i) => (0.43 * Math.max(Math.abs(v / IPT_W[i]), 1e-9) ** (0.43 - 1)) / IPT_W[i]);
     return mm(IPT_OPP.map((r) => [100 * r[0] * d[0], 100 * r[1] * d[1], 100 * r[2] * d[2]]), IPT_LMS);
   },
-};
+};// CIEDE2000's coordinates ARE CIELAB's -- only the form on differences
+// differs -- so it differentiates through the same analytic Jacobian.
+D_SPACE.de2000 = D_SPACE.cielab;
+
 
 export function spaceMetric(k = params.space): Metric {
   if (k === 'oklab') return EUCLIDEAN;                 // the chart is its own space
   const w = neutralScale(k) ** 2, h = 0.05;
-  const gram = (col: Vec3[]) => [0, 1, 2].map((i) => [0, 1, 2].map((j) =>
-    w * (col[i][0] * col[j][0] + col[i][1] * col[j][1] + col[i][2] * col[j][2]))) as Mat3;
+  const form = SPACES[k].form;
+  // g = w J' A J, for J the Jacobian into the space and A its form on
+  // differences. A is the identity for every space whose own coordinates are
+  // already what a difference is measured in, which is all of them but one.
+  const gram = (col: Vec3[], A: Mat3 | null) => {
+    const Ac = A ? col.map((v) => apply(A, v)) : col;
+    return [0, 1, 2].map((i) => [0, 1, 2].map((j) =>
+      w * (col[i][0] * Ac[j][0] + col[i][1] * Ac[j][1] + col[i][2] * Ac[j][2]))) as Mat3;
+  };
 
   const dSpace = D_SPACE[k];
   if (dSpace) return (p) => {
     const J = mm(dSpace(toXYZ(p)), dXyzDChart(p));     // rows: space, columns: chart
-    return gram([0, 1, 2].map((i) => [J[0][i], J[1][i], J[2][i]] as Vec3));
+    return gram([0, 1, 2].map((i) => [J[0][i], J[1][i], J[2][i]] as Vec3),
+                form ? form(metricSpace(p, k)) : null);
   };
 
   return (p) => {
@@ -738,7 +816,7 @@ export function spaceMetric(k = params.space): Metric {
       const [sa, sb] = [metricSpace(a, k), metricSpace(b, k)];
       col.push(sb.map((v, j) => (v - sa[j]) / (2 * h)) as Vec3);
     }
-    return gram(col);
+    return gram(col, form ? form(metricSpace(p, k)) : null);
   };
 }
 
