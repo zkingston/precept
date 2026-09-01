@@ -56,11 +56,12 @@ palette in discrete mode.
 #### Feasible set
 
 $$
-\mathcal{F}=G\cap\Lambda\cap X\cap H\cap\textstyle\bigcap_j B_j^{\,c}\cap\bigcap_m E_m
+\mathcal{F}=G\cap V\cap\Lambda\cap X\cap H\cap\textstyle\bigcap_j B_j^{\,c}\cap\bigcap_m E_m
 $$
 
 <dl>
   <dt>$G=\{p:\operatorname{rgb}_\Gamma(p)\in[0,1]^3\}$</dt><dd><a href="https://en.wikipedia.org/wiki/Gamut">gamut</a> of primaries $\Gamma$</dd>
+  <dt>$V=\{p:n_i^{\top}\mathrm{XYZ}(p)\ge 0\ \forall i\}$</dt><dd>physically realisable, 27 planes</dd>
   <dt>$\Lambda=\{p: L_-\le L\le L_+\}$</dt><dd>lightness band</dd>
   <dt>$X=\{p: C_-\le C(p)\le C_+\}$</dt><dd>chroma band</dd>
   <dt>$H=\{p: C(p)<1 \ \vee\ h(p)\in[h_-,h_+]\}$</dt><dd>hue arc, mod $360$</dd>
@@ -77,6 +78,10 @@ $$
 c(p)=\sqrt{\phi_G(p)}+[L_--L]_++[L-L_+]_++[C_--C]_++[C-C_+]_+
       +\frac{\pi}{180}\,C\,\Delta h(p)+\sqrt{\phi_B(p)}+\sqrt{\phi_E(p)}
 $$
+
+$V$ is the convex cone over the spectral locus: the colors some light can actually make.
+It costs nothing for a gamut whose primaries are real, which is every one here but two, and it removes a quarter of ProPhoto's cube and a sixth of ACEScg's.
+Without it a node could be moved somewhere no spectrum reaches, and win separation there.
 
 A control point is put back into $\mathcal{F}$ by projection,
 $p_i\leftarrow\Pi_{\mathcal{F}}(p_i)$, onto $G,\Lambda,X,H,E,B$ in turn, repeating until

@@ -578,7 +578,7 @@ import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { marked } from 'marked';
 import {
-  fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
+  fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, visible, toLCh, fromLCh,
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty, delta, lineDelta,
   obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, gamutFromICC, internals,
   SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES, SPECTRAL_LOCUS, toXYZ, fromXYZ,
@@ -916,6 +916,7 @@ uniform float uScale;
 uniform vec2 uLB, uCB, uHue;
 uniform mat3 uLmsLab, uXyzLms, uLmsXyz, uLabLms;
 uniform mat3 uIptOppI, uIptLmsI, uGamut, uLinSrgb, uXyzSrgb, uCvdM, uBr1, uBr2;
+uniform vec3 uVis[27];
 uniform vec3 uBrN;
 uniform float uBrMix;
 uniform mat3 uIcOppI, uIcLmsI, uCamBack;
@@ -1018,6 +1019,19 @@ bool inBounds(vec3 lab) {
          && (chroma < 1.0 || inArc(hue));
 }
 
+/** the convex cone over the spectral locus: colors a light can actually make */
+bool visible(vec3 xyz) {
+  for (int i = 0; i < 27; i++) if (dot(uVis[i], xyz) < -1e-9) return false;
+  return true;
+}
+
+/** in the working gamut AND physically realisable — the feasible set's own test */
+bool reachable(vec3 xyz) {
+  vec3 ling = uGamut * xyz;
+  if (any(lessThan(ling, vec3(-1e-9))) || any(greaterThan(ling, vec3(1.0 + 1e-9)))) return false;
+  return visible(xyz);
+}
+
 /** XYZ, through the selected observer, to something a monitor can show */
 vec3 shown(vec3 xyz) {
   vec3 lin = uLinSrgb * xyz;
@@ -1047,23 +1061,26 @@ void main() {
   else c = vec3(mix(uLo.x, uHi.x, vUv.y), mix(uLo.y, uHi.y, vUv.x), uT);
 
   vec3 xyz = spaceToXyz(c);
-  vec3 ling = uGamut * xyz;
-  if (any(lessThan(ling, vec3(-1e-9))) || any(greaterThan(ling, vec3(1.0 + 1e-9)))) discard;
+  if (!reachable(xyz)) discard;
   // out of bounds is cut away rather than dimmed: what is left is exactly the
   // set you asked for, with nothing to read past
   if (!inBounds(chartOf(xyz))) discard;
   gl_FragColor = vec4(shown(xyz), uOpacity);
 }`;
 
-// The solid is the gamut boundary, so there is nothing to test — every fragment
-// is reachable by construction. Per fragment rather than per vertex also means
-// the color stops being an interpolation across triangles that are large where
-// the surface curves most.
+// The mesh is the RGB cube's surface, so the box needs no testing — but the
+// feasible set is that cube MET WITH the visible cone, and for a wide gamut the
+// cone cuts through it. Where it does, the fragment goes: what is left is the
+// part of the cube's surface that is real, and the opening is where the cone's
+// own surface would be. Per fragment rather than per vertex also means the color
+// stops being an interpolation across triangles that are large where the surface
+// curves most.
 const SHELL_FRAG = COLOR_GLSL + `
 varying vec3 vPos;
 void main() {
   vec3 c = vec3(vPos.y / uScale + uMid.x, vPos.x / uScale + uMid.y, vPos.z / uScale + uMid.z);
   vec3 xyz = spaceToXyz(c);
+  if (!visible(xyz)) discard;
   if (!inBounds(chartOf(xyz))) discard;
   gl_FragColor = vec4(shown(xyz), uOpacity);
 }`;
@@ -1085,8 +1102,7 @@ uniform int uCap;
 void main() {
   vec3 c = vec3(vPos.y / uScale + uMid.x, vPos.x / uScale + uMid.y, vPos.z / uScale + uMid.z);
   vec3 xyz = spaceToXyz(c);
-  vec3 ling = uGamut * xyz;
-  if (any(lessThan(ling, vec3(-1e-9))) || any(greaterThan(ling, vec3(1.0 + 1e-9)))) discard;
+  if (!reachable(xyz)) discard;
   vec3 lab = chartOf(xyz);
   float chroma = length(lab.yz);
   float hue = degrees(atan(lab.z, lab.y));
@@ -1111,6 +1127,7 @@ const colorUniforms = () => ({
       uLmsXyz: { value: new T.Matrix3() }, uLabLms: { value: new T.Matrix3() },
       uIptOppI: { value: new T.Matrix3() }, uIptLmsI: { value: new T.Matrix3() },
       uGamut: { value: new T.Matrix3() }, uLinSrgb: { value: new T.Matrix3() },
+      uVis: { value: internals.VISIBLE.map((n) => new T.Vector3(...n)) },
       uXyzSrgb: { value: new T.Matrix3() },
   uCvdM: { value: new T.Matrix3() },
   uBr1: { value: m3([internals.BRETTEL_TRITAN.h1.slice(0, 3), internals.BRETTEL_TRITAN.h1.slice(3, 6), internals.BRETTEL_TRITAN.h1.slice(6)]) },
@@ -1196,7 +1213,10 @@ function buildShell() {
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const c = []; c[u] = (i / N) ** 3; c[v] = (j / N) ** 3; c[w] = f;
       const chart = fromLinear(c);
-      maxC = Math.max(maxC, Math.hypot(chart[1], chart[2]));
+      // only the reachable part counts toward the slider's top, or the control
+      // would offer a chroma the feasible set has just stopped admitting —
+      // ProPhoto's cube reaches 148 and its visible part 52
+      if (visible(toXYZ(chart))) maxC = Math.max(maxC, Math.hypot(chart[1], chart[2]));
       const p = wpt(chart);
       pos.setXYZ(k++, p.x, p.y, p.z);
     }
