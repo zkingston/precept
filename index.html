@@ -3862,8 +3862,10 @@ $('aboutbtn').onclick = () => $('aboutdlg').showModal();
  */
 const chroma = $('chroma');
 const CH = { w: 420, h: 450, m: { l: 34, r: 10, t: 10, b: 26 }, xmax: 0.75, ymax: 0.85 };
-let locusFill = null;                              // sRGB, so it survives a gamut change
+let locusFill = null, locusKey = null;             // sRGB, so it survives a gamut change
 let locusLCh = null;                               // per pixel, so bounds are arithmetic
+/** the deficiency as a matrix on linear sRGB, which is where Machado defines it */
+const cvdM = () => (S.cvd === 'none' ? null : internals.cvdMatrix(S.cvd, S.sev));
 
 const chX = (x) => CH.m.l + (x / CH.xmax) * (CH.w - CH.m.l - CH.m.r);
 const chY = (y) => CH.h - CH.m.b - (y / CH.ymax) * (CH.h - CH.m.t - CH.m.b);
@@ -3881,7 +3883,7 @@ const locusPath = (g) => {
  * like the familiar one: a chromaticity has no brightness of its own, so some
  * choice has to be made, and the brightest is the one that shows the most hue.
  */
-function paintLocus() {
+function paintLocus(cvd) {
   const img = new ImageData(CH.w, CH.h), d = img.data;
   // C/L and hue at each chromaticity, which is all the bounds test needs and
   // does not depend on them — see boundsMask
@@ -3903,7 +3905,8 @@ function paintLocus() {
         const y = ((CH.h - CH.m.b - py) / (CH.h - CH.m.t - CH.m.b)) * CH.ymax;
         if (y <= 0) continue;
         const xyz = [x / y, 1, (1 - x - y) / y];
-        const rgb = [0, 1, 2].map((r) => M[r][0] * xyz[0] + M[r][1] * xyz[1] + M[r][2] * xyz[2]);
+        let rgb = [0, 1, 2].map((r) => M[r][0] * xyz[0] + M[r][1] * xyz[1] + M[r][2] * xyz[2]);
+        if (cvd) rgb = [0, 1, 2].map((r) => cvd[3 * r] * rgb[0] + cvd[3 * r + 1] * rgb[1] + cvd[3 * r + 2] * rgb[2]);
         const mx = Math.max(...rgb);
         if (!(mx > 0)) continue;
         const o = 4 * (py * CH.w + px);
@@ -3981,12 +3984,14 @@ function drawChroma() {
   // through a canvas rather than putImageData, which writes device pixels and
   // ignores the transform -- on a 2x display that put the fill at quarter size
   // in the corner while the clip path, which IS transformed, stayed put
-  g.drawImage(locusFill ??= (() => {
+  const key = `${S.cvd}|${S.sev}`;
+  if (key !== locusKey) {
     const off = document.createElement('canvas');
     off.width = CH.w; off.height = CH.h;
-    off.getContext('2d').putImageData(paintLocus(), 0, 0);
-    return off;
-  })(), 0, 0, CH.w, CH.h);
+    off.getContext('2d').putImageData(paintLocus(cvdM()), 0, 0);
+    locusFill = off; locusKey = key;
+  }
+  g.drawImage(locusFill, 0, 0, CH.w, CH.h);
   // what the bounds rule out, veiled rather than cut away: the horseshoe is the
   // landmark you read the rest against, and removing most of it loses that
   const mask = boundsMask();
@@ -4022,17 +4027,40 @@ function drawChroma() {
   locusPath(g);
   g.strokeStyle = 'rgba(232,232,236,.55)'; g.lineWidth = 1; g.stroke();
 
+  /**
+   * Where a chromaticity lands for the observer on screen.
+   *
+   * Machado is a matrix on linear sRGB, so it is linear on XYZ too, and a
+   * linear map sends chromaticities to chromaticities: the triangle stays a
+   * triangle and collapses toward the confusion line as severity rises. The
+   * frame does not move -- the locus and the axes stay the normal observer's,
+   * because a simulation reports the color a normal observer would see, not a
+   * different set of matching functions.
+   */
+  const cv = cvdM();
+  const seen = ([x, y]) => {
+    if (!cv) return [x, y];
+    const xyz = [x / y, 1, (1 - x - y) / y];
+    const M0 = internals.rgbFromXYZ('srgb'), M1 = internals.xyzFromRGB('srgb');
+    const l = [0, 1, 2].map((r) => M0[r][0] * xyz[0] + M0[r][1] * xyz[1] + M0[r][2] * xyz[2]);
+    const c = [0, 1, 2].map((r) => cv[3 * r] * l[0] + cv[3 * r + 1] * l[1] + cv[3 * r + 2] * l[2]);
+    const q = [0, 1, 2].map((r) => M1[r][0] * c[0] + M1[r][1] * c[1] + M1[r][2] * c[2]);
+    const t = q[0] + q[1] + q[2];
+    return t > 0 ? [q[0] / t, q[1] / t] : [x, y];
+  };
+
   /** a gamut's triangle, and its white point */
   const triangle = (k, stroke, wide, dot) => {
     const gm = GAMUTS[k];
     if (!gm?.p) return;
     g.beginPath();
-    gm.p.forEach(([x, y], i) => (i ? g.lineTo(chX(x), chY(y)) : g.moveTo(chX(x), chY(y))));
+    gm.p.map(seen).forEach(([x, y], i) => (i ? g.lineTo(chX(x), chY(y)) : g.moveTo(chX(x), chY(y))));
     g.closePath();
     g.strokeStyle = stroke; g.lineWidth = wide; g.stroke();
     if (!dot) return;
     g.fillStyle = stroke;
-    g.beginPath(); g.arc(chX(gm.w[0]), chY(gm.w[1]), 3, 0, 7); g.fill();
+    const [wx, wy] = seen(gm.w);
+    g.beginPath(); g.arc(chX(wx), chY(wy), 3, 0, 7); g.fill();
     g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 1; g.stroke();
   };
   // Black, not the interface foreground: this sits on the filled horseshoe
@@ -4045,7 +4073,7 @@ function drawChroma() {
   // where the palette actually sits
   const pal = palette();
   for (const p of pal) {
-    const [X, Y, Z] = toXYZ(p), s = X + Y + Z;
+    const [X, Y, Z] = toXYZ(view(p)), s = X + Y + Z;
     if (!(s > 0)) continue;
     g.beginPath(); g.arc(chX(X / s), chY(Y / s), 3.4, 0, 7);
     g.fillStyle = out(p); g.fill();
@@ -4059,9 +4087,11 @@ function drawChroma() {
     + (params.gamut === 'srgb' ? '' : 'The faint triangle is sRGB. ')
     + 'Colors are drawn in sRGB, so anything outside that triangle is shown at the nearest it can manage. '
     + (ruled === 0
-      ? 'The bounds rule out no chromaticity.'
+      ? 'The bounds rule out no chromaticity. '
       : 'The veiled region is what the chroma and hue bounds rule out. Lightness has no axis here, '
-        + 'and enters only by limiting what the chroma band can reach.');
+        + 'and enters only by limiting what the chroma band can reach. ')
+    + (cv ? `Everything is through ${observer()}: the triangle is where those primaries land, `
+          + 'and the axes stay the normal observer\'s.' : '');
 }
 $('chromabtn').onclick = () => { $('chromadlg').showModal(); drawChroma(); };
 $('chromaclose').onclick = () => $('chromadlg').close();
