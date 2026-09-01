@@ -449,7 +449,6 @@
     <section>
       <h2>View</h2>
       <div class="row"><label class="f">space</label><select id="spacesel" style="flex:1"></select></div>
-      <div class="row"><label class="f">marks</label><select id="marksel" style="flex:1"></select></div>
       <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select>
         <button id="iccbtn" style="padding:4px 7px">ICC…</button>
         <input type="file" id="iccfile" accept=".icc,.icm,application/vnd.iccprofile" hidden></div>
@@ -723,6 +722,21 @@
     <li><b>arc length</b> <span class="d">every run's length, added up</span>
       \[ F_{\text{arc}}=\sum_{r\in\mathcal{R}}\ell_r \]</li>
 
+    <li><b>bending</b> <span class="d">how sharply the ramp curves, along the curve itself</span>
+      \[ F_{\text{bend}}=\frac1{|\mathcal{R}|}\sum_{r\in\mathcal{R}}
+         \frac{\ell_r}{4\pi^2}\int_{\gamma_r}\kappa^2\,ds \]
+      <p>\(\kappa\) is the <a href="https://en.wikipedia.org/wiki/Curvature" target="_blank" rel="noopener">curvature</a>
+         of the run, and the integral is its
+         <a href="https://en.wikipedia.org/wiki/Elastica_theory" target="_blank" rel="noopener">bending energy</a>.
+         On the sampled curve the turn \(\theta_i\) at a sample is divided by the arc length that
+         sample owns, so the sum is \(\int\kappa^2ds\) and does not change when you add a control
+         point. The factor \(\ell_r/4\pi^2\) makes it dimensionless: a circle is 1 at any radius,
+         a straight ramp is 0.</p>
+      <p>Squared rather than absolute, which is the reason to prefer it. Total turning alone cannot
+         separate a kink from a sweep — a ramp that turns 180° at one point and a smooth half-circle
+         both total 180°. Squaring divides the turn by the length it happens over, so a tight bend
+         costs far more than the same rotation spread out.</p></li>
+
     <li><b>lightness profile</b> <span class="d">distance from the curve drawn in the plot</span>
       \[ F_{\text{lramp}}=\frac1n\sum_i\bigl(L(\pi_i)-\widehat L(t_i)\bigr)^2 \]</li>
 
@@ -841,7 +855,7 @@ import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty, delta, lineDelta,
   obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, gamutFromICC, internals,
-  SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES, MARKS, markScale,
+  SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES,
 } from './color-space.ts';
 
 // We do every color computation ourselves and hand three gamma-encoded sRGB
@@ -2400,7 +2414,7 @@ for (const [k, f] of Object.entries(FORMATS)) {
  * arrays the file also carries, and restoring it buys nothing.
  */
 const sceneJSON = () => JSON.stringify({
-  precept: 1, space: params.space, gamut: params.gamut, mark: params.mark,
+  precept: 1, space: params.space, gamut: params.gamut,
   // a profile is not one of the built-ins, so it has to travel with the scene
   icc: params.gamut.startsWith('icc-') ? GAMUTS[params.gamut] : undefined,
   ...S, sel: undefined, marks: undefined,
@@ -2444,7 +2458,6 @@ function loadScene(text) {
 
 function applyScene(o) {
   params.space = o.space; params.gamut = o.gamut;
-  params.mark = o.mark && MARKS[o.mark] ? o.mark : 'off';   // scenes written before marks existed
   for (const k of Object.keys(S)) if (k in o) S[k] = o[k];
   if (!('pin' in o)) S.pin = [];                 // a scene written before pins existed
   S.sel = null;
@@ -2993,6 +3006,7 @@ const HELP = {
   pair:     "Even spacing over every pair.",
   contr:    "Swatches under the contrast floor.",
   lsep:     "Pairs closer in lightness than the palette could manage.",
+  bend:     "Squared curvature along the ramp. A circle is 1, a straight line 0.",
   sym:      "Lightness asymmetry between a diverging map's two arms.",
   wind:     "How far a loop's hue turn is from a full circle.",
   space:    "Uneven control point spacing.",
@@ -3041,7 +3055,7 @@ const contrastRatio = (a, b) => {
  * which is the check on the list itself.
  *
  * Nearest under this app's own metric rather than sRGB distance, so which name
- * you get moves with the space and the mark size like everything else does.
+ * you get moves with the space like everything else does.
  * Along the chord, not the geodesic: this is an argmin over 148 fixed anchors,
  * so the ranking is what matters and not the lengths. The geodesic costs 123ms
  * a lookup in CAM02-UCS against 2.8ms, a visible hitch on a click, and it does
@@ -3313,6 +3327,56 @@ const OBJ = [
       return k ? e / k : 0;
     } },
   /**
+   * Bending, measured on the curve rather than on the points that generate it.
+   *
+   * The elastic energy of a wire, the integral of squared curvature along the
+   * ramp. Discretely, the turn at a sample divided by the arc length that
+   * sample owns: theta^2 / l summed over the curve is a Riemann sum for
+   * integral k^2 ds, and it converges -- on a circle of radius R at any sample
+   * count it gives exactly 2*pi/R, which is what the integral is.
+   *
+   * Squared, not absolute, and that is the whole reason to prefer it. Total
+   * turning alone cannot tell a kink from a sweep: a ramp that turns 180
+   * degrees at one point and a smooth half-circle both total 180. Squaring
+   * weights the turn by how little length it happens over, so a tight bend
+   * costs far more than the same rotation spread out -- which is the ColorMaker
+   * two-scale intent (Salvi et al., CHI 2024) falling out of one term instead
+   * of two passes at different decimations.
+   *
+   * Reported as L * integral k^2 ds over 4*pi^2, which is dimensionless and
+   * scale invariant: a circle reads 1 at any radius, a straight ramp 0. So the
+   * number is a property of the SHAPE, and unlike the control-polygon version
+   * it does not move when you add a point.
+   */
+  { key: 'bend', label: 'bending', mode: 'continuous', bad: true,
+    f: (x) => {
+      let tot = 0, k = 0;
+      x.curves.forEach((C, ci) => {
+        // spline() ends a closed curve back on its start; drop the repeat so
+        // the seam is one vertex and not two
+        const closed = runs()[ci].closed;
+        const P = closed && C.length > 1 ? C.slice(0, -1) : C;
+        const m = P.length;
+        if (m < 3) return;
+        const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+        let E = 0, L = 0;
+        for (let i = closed ? 0 : 1; i < (closed ? m : m - 1); i++) {
+          const u = sub3(P[i], P[(i - 1 + m) % m]), v = sub3(P[(i + 1) % m], P[i]);
+          const nu = Math.hypot(...u), nv = Math.hypot(...v);
+          if (nu < 1e-12 || nv < 1e-12) continue;
+          // atan2 of |u x v| against u.v — accurate for the small angles that
+          // dominate a finely sampled curve, where acos loses most of its digits
+          const cr = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+          const th = Math.atan2(Math.hypot(...cr), u[0] * v[0] + u[1] * v[1] + u[2] * v[2]);
+          E += (th * th) / ((nu + nv) / 2);       // k^2 times the length this sample owns
+        }
+        for (let i = 0; i + 1 < (closed ? m + 1 : m); i++) L += Math.hypot(...sub3(P[(i + 1) % m], P[i]));
+        tot += (L * E) / (4 * Math.PI ** 2);
+        k++;
+      });
+      return k ? tot / k : 0;
+    } },
+  /**
    * What makes a diverging map diverging: the two arms are mirror images in
    * LIGHTNESS about the middle. Not in hue or chroma — the arms being different
    * hues is the entire point, and a term that pulled them together would undo
@@ -3399,7 +3463,7 @@ const OBJ = [
 
 /** Terms included in the combined step. Constraints on, shaping opt-in. */
 // Shaping terms that fight the rest of the palette unless you ask for them.
-const OPT_IN = ['repcvd', 'contr', 'lsep', 'sym', 'wind'];
+const OPT_IN = ['repcvd', 'contr', 'lsep', 'sym', 'wind', 'bend'];
 S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
 /** Relative pull of each term in the combined step. */
 S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
@@ -4860,20 +4924,12 @@ function mirror() {
   $('sevv').textContent = unit1(S.sev);
   $('shellv').textContent = unit1(S.shell);
   $('spacesel').value = params.space; $('gamutsel').value = params.gamut;
-  $('marksel').value = params.mark;
   ['sL', 'sA', 'sB'].forEach((id, k) => ($(id).value = S.slice[k]));
   for (const id of ['mode', 'tool'])
     for (const b of $(id).children) b.ariaPressed = b.dataset.v === S[id];
   paintBounds(); paintPlotButtons(); applyBg();
 }
 mirror();
-$('marksel').innerHTML = '<option value="off">off · same at every size</option>'
-  + Object.entries(MARKS).map(([k, s]) => `<option value="${k}">${k} · ${s}&deg;</option>`).join('');
-$('marksel').onchange = (e) => {
-  params.mark = e.target.value;
-  disturb();                                   // a different metric is a different problem
-  sync();
-};
 $('spacesel').innerHTML = Object.entries(SPACES)
   .map(([k, sp]) => `<option value="${k}"${k === params.space ? ' selected' : ''}>${sp.name}</option>`).join('');
 paintGamutList();
@@ -4901,7 +4957,6 @@ const HINTS = {
   mode: 'Ramp or swatch set.',
   loadbtn: 'Published palettes, as swatches. Click one to load it.',
   spacesel: 'Space the panels are drawn in and distances measured in.',
-  marksel: 'Tilt the metric for how big the marks will be. Small marks are told apart by lightness.',
   gamutsel: 'Which colors are reachable. ICC loads a matrix/TRC RGB profile.',
   cvd: 'Simulate a color-vision deficiency.',
   sev: 'Below 1 is anomalous trichromacy; 1 is dichromacy.',
