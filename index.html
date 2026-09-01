@@ -581,7 +581,7 @@ import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toLinear, toGamut, inGamut, toLCh, fromLCh,
   arcLength, segLength, perceive, unperceive, resample, spline, gamutPenalty, delta, lineDelta,
   obstaclePenalty, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, params, GAMUTS, gamutFromICC, internals,
-  SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES, SPECTRAL_LOCUS, toXYZ,
+  SPACES, toSpace, fromSpace, spaceExtent, spaceMetric, CUBE_FACES, SPECTRAL_LOCUS, toXYZ, fromXYZ,
 } from './color-space.ts';
 
 // We do every color computation ourselves and hand three gamma-encoded sRGB
@@ -3863,6 +3863,7 @@ $('aboutbtn').onclick = () => $('aboutdlg').showModal();
 const chroma = $('chroma');
 const CH = { w: 420, h: 450, m: { l: 34, r: 10, t: 10, b: 26 }, xmax: 0.75, ymax: 0.85 };
 let locusFill = null;                              // sRGB, so it survives a gamut change
+let locusLCh = null;                               // per pixel, so bounds are arithmetic
 
 const chX = (x) => CH.m.l + (x / CH.xmax) * (CH.w - CH.m.l - CH.m.r);
 const chY = (y) => CH.h - CH.m.b - (y / CH.ymax) * (CH.h - CH.m.t - CH.m.b);
@@ -3882,6 +3883,9 @@ const locusPath = (g) => {
  */
 function paintLocus() {
   const img = new ImageData(CH.w, CH.h), d = img.data;
+  // C/L and hue at each chromaticity, which is all the bounds test needs and
+  // does not depend on them — see boundsMask
+  const ratio = new Float32Array(CH.w * CH.h).fill(NaN), hue = new Float32Array(CH.w * CH.h);
   const M = internals.rgbFromXYZ('srgb');
   const pts = SPECTRAL_LOCUS.map(([x, y]) => [chX(x), chY(y)]);
   for (let py = 0; py < CH.h; py++) {
@@ -3906,9 +3910,58 @@ function paintLocus() {
         for (let c = 0; c < 3; c++)
           d[o + c] = 255 * clamp01(Math.max(0, rgb[c] / mx) ** (1 / 2.2));
         d[o + 3] = 255;
+        const [L1, a1, b1] = fromXYZ(xyz);
+        if (L1 > 0) {
+          const i = py * CH.w + px;
+          ratio[i] = Math.hypot(a1, b1) / L1;
+          hue[i] = ((Math.atan2(b1, a1) * 180) / Math.PI + 360) % 360;
+        }
       }
   }
+  locusLCh = { ratio, hue };
   return img;
+}
+
+/**
+ * Which chromaticities the bounds still allow.
+ *
+ * Lightness has no axis on this diagram — a chromaticity is a color with its
+ * brightness already divided out — so the band cannot be drawn directly. It is
+ * not absent from the answer, though. Oklab is linear in the cube root of a
+ * scale on XYZ, so moving along a chromaticity at fixed hue scales L, a and b
+ * together: hue does not depend on lightness at all, and C/L is a constant of
+ * the chromaticity. Measured, both hold to 1e-10.
+ *
+ * That makes the test exact rather than sampled. The chroma band asks for
+ * C = r·L in [C-, C+], which is an interval in L; intersect it with the
+ * lightness band and the chromaticity survives if what is left is non-empty.
+ * So the lightness band shows up here only through what it lets the chroma
+ * band reach, and on its own it excludes nothing: any chromaticity can be had
+ * at any lightness by turning the luminance up or down.
+ *
+ * The hue arc exempts chroma below 1, as the slice shaders do, but the
+ * exemption has to be read against the chromaticity rather than the color, or
+ * it swallows the diagram: the lightness band reaches 0 by default, so every
+ * chromaticity could be taken near-black, be exempt, and the arc would veil
+ * nothing. What the picture asks instead is whether this chromaticity can be
+ * had at chroma 1 or more at all within the bounds. If it cannot it is neutral
+ * and hue does not apply to it; if it can, it has to lie in the arc.
+ */
+function boundsMask() {
+  const { ratio, hue } = locusLCh;
+  const [lL, lC] = [S.lo[0], S.lo[1]], [hL, hC] = [S.hi[0], S.hi[1]];
+  const anyHue = S.hue[0] === 0 && S.hue[1] === 360;
+  const m = new Uint8Array(CH.w * CH.h);
+  for (let i = 0; i < m.length; i++) {
+    const r = ratio[i];
+    if (Number.isNaN(r)) continue;
+    // the chroma band as an interval in L, met with the lightness band
+    const lo = r > 0 ? Math.max(lL, lC / r) : (lC > 0 ? Infinity : lL);
+    const hi = r > 0 ? Math.min(hL, hC / r) : hL;
+    if (lo > hi) continue;
+    m[i] = anyHue || r * hi < 1 || inHueArc(hue[i]) ? 1 : 0;
+  }
+  return m;
 }
 
 function drawChroma() {
@@ -3917,8 +3970,11 @@ function drawChroma() {
   chroma.style.aspectRatio = `${CH.w} / ${CH.h}`;
   const g = chroma.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.fillStyle = getComputedStyle(document.body).getPropertyValue('--panel') || '#1c1c1f';
+  const panel = getComputedStyle(document.body).getPropertyValue('--panel').trim() || '#1c1c1f';
+  g.fillStyle = panel;
   g.fillRect(0, 0, CH.w, CH.h);
+  g.fillRect(0, 0, 1, 1);
+  const bg = g.getImageData(0, 0, 1, 1).data;
 
   g.save();
   locusPath(g); g.clip();
@@ -3931,6 +3987,22 @@ function drawChroma() {
     off.getContext('2d').putImageData(paintLocus(), 0, 0);
     return off;
   })(), 0, 0, CH.w, CH.h);
+  // what the bounds rule out, veiled rather than cut away: the horseshoe is the
+  // landmark you read the rest against, and removing most of it loses that
+  const mask = boundsMask();
+  let ruled = 0;
+  {
+    const veil = new ImageData(CH.w, CH.h), v = veil.data;
+    for (let i = 0; i < mask.length; i++)
+      if (!mask[i] && !Number.isNaN(locusLCh.ratio[i])) {
+        ruled++;
+        v[4 * i] = bg[0]; v[4 * i + 1] = bg[1]; v[4 * i + 2] = bg[2]; v[4 * i + 3] = 214;
+      }
+    const off = document.createElement('canvas');
+    off.width = CH.w; off.height = CH.h;
+    off.getContext('2d').putImageData(veil, 0, 0);
+    g.drawImage(off, 0, 0, CH.w, CH.h);
+  }
   g.restore();
 
   // axes, under everything that matters
@@ -3985,7 +4057,11 @@ function drawChroma() {
     `${gm.name}, white at (${gm.w[0]}, ${gm.w[1]}). `
     + `${pal.length} swatch${pal.length === 1 ? '' : 'es'} plotted. `
     + (params.gamut === 'srgb' ? '' : 'The faint triangle is sRGB. ')
-    + 'Colors are drawn in sRGB, so anything outside that triangle is shown at the nearest it can manage.';
+    + 'Colors are drawn in sRGB, so anything outside that triangle is shown at the nearest it can manage. '
+    + (ruled === 0
+      ? 'The bounds rule out no chromaticity.'
+      : 'The veiled region is what the chroma and hue bounds rule out. Lightness has no axis here, '
+        + 'and enters only by limiting what the chroma band can reach.');
 }
 $('chromabtn').onclick = () => { $('chromadlg').showModal(); drawChroma(); };
 $('chromaclose').onclick = () => $('chromadlg').close();
