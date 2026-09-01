@@ -311,8 +311,13 @@ export const fromLCh = ([L, C, h]: Vec3): Vec3 => [L, C * Math.cos((h * Math.PI)
  * gamut, on channels of (-9.7e-5, 7.4e-5, -5.5e-5). The slices drew it, the
  * solid could not enclose it, and the two disagreed at the bottom.
  */
-export const inGamut = (p: Vec3, g = params.gamut, eps = 1e-9) =>
-  toLinear(p, g).every((c) => c >= -eps && c <= 1 + eps) && visible(toXYZ(p), eps);
+export const inGamut = (p: Vec3, g = params.gamut, eps = 1e-9) => {
+  // one conversion, not two: toLinear computes toXYZ on the way through, and
+  // asking for both separately made the chart-to-XYZ map the hottest thing in
+  // the solver
+  const xyz = toXYZ(p);
+  return apply(mats(g).from, xyz).every((c) => c >= -eps && c <= 1 + eps) && visible(xyz, eps);
+};
 
 /**
  * The colors a light can actually make: 27 half-planes through the origin of XYZ.
@@ -374,9 +379,10 @@ export const visible = (xyz: Vec3, eps = 1e-9): boolean => {
 
 /** Smooth, ≥0, zero inside the gamut. Penalty term for a trajectory optimizer. */
 export const gamutPenalty = (p: Vec3): number => {
-  const box = toLinear(p).reduce((acc, c) => acc + (c < 0 ? c * c : c > 1 ? (c - 1) ** 2 : 0), 0);
-  // the cone in the same units: XYZ and linear RGB are both on 0..1 here
+  // see inGamut: toXYZ once, reused for both halves of the test
   const xyz = toXYZ(p);
+  const box = apply(mats(params.gamut).from, xyz)
+    .reduce((acc, c) => acc + (c < 0 ? c * c : c > 1 ? (c - 1) ** 2 : 0), 0);
   const s = xyz[0] + xyz[1] + xyz[2];
   if (!(s > 0)) return box;
   return VISIBLE.reduce((acc, n) => {
