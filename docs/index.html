@@ -5,6 +5,14 @@
 <title>Precept Palette Optimizer</title>
 <!-- the emoji as an SVG document, so there is no file to ship or fetch -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌈</text></svg>">
+<!-- three.core.js is the biggest thing the page loads and the last thing it
+     learns it needs: three.module.js is a renderer that imports the rest, so
+     the browser has to fetch and parse 635 kB before it can even discover the
+     1.4 MB behind it. That put the largest file on the far side of a serial
+     hop — it began downloading a second into the load. Naming it here starts
+     it with everything else. It is a hint, not a second fetch; the import
+     below takes it from the module map. -->
+<link rel="modulepreload" href="./vendor/three.core.min.js">
 <style>
   /* Fira, self-hosted, latin plus the one Greek weight the interface needs
      (the ΔL note). Everything Fira has no glyph for — ↺, ◐, the rotate
@@ -43,7 +51,6 @@
                enableSpeech: false, enableBraille: false },
   };
 </script>
-<script defer src="./vendor/mathjax-fira/tex-mml-chtml-mathjax-fira.js"></script>
 <style>
   :root { --bg:#101012; --panel:#1c1c1f; --line:#32323a; --fg:#e8e8ec; --dim:#8b8b96; --hot:#ff5b5b; --sel:#3d5a6c;
           --hud:#33333a; --ctl:#26262b; --link:#7dd3fc;
@@ -568,7 +575,7 @@
 </dialog>
 
 <script type="importmap">
-{ "imports": { "three": "./vendor/three.module.js",
+{ "imports": { "three": "./vendor/three.module.min.js",
                "three/addons/": "./vendor/jsm/",
                "marked": "./vendor/marked.esm.js" } }
 </script>
@@ -576,7 +583,6 @@
 <script type="module">
 import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { marked } from 'marked';
 import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toGamut, inGamut, visible, toLCh, fromLCh,
   arcLength, perceive, unperceive, resample, spline, delta, lineDelta, obstaclePenalty, simulate,
@@ -3112,7 +3118,7 @@ const paintHist = () => {
   $('undo').disabled = !HIST.past.length;
   $('redo').disabled = !HIST.future.length;
 };
-$('aboutbtn').onclick = () => $('aboutdlg').showModal();
+$('aboutbtn').onclick = async () => { await docsReady; $('aboutdlg').showModal(); };
 /**
  * The gamut on a CIE 1931 chromaticity diagram.
  *
@@ -3440,7 +3446,7 @@ const asTeX = (m) => (m.startsWith('$$')
   ? `\\[${m.slice(2, -2)}\\]`
   : `\\(${m.slice(1, -1)}\\)`);
 
-async function renderDoc(url, into) {
+async function renderDoc(url, into, marked) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: ${res.status}`);
   const math = [];
@@ -3457,11 +3463,39 @@ async function renderDoc(url, into) {
 }
 
 const DOCS = [['./about.md', 'aboutbody'], ['./formulation.md', 'mathbody'], ['./spaces.md', 'spacebody']];
-const docsReady = Promise.all(DOCS.map(([url, into]) => renderDoc(url, into)))
-  .catch((e) => DOCS.forEach(([, into]) => ($(into).textContent = String(e))));
 
 /**
- * The formulation is typeset at startup, laid out off-screen while it happens.
+ * None of this is on screen until a ? button is pressed, so none of it happens
+ * until the viewport has drawn.
+ *
+ * It used to sit in front of the first frame: MathJax is 950 kB, its renderer
+ * and the three documents another 80, and all of it was competing with three
+ * for the connection before anything had painted — a third of what the page
+ * fetched, for dialogs most sessions never open. Waiting for one painted frame
+ * moves it off the critical path without changing what eventually loads, which
+ * matters, because when the math loads is not the same question as when it is
+ * typeset. That still has to happen ahead of the click; see below.
+ */
+const painted = new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+const docsReady = painted
+  .then(async () => {
+    const { marked } = await import('marked');
+    await Promise.all(DOCS.map(([url, into]) => renderDoc(url, into, marked)));
+  })
+  .catch((e) => DOCS.forEach(([, into]) => ($(into).textContent = String(e))));
+
+/** MathJax is a classic script that configures itself from window.MathJax. */
+const loadMathJax = () => new Promise((res, rej) => {
+  const el = document.createElement('script');
+  el.src = './vendor/mathjax-fira/tex-mml-chtml-mathjax-fira.js';
+  el.onload = () => res(window.MathJax.startup.promise);
+  el.onerror = () => rej(new Error('MathJax did not load'));
+  document.head.append(el);
+});
+
+/**
+ * The formulation is typeset before it is ever shown, laid out off-screen.
  *
  * Typesetting on the click was wrong twice over. It is what pulls the math
  * webfonts down, about 700 kB across a dozen faces, so the first look at the
@@ -3472,27 +3506,44 @@ const docsReady = Promise.all(DOCS.map(([url, into]) => renderDoc(url, into)))
  * Laying it out off-screen for the duration fetches exactly the faces this
  * formulation uses, and gives CHTML a real width to measure while it is at it.
  */
-window.MathJax?.startup?.promise.then(async () => {
-  await docsReady;                     // nothing to typeset until the files are in
-  const dlgs = [$('mathdlg'), $('spacedlg')];
-  for (const d of dlgs)
-    Object.assign(d.style, { display: 'block', visibility: 'hidden', position: 'fixed', left: '-9999px' });
+async function typesetDialog(id) {
+  const d = $(id);
+  Object.assign(d.style, { display: 'block', visibility: 'hidden', position: 'fixed', left: '-9999px' });
   try {
-    await MathJax.typesetPromise(dlgs);
+    await MathJax.typesetPromise([d]);
     await document.fonts.ready;
     // CHTML makes every expression focusable for the explorer. With the
     // explorer off there is nothing to explore, and 130 tab stops between the
     // dialog and its close button is worse than none.
-    for (const d of dlgs)
-      d.querySelectorAll('mjx-container[tabindex]').forEach((c) => c.removeAttribute('tabindex'));
+    d.querySelectorAll('mjx-container[tabindex]').forEach((c) => c.removeAttribute('tabindex'));
   } finally {
-    for (const d of dlgs) d.removeAttribute('style');
+    d.removeAttribute('style');
   }
-});
+}
+
+/**
+ * Each dialog is set once, by whichever comes first: the warming below, or a
+ * click that beat it there.
+ *
+ * Setting both in one call was 291 expressions, and both stayed parked
+ * off-screen for all of it — so opening either showed an empty box. They are
+ * independent. MathJax is single-threaded and queues, so splitting them does
+ * not make the work shorter; it stops a dialog nobody opened from being the
+ * reason the one they did open is still blank. The formulation warms first,
+ * its ? being next to the panel people are already reading.
+ */
+const mathjaxReady = docsReady.then(loadMathJax);
+const setting = {};
+const dialogReady = (id) => (setting[id] ??= mathjaxReady.then(() => typesetDialog(id))
+  .catch(() => {}));                 // an unset formulation still reads as TeX
+mathjaxReady.then(() => dialogReady('mathdlg')).then(() => dialogReady('spacedlg'));
+
 /** a ? button, its dialog, and its close: click the backdrop to dismiss */
 for (const [btn, dlg, close] of [['mathbtn', 'mathdlg', 'mathclose'],
                                  ['spacebtn', 'spacedlg', 'spaceclose']]) {
-  $(btn).onclick = () => $(dlg).showModal();
+  // a dialog is parked off-screen while it typesets, so opening it before that
+  // finishes would show an empty box. Each waits only for its own.
+  $(btn).onclick = async () => { await dialogReady(dlg); $(dlg).showModal(); };
   $(close).onclick = () => $(dlg).close();
   $(dlg).onclick = (e) => { if (e.target === $(dlg)) $(dlg).close(); };
 }

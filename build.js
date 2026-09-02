@@ -14,6 +14,11 @@ import { dirname, join, posix } from 'node:path';
 
 const OUT = 'docs';
 const JSM = 'node_modules/three/examples/jsm';
+// three's own minified ES build. The readable one is 2044 kB across two files
+// and this is 733 kB, which is most of what the page downloads; `node serve.js`
+// still runs the readable one, so a stack trace in development still names
+// something. Not a minifier in the build — three ships these.
+const THREE = 'three.module.min.js';
 
 await rm(OUT, { recursive: true, force: true });
 await mkdir(join(OUT, 'vendor/jsm'), { recursive: true });
@@ -35,13 +40,15 @@ for (const f of ['solver.js', 'solver-worker.js']) {
 // ─── the page, with every specifier pointed at something that will exist ─────
 const html = (await readFile('index.html', 'utf8'))
   .replace("'./color-space.ts'", "'./color-space.js'")
-  .replace('"/node_modules/three/build/three.module.js"', '"./vendor/three.module.js"')
+  .replace('"/node_modules/three/build/three.module.js"', `"./vendor/${THREE}"`)
+  .replace('"/node_modules/three/build/three.core.js"', '"./vendor/three.core.min.js"')
   .replace('"/node_modules/three/examples/jsm/"', '"./vendor/jsm/"')
   .replace('"/node_modules/marked/lib/marked.esm.js"', '"./vendor/marked.esm.js"')
   .replaceAll('/node_modules/@mathjax/mathjax-fira-font', './vendor/mathjax-fira')
   .replaceAll('/node_modules/mathjax', './vendor/mathjax')
   .replaceAll('/node_modules/@fontsource/', './vendor/fontsource/');
-for (const [what, pat] of [['color-space.js', /'\.\/color-space\.js'/], ['three', /"\.\/vendor\/three\.module\.js"/],
+for (const [what, pat] of [['color-space.js', /'\.\/color-space\.js'/], ['three', /"\.\/vendor\/three\.module\.min\.js"/],
+                           ['three.core preload', /"\.\/vendor\/three\.core\.min\.js"/],
                            ['three/addons', /"\.\/vendor\/jsm\/"/], ['mathjax', /\.\/vendor\/mathjax-fira\//],
                            ['marked', /"\.\/vendor\/marked\.esm\.js"/],
                            ['mathjax paths', /\.\/vendor\/mathjax'/], ['fonts', /\.\/vendor\/fontsource\//]])
@@ -54,7 +61,7 @@ await writeFile(join(OUT, 'index.html'), html);
 // that only shows up once the page is served statically. Walk the graph.
 const copied = new Set();
 const queue = [
-  { root: 'node_modules/three/build', rel: 'three.module.js', out: 'vendor' },
+  { root: 'node_modules/three/build', rel: THREE, out: 'vendor' },
   ...[...html.matchAll(/from\s+'three\/addons\/([^']+)'/g)].map((m) => ({ root: JSM, rel: m[1], out: 'vendor/jsm' })),
 ];
 while (queue.length) {
@@ -65,7 +72,7 @@ while (queue.length) {
   const src = await readFile(join(root, rel), 'utf8');
   await mkdir(dirname(join(OUT, out, rel)), { recursive: true });
   await writeFile(join(OUT, out, rel), src);
-  for (const m of src.matchAll(/from\s+'(\.[^']+|three\/addons\/[^']+)'/g))
+  for (const m of src.matchAll(/from\s*['"](\.[^'"]+|three\/addons\/[^'"]+)['"]/g))
     queue.push(m[1].startsWith('three/addons/')
       ? { root: JSM, rel: m[1].slice(13), out: 'vendor/jsm' }
       : { root, rel: posix.normalize(posix.join(posix.dirname(rel), m[1])), out });
