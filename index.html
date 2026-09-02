@@ -59,8 +59,16 @@
   };
 </script>
 <style>
-  :root { --bg:#101012; --panel:#1c1c1f; --line:#32323a; --fg:#e8e8ec; --dim:#8b8b96; --hot:#ff5b5b; --sel:#3d5a6c;
-          --hud:#33333a; --ctl:#26262b; --link:#7dd3fc;
+  /* applyBg() overwrites every one of these on the root element, so these
+     values are only ever on screen before it has run — which is exactly the
+     stretch the cover below is up for. They were a dark scheme, so the page
+     opened near-black and then turned the backdrop's cream the moment the
+     module finished, a flash the cover made more obvious rather than less.
+     They are now what applyBg() derives from the default backdrop, #f0ead6,
+     which is the ground the interface is about to have. Change that default
+     and these want recomputing with it. */
+  :root { --bg:#f0ead6; --panel:#f0ead6; --line:#0000002e; --fg:#1b1a16; --dim:#75736f; --hot:#ee0012;
+          --sel:#bbb9b4; --hud:#53514d; --ctl:#00000012; --link:#005fa4;
           /* chips sit over the 3D view, not in the panel, so they keep their own
              dark scheme however the panel is themed */
           --hudfg:#e8e8ec; --hudbg:#26262bd9; }
