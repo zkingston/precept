@@ -713,7 +713,17 @@ export const OBJ = [
    * categorical palette needs. A floor asks only that nothing is unreadable and
    * leaves the rest of the palette alone once it is met.
    */
-  { key: 'contr', label: 'contrast floor', bad: true,
+  /**
+   * A floor on the worst swatch against the ground the palette will sit on.
+   *
+   * Discrete only. A ramp is read as a surface, and every level of it has to be
+   * there — including the dark end, which is exactly what a contrast floor
+   * removes. Holding one over a continuous map either compresses the range that
+   * carries the data or does nothing, and neither is what a colormap is for.
+   * Swatches are read as marks against a page, and there the floor is the
+   * question.
+   */
+  { key: 'contr', label: 'contrast floor', bad: true, mode: 'discrete',
     f: (x) => { const bg = fromHex(S.cbg);
       return x.probe.reduce((a, p) => a + hinge(S.cmin - contrastRatio(p, bg)) ** 2, 0); } },
   /**

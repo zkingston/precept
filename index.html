@@ -508,12 +508,12 @@
     </section>
 
     <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2>
-      <button id="run">run Adam</button>
+      <button id="run">run optimizer</button>
       <table id="metrics"></table>
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
         <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span>
         <label class="chk" title="jolt out of a stall and keep the best attempt"><input type="checkbox" id="restart">restarts</label></div>
-      <div class="row"><label class="f">contrast</label>
+      <div class="row" id="contrastrow"><label class="f">contrast</label>
         <input type="color" id="cbg" value="#ffffff" title="the ground swatches are judged against">
         <input type="number" id="cfloor" min="1" max="21" step="0.5" value="3"
                style="width:52px" title="minimum contrast ratio the palette should reach">
@@ -1902,11 +1902,12 @@ function sidebar() {
   }
 
   // worst swatch against the contrast ground, live next to the two knobs that
-  // set it. Shown in both modes: a ramp has a lightest end, and how readable
-  // that end is against the page is worth knowing even when nothing optimizes it.
-  {
+  // set it. Discrete only, with the term: a ramp is read as a surface and needs
+  // its dark end, so there is nothing here for a continuous palette to answer.
+  $('contrastrow').style.display = S.mode === 'discrete' ? '' : 'none';
+  if (S.mode === 'discrete') {
     const bg = fromHex(S.cbg);
-    const set = S.mode === 'continuous' && S.pts.length >= 2 ? curve() : pal;
+    const set = pal;
     const lo = set.length ? Math.min(...set.map((p) => contrastRatio(p, bg))) : null;
     // the same worst case in APCA, which is the reading the ratio is meant to
     // be replaced by. |Lc|, since the sign only says which color is on top.
@@ -2839,7 +2840,7 @@ function solverWorker() {
   solver.onmessage = ({ data: m }) => {
     // A stop and an immediate restart leaves the ending run's last message in
     // flight. Without the id it lands on the new run: `final` would put the
-    // button back to `run Adam` over a worker that is still stepping, and every
+    // button back to `run optimizer` over a worker that is still stepping, and every
     // `pts` after that is dropped, so the palette freezes with no way back.
     if (m.id !== runId) return;
     if (m.t === 'pts') { if (running) fromSolver(m.pts, false); return; }
@@ -2864,11 +2865,15 @@ function stopSolver() {
 }
 function endRun() {
   running = false;
-  $('run').textContent = 'run Adam'; delete $('run').dataset.on;
+  $('run').textContent = 'run optimizer'; delete $('run').dataset.on;
 }
 
 // ─── lightness plot: what the ramp does, and what you want it to do ─────────
-const LPAD = { l: 26, r: 10, t: 10, b: 15 };
+// The left pad holds the tick labels AND the range bracket, with air between
+// them: the bracket is a control and reads as one by not being crowded against
+// the numbers it is not part of. Labels end around x 18, the bracket sits at
+// 26, the plot starts at 36.
+const LPAD = { l: 36, r: 10, t: 10, b: 15 };
 
 /**
  * The two profiles, side by side. They were one canvas with a toggle, which
@@ -3035,11 +3040,12 @@ function drawPlot(p) {
   }
   const band = lpband(p);
   if (band) {
-    const bx = LPAD.l - 5;
-    ctx.globalAlpha = 0.6; ctx.beginPath();
+    const bx = LPAD.l - 10;
+    ctx.globalAlpha = 0.7; ctx.lineWidth = 2; ctx.beginPath();
     for (const [a, c] of band.segs) { ctx.moveTo(bx, lpy(p, c)); ctx.lineTo(bx, lpy(p, a)); }
-    for (const y of [band.yHi, band.yLo]) { ctx.moveTo(bx - 3, y); ctx.lineTo(bx + 3, y); }
+    for (const y of [band.yHi, band.yLo]) { ctx.moveTo(bx - 5, y); ctx.lineTo(bx + 5, y); }
     ctx.stroke();
+    ctx.lineWidth = 1;
   }
   ctx.globalAlpha = 1;
 
@@ -4171,20 +4177,25 @@ function a11yReport() {
              gpair ? `${gap.toFixed(1)} · swatches ${gpair[0] + 1} and ${gpair[1] + 1}` : '—',
              gpair ? gap >= (cont ? 0 : SEP_MIN) : null]);
 
-  // contrast against the ground the palette will actually sit on
-  const bg = fromHex(S.cbg);
-  const cr = pal.map((p) => contrastRatio(p, bg));
-  const worst = Math.min(...cr), at = cr.indexOf(worst);
-  rows.push(['head', 'Contrast', `against ${S.cbg} · WCAG 2`]);
-  rows.push(['row', 'worst swatch', `${worst.toFixed(2)}:1 · swatch ${at + 1}`, null]);
-  rows.push(['row', 'clears 3:1', worst >= 3 ? 'yes' : 'no', worst >= 3]);
-  rows.push(['row', 'clears 4.5:1', worst >= 4.5 ? 'yes' : 'no', worst >= 4.5]);
-  const lcs = pal.map((p) => Math.abs(apcaLc(p, bg)));
-  const lcw = Math.min(...lcs), lat = lcs.indexOf(lcw);
-  rows.push(['head', 'Contrast', `against ${S.cbg} · APCA Lc`]);
-  rows.push(['row', 'worst swatch', `Lc ${Math.round(lcw)} · swatch ${lat + 1}`, null]);
-  rows.push(['row', 'clears Lc 60 (body text)', lcw >= 60 ? 'yes' : 'no', lcw >= 60]);
-  rows.push(['row', 'clears Lc 30 (large or non-text)', lcw >= 30 ? 'yes' : 'no', lcw >= 30]);
+  // contrast against the ground the palette will actually sit on — for a
+  // discrete set, which is read as marks on a page. A ramp is read as a
+  // surface: it is supposed to reach the dark end, so a floor it fails is a
+  // fact about the ramp doing its job rather than a finding against it.
+  if (!cont) {
+    const bg = fromHex(S.cbg);
+    const cr = pal.map((p) => contrastRatio(p, bg));
+    const worst = Math.min(...cr), at = cr.indexOf(worst);
+    rows.push(['head', 'Contrast', `against ${S.cbg} · WCAG 2`]);
+    rows.push(['row', 'worst swatch', `${worst.toFixed(2)}:1 · swatch ${at + 1}`, null]);
+    rows.push(['row', 'clears 3:1', worst >= 3 ? 'yes' : 'no', worst >= 3]);
+    rows.push(['row', 'clears 4.5:1', worst >= 4.5 ? 'yes' : 'no', worst >= 4.5]);
+    const lcs = pal.map((p) => Math.abs(apcaLc(p, bg)));
+    const lcw = Math.min(...lcs), lat = lcs.indexOf(lcw);
+    rows.push(['head', 'Contrast', `against ${S.cbg} · APCA Lc`]);
+    rows.push(['row', 'worst swatch', `Lc ${Math.round(lcw)} · swatch ${lat + 1}`, null]);
+    rows.push(['row', 'clears Lc 60 (body text)', lcw >= 60 ? 'yes' : 'no', lcw >= 60]);
+    rows.push(['row', 'clears Lc 30 (large or non-text)', lcw >= 30 ? 'yes' : 'no', lcw >= 30]);
+  }
   return rows;
 }
 
