@@ -37,6 +37,14 @@
      output; the paths tell it where its own source tree is, since the speech
      worker and the character maps live under mathjax/ rather than the font. -->
 <script>
+  // The cover over the interface comes off when the module has laid it out. If
+  // the module throws on the way there it never will, and the page would sit on
+  // `loading…` for good — so uncover on an uncaught error too. A half-built
+  // interface is at least legible, and the console says what happened. Only
+  // script errors reach window this way; a font or image that fails to load
+  // fires on its own element and does not bubble.
+  addEventListener('error', () => document.body?.classList.add('ready'));
+
   window.MathJax = {
     loader: { paths: { mathjax: './vendor/mathjax',
                        'mathjax-fira': './vendor/mathjax-fira' } },
@@ -58,6 +66,20 @@
           --hudfg:#e8e8ec; --hudbg:#26262bd9; }
   * { box-sizing:border-box; }
   body { margin:0; overflow:hidden; background:var(--bg); color:var(--fg); font:13px/1.45 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
+  /* What the markup renders as before layout() runs is nothing like what it
+     becomes: the panel is a column taller than the window, the tools are a
+     stack in the corner, the plots sit in the middle of nothing, and the canvas
+     is an empty black rectangle. Every one of those positions is computed, so
+     there is no arrangement of CSS that would have them right in advance — but
+     a page that spends its first second looking broken is worse than one that
+     says what it is doing. So cover it until there is something worth showing. */
+  #boot { position:fixed; inset:0; z-index:200; background:var(--bg);
+          display:grid; place-content:center; justify-items:center; gap:9px; transition:opacity .3s ease; }
+  #boot b { font-size:12px; font-weight:600; letter-spacing:.19em; color:var(--fg); }
+  #boot span { font-size:11px; letter-spacing:.06em; color:var(--dim); }
+  body.ready #boot { opacity:0; pointer-events:none; }
+  /* still a transition, so transitionend still fires and still removes it */
+  @media (prefers-reduced-motion: reduce) { #boot { transition-duration:1ms; } }
   /* the row must be 1fr, not the implicit auto: a sidebar taller than the
      viewport would otherwise stretch the row and push the canvas off-screen */
   #app { display:grid; grid-template-columns:1fr 330px; grid-template-rows:1fr; height:100vh; }
@@ -386,6 +408,7 @@
   }
 </style>
 
+<div id="boot"><b>PRECEPT PALETTE OPTIMIZER</b><span>loading…</span></div>
 <div id="app">
   <main>
     <canvas id="gl"></canvas>
