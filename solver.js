@@ -758,8 +758,15 @@ export const OBJ = [
 // Shaping terms that fight the rest of the palette unless you ask for them.
 export const OPT_IN = ['repcvd', 'contr', 'lsep', 'sym', 'bend'];
 S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
-/** Relative pull of each term in the combined step. */
-S.w = Object.fromEntries(OBJ.map((o) => [o.key, 1]));
+/**
+ * Relative pull of each term in the combined step.
+ *
+ * The two drawn profiles carry more than the rest. They are targets someone set
+ * deliberately, where the others are standing preferences that are always on,
+ * so parity with eight of those understates what asking for a profile means.
+ */
+export const W_DEFAULT = { lramp: 1.5, hprof: 1.5 };
+S.w = Object.fromEntries(OBJ.map((o) => [o.key, W_DEFAULT[o.key] ?? 1]));
 
 /**
  * Central differences over the 3n control coordinates, for several terms at

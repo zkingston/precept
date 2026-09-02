@@ -630,9 +630,9 @@ import {
   spaceMetric, SPECTRAL_LOCUS, toXYZ, fromXYZ, tritanMix,
 } from './color-space.ts';
 import {
-  LK, LSEP, M, OBJ, OPT_IN, PER_SPAN, S, WARN_EPS, angDiff, angGap, apcaLc, clamp01, constrain,
-  contrastRatio, ctxOf, curve, curveOf, curves, degree, derive, disturb, dot3, hueOf, inHueArc,
-  norm360, observer, palette, primary, rnd, runs, setRuns, syncProfiles, takeDisturbed,
+  LK, LSEP, M, OBJ, OPT_IN, PER_SPAN, S, WARN_EPS, W_DEFAULT, angDiff, angGap, apcaLc, clamp01,
+  constrain, contrastRatio, ctxOf, curve, curveOf, curves, degree, derive, disturb, dot3, hueOf,
+  inHueArc, norm360, observer, palette, primary, rnd, runs, setRuns, syncProfiles, takeDisturbed,
   totalTurn, view, whereIs,
 } from './solver.js';
 
@@ -2384,7 +2384,7 @@ function applyScene(o) {
   // term leave that term at undefined, which reads as off and cannot be
   // switched on. Keep the keys OBJ defines and take the file's value only
   // where it has one.
-  S.w = Object.fromEntries(OBJ.map((t) => [t.key, o.w?.[t.key] ?? 1]));
+  S.w = Object.fromEntries(OBJ.map((t) => [t.key, o.w?.[t.key] ?? W_DEFAULT[t.key] ?? 1]));
   S.on = Object.fromEntries(OBJ.map((t) => [t.key, o.on?.[t.key] ?? !OPT_IN.includes(t.key)]));
   S.sel = null;
   reframe(); layout(); buildShell(); capKey = null;   // a new chart moves everything
@@ -4617,11 +4617,12 @@ const HINTS = {
   host.insertAdjacentHTML('beforeend', `<span class="q" data-h="${esc(text)}">?</span>`);
 }
 
-// On a phone the three cuts and the 3D view are all small, and the one worth
-// having first is the 3D one. Only the opening default: the button still says
-// which way it is, a resize does not undo a choice, and a scene in the URL sets
-// it from the link rather than from the screen it is opened on.
-S.panels = !NARROW.matches;
+// The 3D view is the one worth opening on at any size — the three cuts are a
+// second reading of the same solid, and they are worth asking for rather than
+// worth arriving with. Only the opening default: the button says which way it
+// is, a resize does not undo a choice, and a scene in the URL sets it from the
+// link rather than from the screen it is opened on.
+S.panels = false;
 syncProfiles(); lprofFit(); hprofFit(); mirror(); commit();
 loadFromHash();
 /**
