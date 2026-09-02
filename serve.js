@@ -15,13 +15,24 @@ const TYPE = { '.html': 'text/html', '.js': 'text/javascript', '.ts': 'text/java
                '.md': 'text/markdown' };
 
 createServer(async (req, res) => {
-  const rel = normalize(decodeURI(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
+  const [path, query] = req.url.split('?');
+  const rel = normalize(decodeURI(path)).replace(/^(\.\.[/\\])+/, '');
   const file = join(import.meta.dirname, rel.endsWith('/') ? rel + 'index.html' : rel);
   try {
     const src = await readFile(file);                    // Buffer: see above
     res.writeHead(200, { 'content-type': TYPE[extname(file)] ?? 'text/plain', 'cache-control': 'no-store' });
     res.end(extname(file) === '.ts' ? stripTypeScriptTypes(src.toString('utf8')) : src);
-  } catch {
+  } catch (err) {
+    // A directory asked for without its trailing slash. Redirect rather than
+    // serve its index.html from here: /docs and /docs/ are different bases, and
+    // from the first one every relative URL in the page — ./app.js, ./about.md —
+    // resolves a level too high and 404s. This is what a static host does with
+    // the same request, GitHub Pages included, so the deployed copy already
+    // behaves this way and only the dev server did not.
+    if (err.code === 'EISDIR') {
+      res.writeHead(301, { location: path + '/' + (query ? `?${query}` : '') }).end();
+      return;
+    }
     res.writeHead(404).end('not found');
   }
 }).listen(8080, () => console.log('http://localhost:8080'));
