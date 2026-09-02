@@ -43,10 +43,6 @@ scientifically validated palettes.
   the same way, then slid by its center or turned by its tip.
 - Under **Optimize**, tick the terms to include and set how hard each one pulls in the **×**
   column — type a weight, or drag one up and down. Then press **run optimizer**.
-- **a11y**, beside that heading, reads the palette back under each of the three dichromacies as
-  well as normal vision: the closest pair for a set of swatches, or how many steps a ramp still
-  resolves. Contrast and lightness spread are in the panel already, and neither moves when the
-  observer does.
 - Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette.
 - Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.
 

@@ -261,12 +261,10 @@
   .note { color:var(--dim); font-size:11px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
-  h2 #a11ybtn, h2 #mathbtn { float:right; margin:-3px 0 0; padding:0 6px;
+  h2 #mathbtn { float:right; margin:-3px 0 0; padding:0 6px; font:11px/1.5 'Fira Sans',ui-sans-serif,system-ui,sans-serif;
                 background:var(--ctl); color:var(--dim); border:1px solid var(--line); border-radius:3px;
                 cursor:pointer; text-transform:none; letter-spacing:0; }
-  h2 #mathbtn { font:11px/1.5 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
-  h2 #a11ybtn { margin-right:6px; font:11px/1.5 'Fira Mono',ui-monospace,monospace; }
-  h2 #a11ybtn:hover, h2 #mathbtn:hover { color:var(--fg); }
+  h2 #mathbtn:hover { color:var(--fg); }
   .doc { max-width:min(760px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto;
     overscroll-behavior:contain; padding:22px 26px; background:var(--panel); color:var(--fg);
     border:1px solid var(--line); border-radius:9px; font:13px/1.6 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
@@ -311,27 +309,6 @@
     background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:9px;
     font:13px/1.55 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
   #aboutdlg::backdrop { background:#000a; }
-  #a11ydlg { width:min(520px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto;
-    overscroll-behavior:contain; padding:20px 22px; background:var(--panel); color:var(--fg);
-    border:1px solid var(--line); border-radius:9px;
-    font:13px/1.5 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
-  #a11ydlg::backdrop { background:#000a; }
-  #a11ydlg h3 { margin:0 0 6px; font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
-  #a11yclose { position:absolute; top:12px; right:12px; width:26px; height:26px; padding:0;
-    background:none; border:0; color:var(--dim); font-size:19px; line-height:1; cursor:pointer; }
-  #a11yclose:hover { color:var(--fg); }
-  #a11ybody { width:100%; border-collapse:collapse; }
-  #a11ybody td { padding:2px 0; vertical-align:baseline; }
-  #a11ybody td.v { text-align:right; white-space:nowrap; padding-left:12px;
-    font-family:'Fira Mono',ui-monospace,monospace; font-size:11px; }
-  #a11ybody td.mark { width:16px; text-align:right; font-size:11px; }
-  /* td:last-child is right-aligned for the value column, and a colspan head is
-     also a last child — so it has to say so. */
-  #a11ybody tr.h td { padding:14px 0 4px; font-size:10px; letter-spacing:.1em;
-    text-align:left; text-transform:uppercase; color:var(--dim); }
-  #a11ybody tr.h td em { font-style:normal; text-transform:none; letter-spacing:normal; }
-  #a11ybody .no { color:var(--hot); }
-  #a11ycopy { margin-top:16px; padding:5px 10px; }
   #loaddlg { width:min(720px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto;
     overscroll-behavior:contain; padding:20px 22px; background:var(--panel); color:var(--fg);
     border:1px solid var(--line); border-radius:9px;
@@ -509,8 +486,7 @@
       <div class="row"><button id="flip" style="flex:1">flip the excluded side</button></div>
     </section>
 
-    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button>
-      <button id="a11ybtn" title="how this palette reads for everyone else">a11y</button></h2>
+    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2>
       <button id="run">run optimizer</button>
       <table id="metrics"></table>
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
@@ -584,13 +560,6 @@
   <div id="aboutbody"></div>
 </dialog>
 
-<dialog id="a11ydlg">
-  <button id="a11yclose" title="close">&times;</button>
-  <h3>Accessibility</h3>
-  <table id="a11ybody"></table>
-  <button id="a11ycopy">copy as text</button>
-</dialog>
-
 <dialog id="loaddlg">
   <button id="loadclose" title="close">&times;</button>
   <h3>Load a palette</h3>
@@ -625,8 +594,8 @@ import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
   fromHex, toHex, toSRGB, fromSRGB, fromLinear, toGamut, inGamut, visible, toLCh, fromLCh,
-  arcLength, perceive, unperceive, resample, spline, delta, lineDelta, obstaclePenalty, simulate,
-  NORMAL, params, GAMUTS, gamutFromICC, internals, SPACES, toSpace, fromSpace, spaceExtent,
+  arcLength, perceive, unperceive, resample, spline, lineDelta, obstaclePenalty,
+  params, GAMUTS, gamutFromICC, internals, SPACES, toSpace, fromSpace, spaceExtent,
   spaceMetric, SPECTRAL_LOCUS, toXYZ, fromXYZ, tritanMix,
 } from './color-space.ts';
 import {
@@ -4120,66 +4089,6 @@ $('spacesel').onchange = (e) => {
   sync();
 };
 /**
- * What a palette does for a reader who is not you.
- *
- * One question asked of four observers: do the colors still come apart? That is
- * the whole report, and it is the whole of what the panel behind it cannot
- * already say. Contrast against the ground and the closest pair in lightness
- * are both live in Optimize, and neither of them moves when the observer does.
- *
- * Grayscale is not a fifth row here, though it looks like one. Every
- * categorical palette collapses under it — okabe-ito's closest pair is 0.2,
- * tab10's is 0.1 — so a pass mark at any threshold says nothing; and for a ramp
- * arc length cannot see a fold, so turbo measures 119 steps in gray against
- * viridis's 63, which is backwards from what those two are known for. The
- * lightness profile is drawn on screen and answers it honestly.
- *
- * Built as rows rather than as markup so the dialog and the text you copy out
- * of it come from one place and cannot drift apart.
- *
- * The separation line at 5 is ours, and calibrated rather than looked up —
- * Okabe and Ito's set, which was designed against color vision deficiency,
- * holds 6.4 under deuteranopia, while tab10 and Set1, which were not, fall to
- * 1.3 and 2.8. A JND of one chart unit is likewise a working figure, not a
- * measurement, and it only scales the step count.
- */
-const JND = 1, SEP_MIN = 5;
-
-function a11yReport() {
-  const g = M(), pal = palette();
-  const rows = [];
-  const VIEWS = [['normal', NORMAL], ['protanopia', simulate('protan', 1)],
-                 ['deuteranopia', simulate('deutan', 1)], ['tritanopia', simulate('tritan', 1)]];
-
-  if (S.mode === 'continuous' && S.pts.length >= 2) {
-    // Per run, not over curve(): a cut is a discontinuity the map is supposed
-    // to have, and the jump across it is not travel anyone reads steps out of.
-    // Measured through it, bukavu comes to 206 steps rather than its 141.
-    const cs = curves();
-    rows.push(['head', 'Resolvable steps', `along the ramp, at ${JND} chart unit per step`]);
-    for (const [name, v] of VIEWS) {
-      const n = cs.reduce((t, c) => t + arcLength(c.map(v), g), 0) / JND;
-      rows.push(['row', name, `${n.toFixed(0)} steps`, null]);
-    }
-  } else {
-    rows.push(['head', 'Separation', `closest pair, in perceived units · ${SEP_MIN} or more passes`]);
-    for (const [name, v] of VIEWS) {
-      let lo = Infinity, at = null;
-      for (let i = 0; i < pal.length; i++) for (let j = i + 1; j < pal.length; j++) {
-        const d = delta(v(pal[i]), v(pal[j]), g);
-        if (d < lo) { lo = d; at = [i, j]; }
-      }
-      rows.push(['row', name, at ? `${lo.toFixed(1)} · swatches ${at[0] + 1} and ${at[1] + 1}` : '—',
-                 at ? lo >= SEP_MIN : null]);
-    }
-  }
-  return rows;
-}
-
-const a11yText = () => a11yReport().map(([kind, a, b]) =>
-  kind === 'head' ? `\n${a} — ${b}` : `  ${a.padEnd(26)} ${b}`).join('\n').trim();
-
-/**
  * The strip a preset would actually produce, as a CSS gradient.
  *
  * Rendered rather than listed: a continuous map is its spline resampled to
@@ -4224,17 +4133,6 @@ $('panelbtn').onclick = () => {
   S.panels = !S.panels;
   layout(); mirror(); sync();
 };
-function paintA11y() {
-  $('a11ybody').innerHTML = a11yReport().map(([kind, a, b, ok]) =>
-    kind === 'head'
-      ? `<tr class="h"><td colspan="3">${esc(a)} <em>— ${esc(b)}</em></td></tr>`
-      : `<tr><td>${esc(a)}</td><td class="v">${esc(b)}</td>`
-        + `<td class="mark ${ok === false ? 'no' : ''}">${ok === null || ok === undefined ? '' : ok ? '✓' : '✗'}</td></tr>`).join('');
-}
-$('a11ybtn').onclick = () => { paintA11y(); $('a11ydlg').showModal(); };
-$('a11yclose').onclick = () => $('a11ydlg').close();
-$('a11ydlg').onclick = (e) => { if (e.target === $('a11ydlg')) $('a11ydlg').close(); };
-$('a11ycopy').onclick = (e) => copyText(e.target, a11yText(), 'copy as text');
 
 $('loadbtn').onclick = () => { paintLoadList(); $('loaddlg').showModal(); };
 $('loadclose').onclick = () => $('loaddlg').close();
