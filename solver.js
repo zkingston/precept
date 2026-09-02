@@ -764,8 +764,13 @@ S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
  * The two drawn profiles carry more than the rest. They are targets someone set
  * deliberately, where the others are standing preferences that are always on,
  * so parity with eight of those understates what asking for a profile means.
+ *
+ * Arc length and bending pull the other way: both of them are satisfied by a
+ * shorter, straighter path, which is a path that has given up chroma and hue
+ * range to get there. At parity they flatten what the rest of the terms are
+ * trying to shape, so they come in at half and a quarter.
  */
-export const W_DEFAULT = { lramp: 1.5, hprof: 1.5 };
+export const W_DEFAULT = { lramp: 1.5, hprof: 1.5, arc: 0.5, bend: 0.25 };
 S.w = Object.fromEntries(OBJ.map((o) => [o.key, W_DEFAULT[o.key] ?? 1]));
 
 /**
