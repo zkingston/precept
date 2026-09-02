@@ -32,13 +32,17 @@ scientifically validated palettes.
   fit a straight ramp or a tent, a steady turn or two plateaus, each of which double-clicks to its
   reverse. The matching term measures the distance from the target, so drawing the curve you want is
   how you ask for it.
+- The bracket down a plot's left edge is that whole profile rather than one knot of it. Drag its
+  middle to move the profile up or down, or either end to stretch it about the other. Lightness
+  stops at black and white; hue has no ends, so the same two gestures turn the profile and widen
+  the turn it makes, and the bracket wraps around the axis as the curve does.
 - The lightness and chroma sliders and the hue wheel bound the allowable colors. Double-click the
   wheel, or the arrow at its center, to allow every hue again.
 - The tools switch between nodes, keep-out spheres and halfplanes. A sphere is placed by
   double-clicking a cut panel and resized by dragging the small handle beside it; a halfplane is cut
   the same way, then slid by its center or turned by its tip.
 - Under **Optimize**, tick the terms to include and set how hard each one pulls in the **×**
-  column. Then run Adam.
+  column — type a weight, or drag one up and down. Then press **run optimizer**.
 - Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette.
 - Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.
 
