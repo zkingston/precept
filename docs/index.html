@@ -254,7 +254,8 @@
     -moz-appearance:textfield; appearance:textfield; }
   #metrics input.w::-webkit-outer-spin-button, #metrics input.w::-webkit-inner-spin-button {
     -webkit-appearance:none; margin:0; }
-  #metrics input.w:disabled { opacity:.3; }
+  #metrics input.w { cursor:ns-resize; touch-action:none; }
+  #metrics input.w:disabled { opacity:.3; cursor:default; }
   #metrics .mx { color:var(--dim); font-size:10px; margin-left:3px; }
   #metrics .mx[data-off] { opacity:.3; }
   .note { color:var(--dim); font-size:11px; }

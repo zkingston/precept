@@ -254,7 +254,8 @@
     -moz-appearance:textfield; appearance:textfield; }
   #metrics input.w::-webkit-outer-spin-button, #metrics input.w::-webkit-inner-spin-button {
     -webkit-appearance:none; margin:0; }
-  #metrics input.w:disabled { opacity:.3; }
+  #metrics input.w { cursor:ns-resize; touch-action:none; }
+  #metrics input.w:disabled { opacity:.3; cursor:default; }
   #metrics .mx { color:var(--dim); font-size:10px; margin-left:3px; }
   #metrics .mx[data-off] { opacity:.3; }
   .note { color:var(--dim); font-size:11px; }
@@ -2685,7 +2686,7 @@ function paintMetrics(rows) {
       // the multiplier sits against its own number rather than over the column:
       // one mark per weight says what that weight is, where a heading says it
       // once and then leaves eleven bare numbers to be taken on trust
-      (obj ? `<td class="w"><input class="w" type="number" min="0" max="20" step="0.25" data-w="${obj}"`
+      (obj ? `<td class="w"><input class="w" type="number" min="0" max="20" step="any" data-w="${obj}"`
            + ` value="${S.w[obj]}"${S.on[obj] ? '' : ' disabled'} title="relative pull in the combined step"`
            + `><span class="mx"${S.on[obj] ? '' : ' data-off'}>&times;</span></td>`
            : '<td class="w"></td>') + '</tr>';
@@ -3131,6 +3132,16 @@ function sync({ colors = false, light = false } = {}) {
   buildTube(); buildPoints(); buildObstacles(); buildPlanes();
   if (!light) sidebar();
   noteEdit();
+  pushState();
+}
+
+/**
+ * The worker holds its own S, so anything changed here has to be sent. sync()
+ * is where most edits pass through, but not all of them: a weight never
+ * re-renders anything, so it never reached the solver at all while one was
+ * running — the run kept descending the weights it started with.
+ */
+function pushState() {
   if (running && !applying) solver.postMessage({ t: 'state', ...solverState() });
 }
 
@@ -4171,8 +4182,52 @@ const EXCLUSIVE = [REPULSIONS];
 
 $('metrics').oninput = (e) => {
   const k = e.target.dataset?.w;
-  if (k) S.w[k] = Math.max(0, +e.target.value || 0);
+  if (!k) return;
+  S.w[k] = Math.max(0, +e.target.value || 0);
+  pushState();
 };
+
+/**
+ * Drag a multiplier up or down to set it.
+ *
+ * Weights are read as ratios — twice this term, a tenth of that — and a linear
+ * drag spends most of its travel between 5 and 20 and almost none of it under
+ * 1, which is where the useful settings are. So the travel is logarithmic:
+ * three decades, 0.01 to 10, and the same drag is the same ratio wherever it
+ * starts. Two significant figures, because a weight of 0.6231 is a number
+ * pretending to a precision the objective does not have.
+ *
+ * The field stays typable. Nothing moves until the pointer has, by a few
+ * pixels, so a click still lands a caret; the capture is taken at that point
+ * and not before, which leaves a click free to select text as it always did.
+ */
+const W_LO = 0.01, W_HI = 10, W_TRAVEL = 220;     // px for the whole range
+const wAt = (t) => +(W_LO * (W_HI / W_LO) ** Math.min(1, Math.max(0, t))).toPrecision(2);
+const wPos = (v) => Math.log(Math.min(W_HI, Math.max(W_LO, v || W_LO)) / W_LO) / Math.log(W_HI / W_LO);
+
+let wDrag = null;
+$('metrics').addEventListener('pointerdown', (e) => {
+  const el = e.target.closest('input.w');
+  if (el && !el.disabled) wDrag = { el, y: e.clientY, t: wPos(+el.value), id: e.pointerId, moved: false };
+});
+// The whole range is 220px and the box is 38 tall, so the pointer is outside it
+// for all but the smallest change. Following it on the window rather than
+// capturing it keeps that working without depending on capture being available.
+addEventListener('pointermove', (e) => {
+  if (!wDrag || e.pointerId !== wDrag.id) return;
+  const dy = wDrag.y - e.clientY;                 // up is more
+  if (!wDrag.moved) {
+    if (Math.abs(dy) < 3) return;                 // a click is still a click
+    wDrag.moved = true;
+  }
+  e.preventDefault();                             // or the drag selects the digits
+  const v = wAt(wDrag.t + dy / W_TRAVEL);
+  wDrag.el.value = v;
+  S.w[wDrag.el.dataset.w] = v;
+  pushState();
+});
+for (const ev of ['pointerup', 'pointercancel'])
+  addEventListener(ev, () => { wDrag = null; });
 $('run').onclick = () => (running ? stopSolver() : startSolver());
 $('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; sidebar(); };
 $('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1); };
