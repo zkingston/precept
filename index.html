@@ -3025,39 +3025,48 @@ function paintPlotButtons() {
   }
 }
 
-const plotOf = (e) => PLOTS[e.target.closest('.pplot')?.dataset.plot];
-$('lplot').onclick = (e) => {
-  const p = plotOf(e), { on, p: act } = e.target.dataset ?? {};
-  if (!p) return;
-  if (on) S.on[on] = e.target.checked;
-  else if (act) p[act]();
-  else return;
-  sidebar();
-};
 /**
- * Double-click flips the profile. The click pair has already laid down the
- * natural one by the time this fires, so it only has to invert what is there.
+ * Bound to each plot, not to the strip they sometimes share.
  *
- * How to invert depends on the shape, and reversing is not always it: a tent
- * reversed is the same tent. So a symmetric profile is mirrored in lightness
- * instead, turning a light-centerd diverging ramp into a dark-centerd one,
- * while an asymmetric one is reversed, turning dark-to-light into light-to-dark.
+ * Docked, a plot is a row of the Optimize table and the two have no ancestor
+ * between them but the document — so a listener on #lplot heard only whichever
+ * plots happened to be at home, which after the panel took them was none. The
+ * canvas drag never had this problem because it was always bound to the canvas.
+ * These are bound the same way now, and travel with the element that owns them.
  */
-$('lplot').ondblclick = (e) => {
-  const p = plotOf(e), act = e.target.dataset?.p;
-  if (!p || (act !== 'p1' && act !== 'p2')) return;
-  const prof = p.prof();
-  if (p.hue) {
-    // a sweep flips by running backwards; a split flips by taking the other arc
-    if (act === 'p2') hprofSplit(true);
-    else S.hprof = prof.slice().reverse();
-  } else {
-    const [lo, hi] = [Math.min(...prof), Math.max(...prof)];
-    const symmetric = prof.every((v, i) => Math.abs(v - prof[LK - 1 - i]) < 1e-9);
-    S.lprof = symmetric ? prof.map((v) => lo + hi - v) : prof.slice().reverse();
-  }
-  sidebar();
-};
+for (const p of PLOTLIST) {
+  p.root.onclick = (e) => {
+    const { on, p: act } = e.target.dataset ?? {};
+    if (on) S.on[on] = e.target.checked;
+    else if (act) p[act]();
+    else return;
+    sidebar();
+  };
+  /**
+   * Double-click flips the profile. The click pair has already laid down the
+   * natural one by the time this fires, so it only has to invert what is there.
+   *
+   * How to invert depends on the shape, and reversing is not always it: a tent
+   * reversed is the same tent. So a symmetric profile is mirrored in lightness
+   * instead, turning a light-centerd diverging ramp into a dark-centerd one,
+   * while an asymmetric one is reversed, turning dark-to-light into light-to-dark.
+   */
+  p.root.ondblclick = (e) => {
+    const act = e.target.dataset?.p;
+    if (act !== 'p1' && act !== 'p2') return;
+    const prof = p.prof();
+    if (p.hue) {
+      // a sweep flips by running backwards; a split flips by taking the other arc
+      if (act === 'p2') hprofSplit(true);
+      else S.hprof = prof.slice().reverse();
+    } else {
+      const [lo, hi] = [Math.min(...prof), Math.max(...prof)];
+      const symmetric = prof.every((v, i) => Math.abs(v - prof[LK - 1 - i]) < 1e-9);
+      S.lprof = symmetric ? prof.map((v) => lo + hi - v) : prof.slice().reverse();
+    }
+    sidebar();
+  };
+}
 
 /**
  * The backdrop is the whole interface's ground, not just the viewport's: the
