@@ -5,13 +5,12 @@
 <title>Precept Palette Optimizer</title>
 <!-- the emoji as an SVG document, so there is no file to ship or fetch -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌈</text></svg>">
-<!-- three.core.js is the biggest thing the page loads and the last thing it
-     learns it needs: three.module.js is a renderer that imports the rest, so
-     the browser has to fetch and parse 635 kB before it can even discover the
-     1.4 MB behind it. That put the largest file on the far side of a serial
-     hop — it began downloading a second into the load. Naming it here starts
-     it with everything else. It is a hint, not a second fetch; the import
-     below takes it from the module map. -->
+<!-- The biggest module the page needs, named before anything has parsed the
+     script that asks for it. Unnamed it sits behind a serial hop — three.module
+     is a renderer that imports the rest, so the browser must fetch and parse
+     635 kB to discover the 1.4 MB behind it, and the largest file began
+     downloading a second into the load. A hint, not a second fetch: the import
+     takes it from the module map. The build points this at its bundle. -->
 <link rel="modulepreload" href="/node_modules/three/build/three.core.js">
 <style>
   /* Fira, self-hosted, latin plus the one Greek weight the interface needs

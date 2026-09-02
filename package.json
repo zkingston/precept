@@ -12,5 +12,8 @@
     "build": "node build.js",
     "serve": "node serve.js",
     "check": "node color-space.ts"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

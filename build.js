@@ -1,82 +1,82 @@
 // Builds docs/ for GitHub Pages.
 //
-// Two things make the dev setup non-static, and this undoes both. The browser
-// cannot parse TypeScript, so `serve.js` strips types on the way out — here
-// they are stripped once, to a file. And the import map points at absolute
-// /node_modules paths, which resolve to the DOMAIN root on a project Pages
-// site, not the project root — so the vendored copies are addressed relatively.
+// The dev setup is not static and this undoes that. The browser cannot parse
+// TypeScript; the import map points at absolute /node_modules paths, which
+// resolve to the DOMAIN root on a project Pages site rather than the project
+// root; and the page's script is written inline, against a three that ships
+// 2 MB of everything. esbuild answers all three at once: it reads the .ts, it
+// resolves every specifier at build time so no map is needed, and it keeps
+// only the parts of three the page actually reaches.
+//
+// The dev server serves the sources untouched, so `node serve.js` still runs
+// readable code with real names in a stack trace. The bundle is for the
+// deployed copy only.
 //
 // docs/ is a build artifact but is committed, because Pages serves from the
-// repo. Rebuild before pushing; `node serve.js` still runs from source.
-import { readFile, writeFile, mkdir, rm, cp } from 'node:fs/promises';
-import { stripTypeScriptTypes } from 'node:module';
-import { dirname, join, posix } from 'node:path';
+// repo. Rebuild before pushing.
+import { readFile, writeFile, mkdir, rm, cp, unlink } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { build } from 'esbuild';
 
 const OUT = 'docs';
-const JSM = 'node_modules/three/examples/jsm';
-// three's own minified ES build. The readable one is 2044 kB across two files
-// and this is 733 kB, which is most of what the page downloads; `node serve.js`
-// still runs the readable one, so a stack trace in development still names
-// something. Not a minifier in the build — three ships these.
-const THREE = 'three.module.min.js';
 
 await rm(OUT, { recursive: true, force: true });
-await mkdir(join(OUT, 'vendor/jsm'), { recursive: true });
+await mkdir(join(OUT, 'vendor'), { recursive: true });
 
-// ─── the module the browser could not have parsed ────────────────────────────
-const ts = await readFile('color-space.ts', 'utf8');
-await writeFile(join(OUT, 'color-space.js'), stripTypeScriptTypes(ts));
+// ─── the page's own module, lifted out so it can be bundled ─────────────────
+// It is written inline, which is right for a file you open and read and wrong
+// for something esbuild has to resolve imports from. So it goes to a scratch
+// file beside its own sources, where './color-space.ts' and './solver.js' mean
+// what they say, and comes back as one <script src>.
+const RAW = await readFile('index.html', 'utf8');
+const OPEN = '<script type="module">', CLOSE = '</script>';
+const a = RAW.indexOf(OPEN), b = RAW.lastIndexOf(CLOSE);
+if (a < 0 || b < a) throw new Error('index.html: could not find the module script to bundle');
 
-// ─── the solver, and the worker that runs it ─────────────────────────────────
-// Both name color-space by the specifier the page uses, so both need the same
-// rewrite. The worker is fetched by URL at run time rather than imported, so
-// nothing in the module graph walked below would notice a missing copy.
-for (const f of ['solver.js', 'solver-worker.js']) {
-  const src = (await readFile(f, 'utf8')).replace("'./color-space.ts'", "'./color-space.js'");
-  if (src.includes('color-space.ts')) throw new Error(`${f}: a color-space.ts specifier survived the rewrite`);
-  await writeFile(join(OUT, f), src);
+const ENTRY = '.app-entry.js';
+// MathJax is a classic script fetched by URL at run time, so its path travels
+// inside the module rather than in the markup, and has to be rewritten here.
+const entry = RAW.slice(a + OPEN.length, b)
+  .replaceAll('/node_modules/@mathjax/mathjax-fira-font', './vendor/mathjax-fira');
+if (!entry.includes('./vendor/mathjax-fira/')) throw new Error('the MathJax rewrite did not match');
+await writeFile(ENTRY, entry);
+
+// The worker is fetched by URL rather than imported, so nothing would lead
+// esbuild to it: it has to be named as a second entry point. `splitting` gives
+// the two their shared code as one chunk, and each realm still evaluates its
+// own instance of it, which is what the solver's two copies of S rely on.
+let meta;
+try {
+  ({ metafile: meta } = await build({
+    entryPoints: { app: ENTRY, 'solver-worker': 'solver-worker.js' },
+    bundle: true, splitting: true, format: 'esm', outdir: OUT,
+    minify: true, legalComments: 'eof',        // three is MIT: keep the notice
+    target: ['chrome111', 'firefox121', 'safari16.4'],
+    chunkNames: 'chunk-[hash]', metafile: true,
+  }));
+} finally {
+  await unlink(ENTRY).catch(() => {});
 }
 
 // ─── the page, with every specifier pointed at something that will exist ─────
-const html = (await readFile('index.html', 'utf8'))
-  .replace("'./color-space.ts'", "'./color-space.js'")
-  .replace('"/node_modules/three/build/three.module.js"', `"./vendor/${THREE}"`)
-  .replace('"/node_modules/three/build/three.core.js"', '"./vendor/three.core.min.js"')
-  .replace('"/node_modules/three/examples/jsm/"', '"./vendor/jsm/"')
-  .replace('"/node_modules/marked/lib/marked.esm.js"', '"./vendor/marked.esm.js"')
+const html = (RAW.slice(0, a) + '<script type="module" src="./app.js"></script>' + RAW.slice(b + CLOSE.length))
+  // every bare specifier is resolved in the bundle, so the map has nothing left
+  // to answer for
+  .replace(/<script type="importmap">[\s\S]*?<\/script>\n/, '')
+  .replace('<link rel="modulepreload" href="/node_modules/three/build/three.core.js">',
+           '<link rel="modulepreload" href="./app.js">')
   .replaceAll('/node_modules/@mathjax/mathjax-fira-font', './vendor/mathjax-fira')
   .replaceAll('/node_modules/mathjax', './vendor/mathjax')
   .replaceAll('/node_modules/@fontsource/', './vendor/fontsource/');
-for (const [what, pat] of [['color-space.js', /'\.\/color-space\.js'/], ['three', /"\.\/vendor\/three\.module\.min\.js"/],
-                           ['three.core preload', /"\.\/vendor\/three\.core\.min\.js"/],
-                           ['three/addons', /"\.\/vendor\/jsm\/"/], ['mathjax', /\.\/vendor\/mathjax-fira\//],
-                           ['marked', /"\.\/vendor\/marked\.esm\.js"/],
-                           ['mathjax paths', /\.\/vendor\/mathjax'/], ['fonts', /\.\/vendor\/fontsource\//]])
+for (const [what, pat] of [['the bundle', /<script type="module" src="\.\/app\.js"><\/script>/],
+                           ['the preload', /"\.\/app\.js"/],
+                           ['the mathjax loader paths', /'\.\/vendor\/mathjax-fira'/],
+                           ['the mathjax tree', /'\.\/vendor\/mathjax'/],
+                           ['fonts', /\.\/vendor\/fontsource\//]])
   if (!pat.test(html)) throw new Error(`rewrite for ${what} did not match — check index.html`);
+for (const [what, pat] of [['an import map', /type="importmap"/], ['a node_modules path', /\/node_modules\//]])
+  if (pat.test(html)) throw new Error(`${what} survived into the built page`);
 await writeFile(join(OUT, 'index.html'), html);
-
-// ─── three and its addons, by following imports rather than guessing ────────
-// three.module.js is a shim that re-exports three.core.js, and an addon can
-// pull in siblings, so copying just the two files the page names leaves a 404
-// that only shows up once the page is served statically. Walk the graph.
-const copied = new Set();
-const queue = [
-  { root: 'node_modules/three/build', rel: THREE, out: 'vendor' },
-  ...[...html.matchAll(/from\s+'three\/addons\/([^']+)'/g)].map((m) => ({ root: JSM, rel: m[1], out: 'vendor/jsm' })),
-];
-while (queue.length) {
-  const { root, rel, out } = queue.shift();
-  const key = `${out}/${rel}`;
-  if (copied.has(key)) continue;
-  copied.add(key);
-  const src = await readFile(join(root, rel), 'utf8');
-  await mkdir(dirname(join(OUT, out, rel)), { recursive: true });
-  await writeFile(join(OUT, out, rel), src);
-  for (const m of src.matchAll(/from\s*['"](\.[^'"]+|three\/addons\/[^'"]+)['"]/g))
-    queue.push(m[1].startsWith('three/addons/')
-      ? { root: JSM, rel: m[1].slice(13), out: 'vendor/jsm' }
-      : { root, rel: posix.normalize(posix.join(posix.dirname(rel), m[1])), out });
-}
 
 // ─── MathJax, its Fira font, and the interface's own Fira ───────────────────
 // None of this is in the import graph above: MathJax is a classic script that
@@ -115,15 +115,16 @@ for (const f of ['fira-sans/files/fira-sans-latin-400-normal.woff2',
                  'fira-mono/files/fira-mono-latin-400-normal.woff2'])
   await copyInto(`node_modules/@fontsource/${f}`, `vendor/fontsource/${f}`);
 
-// The markdown renderer, and the two documents it renders. The dialogs fetch
-// these at run time, so they are content rather than build input: they have to
-// exist next to index.html on the deployed site.
-await copyInto('node_modules/marked/lib/marked.esm.js', 'vendor/marked.esm.js');
+// The three documents the dialogs fetch at run time: content rather than build
+// input, so they have to exist next to index.html on the deployed site. Their
+// renderer is not here any more — marked is imported dynamically, so esbuild
+// gives it its own chunk and the page still only pays for it on a ? click.
 for (const doc of ['about.md', 'formulation.md', 'spaces.md']) await copyInto(doc, doc);
 
 // Jekyll would otherwise skip anything beginning with an underscore
 await writeFile(join(OUT, '.nojekyll'), '');
 
-console.log(`${OUT}/ built — index.html, color-space.js, solver.js, solver-worker.js,`
-            + ` and ${copied.size} vendored module(s):`);
-for (const f of copied) console.log(`  ${f}`);
+const kb = (n) => `${(n / 1024).toFixed(0)} kB`;
+console.log(`${OUT}/ built —`);
+for (const [f, o] of Object.entries(meta.outputs).sort((x, y) => y[1].bytes - x[1].bytes))
+  console.log(`  ${kb(o.bytes).padStart(8)}  ${f}`);
