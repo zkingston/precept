@@ -138,8 +138,8 @@
   #tip.cell #tipcanvas { width:100%; height:auto; flex:1; min-height:0; }
   #tip.cell #tipbtns { margin-top:0; gap:2px; }
   #tip.cell #tipbtns button { font-size:9px; padding:1px 0; }
-  #dock #tip { position:static; }
-  #dock #tipcanvas { width:100%; height:auto; }
+  #tipdock #tip { position:static; }
+  #tipdock #tipcanvas { width:100%; height:auto; }
   #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
   #tipbtns { display:flex; gap:4px; margin-top:6px; }
   #tipbtns button { flex:1; font-size:10px; padding:2px 0; }
@@ -192,6 +192,28 @@
   .seg { display:flex; } .seg button { border-radius:0; flex:1; }
   .seg button:first-child { border-radius:4px 0 0 4px; } .seg button:last-child { border-radius:0 4px 4px 0; }
   .seg button[aria-pressed=true] { background:var(--sel); border-color:var(--link); }
+
+  /* The one control the page is for, so it leads the section and is the only
+     filled button in the panel — which is what makes it findable, rather than a
+     colour nothing else uses. Running is the same button in the warning colour:
+     the thing to press and the thing to press again are one place, not two. */
+  #run { width:100%; margin:0 0 9px; padding:8px; font:600 12px/1 'Fira Sans',ui-sans-serif,system-ui,sans-serif;
+         letter-spacing:.04em; background:var(--sel); border-color:var(--link); }
+  #run:hover { background:var(--hud); color:var(--panel); }
+  #run[data-on] { background:var(--hot); border-color:var(--hot); color:var(--panel); }
+
+  /* A profile plot docked against the term it belongs to. The row is inserted
+     after that term's own row, so the curve sits under the checkbox that turns
+     it on rather than in a panel of its own somewhere else.
+     Which is also why the plot's own checkbox goes: it is the same term as the
+     row directly above, and two identical labels stacked read as a bug rather
+     than as a convenience. Its buttons stay, and take the panel's own chrome
+     instead of the dark chip they wear over the 3D view. */
+  #metrics tr.plotrow > td { padding:1px 0 9px; }
+  #metrics tr.plotrow .pplot { height:84px; }
+  #metrics tr.plotrow .phead > .chk { display:none; }
+  #metrics tr.plotrow .phead button { background:var(--ctl); color:var(--fg); border-color:var(--line); }
+  #metrics tr.plotrow .phead button:hover { background:var(--sel); }
 
   /* the output belongs next to the thing it came from, not in a side panel.
      layout() sets top and bottom, since what is above it depends on where the
@@ -270,7 +292,7 @@
        another at 540, and the wide end of this tier is where it looked pulled.
        Every test image is drawn from the canvas's own size, so a wider box is
        a wider picture rather than a squashed one. */
-    #dock #tipcanvas { height:auto; aspect-ratio:2.7; }
+    #tipdock #tipcanvas { height:auto; aspect-ratio:2.7; }
   }
   /* Wide formulas scroll sideways on a narrow viewport. The vertical padding is
      not decoration: MathJax's box arithmetic leaves each container overflowing
@@ -350,7 +372,7 @@
      and the plots want the full width anyway, since you drag their knots.
      The breakpoint is shared with the JS through matchMedia; the viewport
      split it selects lives in layout(). */
-  #dock { display:none; }
+  #tipdock { display:none; }
 
   /* ── compact: the panel takes the overlays ──────────────────────────────
      Two thresholds, not one. The SHELL only has to stack on a phone, but the
@@ -360,9 +382,8 @@
      profiles move into the side panel here, while the layout stays side by
      side, and the tools rise to the top now that nothing sits above them. */
   @media (max-width: 1280px), (max-height: 719px) {
-    #dock { display:flex; flex-direction:column; gap:11px; }
-    #lplot { position:static; }
-    #lplot { height:auto; flex-direction:column; gap:9px; }
+    #tipdock { display:block; margin-bottom:9px; }
+    #lplot { position:static; height:auto; flex-direction:column; gap:9px; }
     .pplot { flex:none; height:84px; }          /* flex:1 would beat the height */
     #hud { top:12px; }
     #bar { bottom:14px; }
@@ -372,8 +393,7 @@
     #app { grid-template-columns:1fr; grid-template-rows:48vh minmax(0,1fr); height:100dvh; }
     aside { border-left:0; border-top:1px solid var(--line); gap:11px;
             display:grid; grid-template-columns:repeat(auto-fill,minmax(258px,1fr)); align-content:start; }
-    h1, #dock, section { grid-column:1/-1; }
-    #dock { display:flex; flex-direction:column; gap:11px; }
+    h1, section { grid-column:1/-1; }
     section { grid-column:auto; }
 
     /* the preview is the fourth cell of the cut strip; layout() places it.
@@ -394,19 +414,6 @@
     /* nothing above the tools any more, and the bar stops at the cut row */
     #hud { top:10px; }
   }
-  /* The panel is below the canvas here and as wide as the window, so at 640 the
-     two profiles and the preview stacked to five hundred pixels of scrolling
-     for three things that each want about two hundred. Side by side instead.
-     Bounded below because three columns of a phone's width are 125px each, and
-     by aspect because a window wider than it is tall puts the panel back into a
-     narrow side column, where stacking is right again. */
-  @media (min-width: 560px) and (max-width: 860px) and (max-aspect-ratio: 99/100) {
-    #dock { flex-direction:row; align-items:flex-start; gap:12px; }
-    #lplot { flex:2 1 0; flex-direction:row; gap:12px; }
-    #lplot .pplot { flex:1 1 0; min-width:0; }
-    #tip { flex:1 1 0; min-width:0; }
-  }
-
   /* A phone on its side is 390px tall: stacking there leaves a canvas too
      short to orbit in. Side by side is the shape that fits, with the panel
      narrow — the dock inside it is already a column either way. */
@@ -481,11 +488,57 @@
 
     <section>
       <h2>Palette</h2>
+      <div id="tipdock"></div>
       <div class="seg" id="mode"><button data-v="continuous">Continuous</button><button data-v="discrete">Discrete</button></div>
       <div class="row" style="margin-top:6px"><label class="f">load</label>
         <button id="loadbtn" style="flex:1">load…</button></div>
     </section>
 
+    <section id="selpanel">
+      <h2>Selection</h2>
+      <div class="row" id="selpreview">
+        <input type="color" id="selcolor" title="pick the selected color">
+        <span id="selinfo" class="note"></span></div>
+      <div class="row"><select id="colorfmt" style="width:88px"></select>
+        <input type="text" id="hex" spellcheck="false" style="flex:1;min-width:0"></div>
+      <div class="row"><button id="flip" style="flex:1">flip the excluded side</button></div>
+    </section>
+
+    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2>
+      <button id="run">run Adam</button>
+      <table id="metrics"></table>
+      <div class="row" style="margin-top:8px"><label class="f">rate</label>
+        <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span>
+        <label class="chk" title="jolt out of a stall and keep the best attempt"><input type="checkbox" id="restart">restarts</label></div>
+      <div class="row"><label class="f">contrast</label>
+        <input type="color" id="cbg" value="#ffffff" title="the ground swatches are judged against">
+        <input type="number" id="cfloor" min="1" max="21" step="0.5" value="3"
+               style="width:52px" title="minimum contrast ratio the palette should reach">
+        <span class="note" style="flex:1">:1 floor</span>
+        <span class="v" id="lcnow" style="width:auto;opacity:.7"
+              title="the same worst swatch in APCA Lc — 60 is the floor for body text"></span>
+        <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
+      <div class="row" id="lseprow"><label class="f">grayscale</label>
+        <span class="note" style="flex:1">ΔL floor <b id="lsepv">–</b>, closest pair</span>
+        <span class="v" id="lnow" style="width:auto" title="closest pair in lightness">–</span></div>
+    </section>
+    <section>
+      <h2>Bounds</h2>
+      <div class="row"><label class="f">lightness</label>
+        <span class="dual" id="ldual"><span class="fill"></span>
+          <input type="range" id="lmin" min="0" max="100" step="1" value="0">
+          <input type="range" id="lmax" min="0" max="100" step="1" value="100"></span>
+        <span class="v" style="width:56px" id="lboundv">0–100</span></div>
+      <div class="row"><label class="f">chroma</label>
+        <span class="dual" id="cdual"><span class="fill"></span>
+          <input type="range" id="cmin" min="0" max="40" step="0.5" value="0">
+          <input type="range" id="cmax" min="0" max="40" step="0.5" value="40"></span>
+        <span class="v" style="width:56px" id="cboundv">0–40</span></div>
+      <div class="row" style="align-items:flex-start"><label class="f" style="padding-top:44px">hue</label>
+        <span class="wheelwrap"><canvas id="huewheel" width="112" height="112" title="drag an edge of the arc"></canvas>
+          <button id="huereset" title="allow every hue">↺</button></span>
+        <span class="v" style="width:56px;padding-top:44px" id="hboundv">any</span></div>
+    </section>
     <section>
       <h2>View</h2>
       <div class="row"><label class="f">space</label><select id="spacesel" style="flex:1"></select>
@@ -509,52 +562,6 @@
       <div class="row"><label class="chk"><input type="checkbox" id="lock">lock slices to node</label></div>
     </section>
 
-    <section id="selpanel">
-      <h2>Selection</h2>
-      <div class="row" id="selpreview">
-        <input type="color" id="selcolor" title="pick the selected color">
-        <span id="selinfo" class="note"></span></div>
-      <div class="row"><select id="colorfmt" style="width:88px"></select>
-        <input type="text" id="hex" spellcheck="false" style="flex:1;min-width:0"></div>
-      <div class="row"><button id="flip" style="flex:1">flip the excluded side</button></div>
-    </section>
-
-    <section>
-      <h2>Bounds</h2>
-      <div class="row"><label class="f">lightness</label>
-        <span class="dual" id="ldual"><span class="fill"></span>
-          <input type="range" id="lmin" min="0" max="100" step="1" value="0">
-          <input type="range" id="lmax" min="0" max="100" step="1" value="100"></span>
-        <span class="v" style="width:56px" id="lboundv">0–100</span></div>
-      <div class="row"><label class="f">chroma</label>
-        <span class="dual" id="cdual"><span class="fill"></span>
-          <input type="range" id="cmin" min="0" max="40" step="0.5" value="0">
-          <input type="range" id="cmax" min="0" max="40" step="0.5" value="40"></span>
-        <span class="v" style="width:56px" id="cboundv">0–40</span></div>
-      <div class="row" style="align-items:flex-start"><label class="f" style="padding-top:44px">hue</label>
-        <span class="wheelwrap"><canvas id="huewheel" width="112" height="112" title="drag an edge of the arc"></canvas>
-          <button id="huereset" title="allow every hue">↺</button></span>
-        <span class="v" style="width:56px;padding-top:44px" id="hboundv">any</span></div>
-    </section>
-    <div id="dock"></div>
-
-    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2><table id="metrics"></table>
-      <div class="row" style="margin-top:8px"><label class="f">rate</label>
-        <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span></div>
-      <div class="row"><label class="f">contrast</label>
-        <input type="color" id="cbg" value="#ffffff" title="the ground swatches are judged against">
-        <input type="number" id="cfloor" min="1" max="21" step="0.5" value="3"
-               style="width:52px" title="minimum contrast ratio the palette should reach">
-        <span class="note" style="flex:1">:1 floor</span>
-        <span class="v" id="lcnow" style="width:auto;opacity:.7"
-              title="the same worst swatch in APCA Lc — 60 is the floor for body text"></span>
-        <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
-      <div class="row" id="lseprow"><label class="f">grayscale</label>
-        <span class="note" style="flex:1">ΔL floor <b id="lsepv">–</b>, closest pair</span>
-        <span class="v" id="lnow" style="width:auto" title="closest pair in lightness">–</span></div>
-      <div class="row"><label class="f">solve</label><button id="run" style="flex:1">run Adam</button>
-        <label class="chk"><input type="checkbox" id="restart">random restarts</label></div>
-    </section>
     <section><h2>Export</h2>
       <div class="row"><label class="f">name</label>
         <input type="text" id="scenename" value="precept" style="flex:1;min-width:0"></div>
