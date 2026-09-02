@@ -261,12 +261,12 @@
   .note { color:var(--dim); font-size:11px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
-  h2 #a11ybtn { float:right; margin:-3px 6px 0 0; padding:0 6px;
-    font:11px/1.5 'Fira Mono',ui-monospace,monospace; }
-  h2 #mathbtn { float:right; margin:-3px 0 0; padding:0 6px; font:11px/1.5 'Fira Sans',ui-sans-serif,system-ui,sans-serif;
+  h2 #a11ybtn, h2 #mathbtn { float:right; margin:-3px 0 0; padding:0 6px;
                 background:var(--ctl); color:var(--dim); border:1px solid var(--line); border-radius:3px;
                 cursor:pointer; text-transform:none; letter-spacing:0; }
-  h2 #mathbtn:hover { color:var(--fg); }
+  h2 #mathbtn { font:11px/1.5 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
+  h2 #a11ybtn { margin-right:6px; font:11px/1.5 'Fira Mono',ui-monospace,monospace; }
+  h2 #a11ybtn:hover, h2 #mathbtn:hover { color:var(--fg); }
   .doc { max-width:min(760px, calc(100vw - 32px)); max-height:calc(100dvh - 56px); overflow-y:auto;
     overscroll-behavior:contain; padding:22px 26px; background:var(--panel); color:var(--fg);
     border:1px solid var(--line); border-radius:9px; font:13px/1.6 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
@@ -325,8 +325,10 @@
   #a11ybody td.v { text-align:right; white-space:nowrap; padding-left:12px;
     font-family:'Fira Mono',ui-monospace,monospace; font-size:11px; }
   #a11ybody td.mark { width:16px; text-align:right; font-size:11px; }
+  /* td:last-child is right-aligned for the value column, and a colspan head is
+     also a last child — so it has to say so. */
   #a11ybody tr.h td { padding:14px 0 4px; font-size:10px; letter-spacing:.1em;
-    text-transform:uppercase; color:var(--dim); }
+    text-align:left; text-transform:uppercase; color:var(--dim); }
   #a11ybody tr.h td em { font-style:normal; text-transform:none; letter-spacing:normal; }
   #a11ybody .no { color:var(--hot); }
   #a11ycopy { margin-top:16px; padding:5px 10px; }
@@ -507,7 +509,8 @@
       <div class="row"><button id="flip" style="flex:1">flip the excluded side</button></div>
     </section>
 
-    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2>
+    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button>
+      <button id="a11ybtn" title="how this palette reads for everyone else">a11y</button></h2>
       <button id="run">run optimizer</button>
       <table id="metrics"></table>
       <div class="row" style="margin-top:8px"><label class="f">rate</label>
@@ -581,15 +584,12 @@
   <div id="aboutbody"></div>
 </dialog>
 
-<!-- Shelved, not deleted: the report and its styling are still below, and the
-     button in the Optimize heading is the other half of putting it back.
 <dialog id="a11ydlg">
   <button id="a11yclose" title="close">&times;</button>
   <h3>Accessibility</h3>
   <table id="a11ybody"></table>
   <button id="a11ycopy">copy as text</button>
 </dialog>
--->
 
 <dialog id="loaddlg">
   <button id="loadclose" title="close">&times;</button>
