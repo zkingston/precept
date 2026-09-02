@@ -476,7 +476,8 @@
           <label class="chk"><input type="checkbox" data-on="hprof">hue profile</label>
           <span class="pbtns"><button data-p="fit" title="target ← the ramp's current profile">fit</button>
             <button data-p="p1"></button><button data-p="p2"></button></span>
-        </div><canvas class="pcanvas"></canvas>
+        </div><canvas class="pcanvas"
+              title="drag a knot to shape the target · drag the bracket on the left to turn the whole profile, or its ends to widen the turn"></canvas>
       </div>
     </div>
     <div id="bar">
@@ -2909,26 +2910,58 @@ const lpv = (p, y) => p.lo + ((p.el.clientHeight - LPAD.b - y) / (p.el.clientHei
  * about the other. Editing every knot at once, without a modifier to hold or a
  * row of panel to spend, in the 8px the tick labels do not use.
  *
- * Lightness only. Hue is a circle: its knots are stored wrapped, so a profile
- * crossing the seam reads as spanning nearly the whole axis when it is in fact
- * narrow, and there is no min and max to put a bracket between.
+ * Both plots. See lpunwrap for how a hue profile is made into something with a
+ * span at all.
  */
 const GRIP = 7;
-const lpband = (p) => {
+
+/**
+ * The profile as a path rather than as a set of values.
+ *
+ * Hue knots are stored wrapped and the polyline joins them the short way, so
+ * the excursion the ramp really makes is the running sum of those steps — the
+ * quantity totalTurn reports, and the reason magma's 264 to 109 is a turn of
+ * +205 rather than the -155 its two endpoints suggest. Unwrapped, a hue profile
+ * is a line like a lightness one, and both transforms below are the same
+ * arithmetic on it. Lightness is already a line and comes back unchanged.
+ */
+const lpunwrap = (p) => {
   const prof = p.prof();
-  if (p.hue || prof.length < 2) return null;
-  const lo = Math.min(...prof), hi = Math.max(...prof);
-  return { lo, hi, yLo: lpy(p, lo), yHi: lpy(p, hi) };
+  if (!p.hue) return prof.slice();
+  const u = [prof[0]];
+  for (let i = 1; i < prof.length; i++) u.push(u[i - 1] + angDiff(prof[i], prof[i - 1]));
+  return u;
+};
+
+const lpband = (p) => {
+  if (p.prof().length < 2) return null;
+  const u = lpunwrap(p);
+  const lo = Math.min(...u), hi = Math.max(...u);
+  // Lightness has ends and the bracket sits between them. Hue has none, so it
+  // is centred on the profile's own middle brought back onto the axis: the same
+  // construction, a midpoint and a half-span, reading as a gauge of the turn.
+  const mid = p.hue ? norm360((lo + hi) / 2) : (lo + hi) / 2, half = (hi - lo) / 2;
+  // and it wraps rather than being cut off at the edge, the same way the curve
+  // above it does. Clipped instead, turning a profile past the end of the axis
+  // made the bracket shrink, which is the one thing turning does not do.
+  const segs = [];
+  if (p.hue && half >= 180) segs.push([p.lo, p.hi]);
+  else for (const off of p.hue ? [-360, 0, 360] : [0]) {
+    const a = Math.max(p.lo, mid - half + off), b = Math.min(p.hi, mid + half + off);
+    if (b > a) segs.push([a, b]);
+  }
+  const end = (v) => lpy(p, p.hue ? norm360(v) : v);
+  return { u, lo, hi, segs, yHi: end(mid + half), yLo: end(mid - half) };
 };
 const lpgrip = (p, y) => {
   const b = lpband(p);
   if (!b) return null;
   // ends closer together than the two grips can be told apart: a flat profile
   // has nothing to scale anyway, since every knot is already on the anchor
-  const flat = b.yLo - b.yHi < 2 * GRIP;
+  const flat = Math.abs(b.yLo - b.yHi) < 2 * GRIP;
   if (!flat && Math.abs(y - b.yHi) <= GRIP) return 'hi';
   if (!flat && Math.abs(y - b.yLo) <= GRIP) return 'lo';
-  return y >= b.yHi - GRIP && y <= b.yLo + GRIP ? 'move' : null;
+  return b.segs.some(([a, c]) => y >= lpy(p, c) - GRIP && y <= lpy(p, a) + GRIP) ? 'move' : null;
 };
 /**
  * Always from the snapshot taken when the drag began, never from the last
@@ -2938,22 +2971,33 @@ const lpgrip = (p, y) => {
  * is not moving.
  */
 function lpstretch(p, d, y) {
-  const prof = p.prof(), { snap, grip } = d;
-  const lo = Math.min(...snap), hi = Math.max(...snap);
+  const prof = p.prof(), { u, grip } = d;
+  const lo = Math.min(...u), hi = Math.max(...u);
   const dv = lpv(p, y) - lpv(p, d.y);
+  const put = (v, i) => (prof[i] = p.hue ? norm360(v) : v);
+
   if (grip === 'move') {
-    const s = Math.min(p.hi - hi, Math.max(p.lo - lo, dv));
-    snap.forEach((v, i) => (prof[i] = v + s));
+    // a circle simply turns; a bounded axis stops at its end rather than
+    // flattening the profile against it
+    const s = p.hue ? dv : Math.min(p.hi - hi, Math.max(p.lo - lo, dv));
+    u.forEach((v, i) => put(v + s, i));
     return;
   }
   if (hi - lo < 1e-9) return;
-  if (grip === 'hi') {
-    const k = (Math.min(p.hi, Math.max(lo, hi + dv)) - lo) / (hi - lo);
-    snap.forEach((v, i) => (prof[i] = lo + (v - lo) * k));
-  } else {
-    const k = (hi - Math.min(hi, Math.max(p.lo, lo + dv))) / (hi - lo);
-    snap.forEach((v, i) => (prof[i] = hi - (hi - v) * k));
-  }
+  /**
+   * A step wider than half a circle is read as the short way round the other
+   * side the next time the path is unwrapped, so the profile would jump to a
+   * different winding mid-drag and not come back. Cap the spread where that
+   * would start rather than let it happen.
+   */
+  const step = Math.max(...u.slice(1).map((v, i) => Math.abs(v - u[i])));
+  const kMax = p.hue && step > 0 ? 179 / step : Infinity;
+  const wall = (v, a, b) => (p.hue ? v : Math.min(b, Math.max(a, v)));
+  const k = Math.min(kMax, grip === 'hi'
+    ? (Math.max(lo, wall(hi + dv, lo, p.hi)) - lo) / (hi - lo)
+    : (hi - Math.min(hi, wall(lo + dv, p.lo, hi))) / (hi - lo));
+  const anchor = grip === 'hi' ? lo : hi;
+  u.forEach((v, i) => put(anchor + (v - anchor) * k, i));
 }
 
 function layoutPlot() {
@@ -2992,7 +3036,7 @@ function drawPlot(p) {
   if (band) {
     const bx = LPAD.l - 5;
     ctx.globalAlpha = 0.6; ctx.beginPath();
-    ctx.moveTo(bx, band.yHi); ctx.lineTo(bx, band.yLo);
+    for (const [a, c] of band.segs) { ctx.moveTo(bx, lpy(p, c)); ctx.lineTo(bx, lpy(p, a)); }
     for (const y of [band.yHi, band.yLo]) { ctx.moveTo(bx - 3, y); ctx.lineTo(bx + 3, y); }
     ctx.stroke();
   }
@@ -3064,7 +3108,7 @@ for (const p of PLOTLIST) {
   p.el.addEventListener('pointerdown', (e) => {
     const [x, y] = at(e);
     const grip = x < LPAD.l ? lpgrip(p, y) : null;   // the gutter is the bracket's
-    if (grip) lDrag = { p, grip, y, snap: p.prof().slice() };
+    if (grip) lDrag = { p, grip, y, u: lpunwrap(p) };
     else {
       lDrag = { p, i: Math.min(LK - 1, Math.max(0, Math.round(lpt(p, x) * (LK - 1)))) };  // nearest knot
       p.prof()[lDrag.i] = p.clamp(lpv(p, y));
