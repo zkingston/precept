@@ -1974,6 +1974,7 @@ function sidebar() {
 
   paintPlotButtons(); drawPlots(); drawWheel();
   drawTest();
+  pushState();
 }
 
 // ─── test image preview ──────────────────────────────────────────────────────
@@ -3242,16 +3243,23 @@ function sync({ colors = false, light = false } = {}) {
   slices.forEach(paintSlice);
   paintShell();
   buildTube(); buildPoints(); buildObstacles(); buildPlanes();
-  if (!light) sidebar();
+  if (!light) sidebar();                       // which is what tells the solver
   noteEdit();
-  pushState();
 }
 
 /**
- * The worker holds its own S, so anything changed here has to be sent. sync()
- * is where most edits pass through, but not all of them: a weight never
- * re-renders anything, so it never reached the solver at all while one was
- * running — the run kept descending the weights it started with.
+ * The worker holds its own S, so anything changed here has to be sent.
+ *
+ * sidebar() is the place to send it from. It was sync(), which is one caller up
+ * and misses everything that edits the objective without rebuilding the scene —
+ * every profile edit, since a knot drag, the bracket, and fit/line/arch all
+ * repaint the panel and nothing else. A run went on descending the profile it
+ * started with while the plot showed the new one.
+ *
+ * Every one of those redraws the numbers it changed, so a repaint is what an
+ * edit has in common. The two that deliberately do not repaint, the weights and
+ * the rate, say so themselves. `applying` keeps the solver's own frames from
+ * echoing back: those repaint too.
  */
 function pushState() {
   if (running && !applying) solver.postMessage({ t: 'state', ...solverState() });
@@ -4344,7 +4352,10 @@ for (const ev of ['pointerup', 'pointercancel'])
   addEventListener(ev, () => { wDrag = null; });
 $('run').onclick = () => (running ? stopSolver() : startSolver());
 $('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; sidebar(); };
-$('rate').oninput = (e) => { S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1); };
+$('rate').oninput = (e) => {
+  S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1);
+  pushState();                                   // read every step, repaints nothing
+};
 $('restart').onchange = (e) => { S.restart = e.target.checked; sidebar(); };
 $('cbg').oninput = (e) => { S.cbg = e.target.value; sidebar(); };
 $('cfloor').oninput = (e) => { S.cmin = Math.max(1, +e.target.value || 1); sidebar(); };
