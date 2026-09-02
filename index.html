@@ -468,7 +468,8 @@
           <label class="chk"><input type="checkbox" data-on="lramp">lightness profile</label>
           <span class="pbtns"><button data-p="fit" title="target ← the ramp's current profile">fit</button>
             <button data-p="p1"></button><button data-p="p2"></button></span>
-        </div><canvas class="pcanvas"></canvas>
+        </div><canvas class="pcanvas"
+              title="drag a knot to shape the target · drag the bracket on the left to move the whole profile, or its ends to stretch it"></canvas>
       </div>
       <div class="pplot" data-plot="H">
         <div class="phead">
@@ -2902,6 +2903,59 @@ const lpy = (p, v) => p.el.clientHeight - LPAD.b - ((v - p.lo) / (p.hi - p.lo)) 
 const lpt = (p, x) => (x - LPAD.l) / (p.el.clientWidth - LPAD.l - LPAD.r);
 const lpv = (p, y) => p.lo + ((p.el.clientHeight - LPAD.b - y) / (p.el.clientHeight - LPAD.t - LPAD.b)) * (p.hi - p.lo);
 
+/**
+ * The span the profile occupies, drawn as a bracket down the axis gutter and
+ * draggable there: the middle moves the whole profile, either end stretches it
+ * about the other. Editing every knot at once, without a modifier to hold or a
+ * row of panel to spend, in the 8px the tick labels do not use.
+ *
+ * Lightness only. Hue is a circle: its knots are stored wrapped, so a profile
+ * crossing the seam reads as spanning nearly the whole axis when it is in fact
+ * narrow, and there is no min and max to put a bracket between.
+ */
+const GRIP = 7;
+const lpband = (p) => {
+  const prof = p.prof();
+  if (p.hue || prof.length < 2) return null;
+  const lo = Math.min(...prof), hi = Math.max(...prof);
+  return { lo, hi, yLo: lpy(p, lo), yHi: lpy(p, hi) };
+};
+const lpgrip = (p, y) => {
+  const b = lpband(p);
+  if (!b) return null;
+  // ends closer together than the two grips can be told apart: a flat profile
+  // has nothing to scale anyway, since every knot is already on the anchor
+  const flat = b.yLo - b.yHi < 2 * GRIP;
+  if (!flat && Math.abs(y - b.yHi) <= GRIP) return 'hi';
+  if (!flat && Math.abs(y - b.yLo) <= GRIP) return 'lo';
+  return y >= b.yHi - GRIP && y <= b.yLo + GRIP ? 'move' : null;
+};
+/**
+ * Always from the snapshot taken when the drag began, never from the last
+ * frame: composing the transform each move would drift, and a move that has run
+ * into the ceiling would keep flattening the profile against it instead of
+ * simply stopping. Moving stops at the wall; stretching anchors on the end that
+ * is not moving.
+ */
+function lpstretch(p, d, y) {
+  const prof = p.prof(), { snap, grip } = d;
+  const lo = Math.min(...snap), hi = Math.max(...snap);
+  const dv = lpv(p, y) - lpv(p, d.y);
+  if (grip === 'move') {
+    const s = Math.min(p.hi - hi, Math.max(p.lo - lo, dv));
+    snap.forEach((v, i) => (prof[i] = v + s));
+    return;
+  }
+  if (hi - lo < 1e-9) return;
+  if (grip === 'hi') {
+    const k = (Math.min(p.hi, Math.max(lo, hi + dv)) - lo) / (hi - lo);
+    snap.forEach((v, i) => (prof[i] = lo + (v - lo) * k));
+  } else {
+    const k = (hi - Math.min(hi, Math.max(p.lo, lo + dv))) / (hi - lo);
+    snap.forEach((v, i) => (prof[i] = hi - (hi - v) * k));
+  }
+}
+
 function layoutPlot() {
   const dpr = Math.min(2, devicePixelRatio || 1);
   for (const p of PLOTLIST) {
@@ -2933,6 +2987,14 @@ function drawPlot(p) {
     ctx.globalAlpha = 0.75;
     ctx.fillText(String(v).padStart(3), 2, lpy(p, v) + 3);
     ctx.globalAlpha = 0.28;
+  }
+  const band = lpband(p);
+  if (band) {
+    const bx = LPAD.l - 5;
+    ctx.globalAlpha = 0.6; ctx.beginPath();
+    ctx.moveTo(bx, band.yHi); ctx.lineTo(bx, band.yLo);
+    for (const y of [band.yHi, band.yLo]) { ctx.moveTo(bx - 3, y); ctx.lineTo(bx + 3, y); }
+    ctx.stroke();
   }
   ctx.globalAlpha = 1;
 
@@ -3001,14 +3063,20 @@ for (const p of PLOTLIST) {
   const at = (e) => { const r = p.el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   p.el.addEventListener('pointerdown', (e) => {
     const [x, y] = at(e);
-    lDrag = { p, i: Math.min(LK - 1, Math.max(0, Math.round(lpt(p, x) * (LK - 1)))) };  // nearest knot
+    const grip = x < LPAD.l ? lpgrip(p, y) : null;   // the gutter is the bracket's
+    if (grip) lDrag = { p, grip, y, snap: p.prof().slice() };
+    else {
+      lDrag = { p, i: Math.min(LK - 1, Math.max(0, Math.round(lpt(p, x) * (LK - 1)))) };  // nearest knot
+      p.prof()[lDrag.i] = p.clamp(lpv(p, y));
+    }
     p.el.setPointerCapture(e.pointerId);
-    p.prof()[lDrag.i] = p.clamp(lpv(p, y));
     sidebar();
   });
   p.el.addEventListener('pointermove', (e) => {
     if (lDrag?.p !== p) return;
-    p.prof()[lDrag.i] = p.clamp(lpv(p, at(e)[1]));   // to the visible window, no further
+    const [, y] = at(e);
+    if (lDrag.grip) lpstretch(p, lDrag, y);
+    else p.prof()[lDrag.i] = p.clamp(lpv(p, y));     // to the visible window, no further
     sidebar();
   });
   p.el.addEventListener('pointerup', () => { lDrag = null; });
