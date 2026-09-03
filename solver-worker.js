@@ -12,7 +12,7 @@
  * of those messages is `stop`.
  */
 import {
-  S, RESTART, step, adamReset, resetTick, reseedJitter, better, derive, constrain,
+  S, RESTART, step, adamReset, resetTick, reseedJitter, better, derive, constrain, incumbent,
 } from './solver.js';
 import { params, GAMUTS } from './color-space.ts';
 
@@ -37,7 +37,10 @@ function receive(m) {
 }
 
 /** the run's answer: the best restart, or where it ended if that was better */
-const answer = () => (S.restart && RESTART.best && better(RESTART.best, S.pts) ? RESTART.best : S.pts);
+const answer = () => {
+  const best = incumbent();
+  return S.restart && best && better(best, S.pts) ? best : S.pts;
+};
 
 const finish = () => { running = false; postMessage({ t: 'final', pts: answer(), id }); };
 
@@ -45,7 +48,19 @@ function loop() {
   if (!running) return;
   const until = performance.now() + SLICE;
   let alive = true;
-  do { alive = step(); } while (alive && performance.now() < until);
+  try {
+    do { alive = step(); } while (alive && performance.now() < until);
+  } catch (err) {
+    // A throw in here used to end the run without ending it. loop was never
+    // rescheduled, so neither `pts` nor `final` ever arrived and the page sat
+    // waiting with its button on `stop` over a solver that had stopped — which
+    // is what a solver bug looked like from the outside: a freeze. Hand back
+    // the points as they stand, not answer(), which is one of the things that
+    // can throw. Rethrown so it still reaches the console with its stack.
+    running = false;
+    postMessage({ t: 'final', pts: S.pts, id });
+    throw err;
+  }
   postMessage({ t: 'pts', pts: S.pts, id });
   if (!alive) return finish();                 // converged: nothing moved
   setTimeout(loop, 0);                         // yield, so `stop` can be heard

@@ -950,6 +950,25 @@ export const RESTART = { n: 0, best: null, bestScore: 0, scale: {}, sd: 5, flat:
                   patience: 8, gain: 5e-4 };
 
 /**
+ * The incumbent, if it still describes the palette being optimized.
+ *
+ * It is a snapshot of the points, and ctxOf builds the run structure from S and
+ * indexes the candidate with it — so the moment a node is added or deleted
+ * under a running solver, scoring the snapshot reads off the end of an array
+ * that is now the wrong length. The throw landed in the worker's loop, which
+ * had nothing to catch it, so the run ended without ending: the page waited for
+ * points that were never coming, with its button still on `stop`.
+ *
+ * Repaired on read rather than at the edit, for the reason syncRuns gives:
+ * every path that changes the point count would otherwise have to remember, and
+ * loading a preset and deleting a node already do not.
+ */
+export const incumbent = () => {
+  if (RESTART.best && RESTART.best.length !== S.pts.length) { RESTART.best = null; RESTART.bestScore = 0; }
+  return RESTART.best;
+};
+
+/**
  * Score point sets against each other on a shared running scale. Comparing on
  * a scale that has grown since the incumbent was measured would let a worse
  * result win, so every candidate in a comparison is measured together.
@@ -1018,7 +1037,7 @@ export function restartTick() {
   // between is never kept, and the run can end worse than plain Adam would.
   const here = S.pts.map((p) => [...p]);
   const [score] = scores([here]);
-  if (!RESTART.best || better(here, RESTART.best)) RESTART.best = here;
+  if (!incumbent() || better(here, RESTART.best)) RESTART.best = here;
   RESTART.bestScore = scores([RESTART.best])[0];
   if (score < RESTART.prev - RESTART.gain) { RESTART.prev = score; RESTART.flat = 0; return; }
   if (++RESTART.flat < RESTART.patience) return;
@@ -1215,3 +1234,50 @@ export function derive() {
   setObserver(S.cvd === 'none' ? NORMAL : simulate(S.cvd, S.sev));
   LSEP = autoLsep();
 }
+
+// ─── self-check ──────────────────────────────────────────────────────────────
+
+/**
+ * A node added while the solver is running, which is what the page does when
+ * you double-click during a run.
+ *
+ * With restarts on this used to throw. The incumbent is a snapshot of the
+ * points and ctxOf indexes it with a run structure read from S, so a palette
+ * that has grown since the snapshot was taken runs off the end of it. The throw
+ * landed in the worker's slice loop, which never rescheduled itself afterwards
+ * — so the page waited on points that were never coming and the button stayed
+ * on `stop`. Cheap to test here, and it needs no browser: the browser only
+ * decided the timing.
+ */
+function demo() {
+  const HEX = ['#440154', '#472d7b', '#3b528b', '#2c728e', '#21918c',
+               '#27ad81', '#5cc863', '#aadc32', '#fde725'];
+  let bad = 0;
+  const ok = (cond, what) => { if (!cond) { bad++; console.error('FAIL —', what); } };
+
+  for (const [after, at] of [[30, 3], [60, 0], [120, 9], [200, 5], [400, 1]]) {
+    S.mode = 'continuous'; S.restart = true;
+    S.pts = HEX.map(fromHex); S.pin = []; S.cut = []; S.loop = []; S.marks = []; S.sel = null;
+    Object.assign(RESTART, { n: 0, best: null, bestScore: 0, scale: {}, flat: 0, prev: Infinity });
+    derive(); constrain(); resetTick(); adamReset(); reseedJitter();
+
+    for (let i = 0; i < after; i++) step();
+    ok(!!RESTART.best, `an incumbent exists after ${after} steps, or the case proves nothing`);
+
+    // what addPoint does, and then what the worker does with the state it is sent
+    S.pts.splice(at, 0, fromHex('#7fbf5f'));
+    S.pin.splice(at, 0, false); S.cut.splice(at, 0, false);
+    derive(); constrain(); adamReset();
+
+    for (let i = 0; i < 200; i++) step();
+    ok(S.pts.length === HEX.length + 1, `the node added at ${at} is still there 200 steps later`);
+    ok(!RESTART.best || RESTART.best.length === S.pts.length,
+       `the incumbent is not left describing a palette of another size (added at ${at})`);
+  }
+
+  if (bad) process.exit(1);
+  console.log('ok — a node added mid-run survives, 5 cases');
+}
+
+// Browsers have no `process`; this file is imported by the page and the worker.
+if (typeof process !== 'undefined' && import.meta.filename === process.argv[1]) demo();

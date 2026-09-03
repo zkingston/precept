@@ -2795,6 +2795,17 @@ const solverState = () => ({
 let applying = false;
 
 function fromSolver(pts, done) {
+  // A slice posts its points before it reads the messages queued behind it, so
+  // an edit made during a run is always followed by exactly one frame computed
+  // from the palette as it was. Applying that frame puts S.pts back a node
+  // while pin, cut and sel are already the new length — and syncPins, finding
+  // the mismatch, drops every pin the palette had. Adding a node under a
+  // running solver silently unpinned everything.
+  //
+  // The count is the whole of the test: a frame of the right shape can only be
+  // stale about positions the solver is moving anyway, and the next state
+  // message brings the worker back into step.
+  if (pts.length !== S.pts.length) return;
   applying = true;
   S.pts = pts;
   // the sidebar rebuilds its whole table and re-evaluates every term, which is
