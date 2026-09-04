@@ -233,11 +233,17 @@
   /* the output belongs next to the thing it came from, not in a side panel.
      layout() sets top and bottom, since what is above it depends on where the
      preview ended up and what is below it on which split is in play. */
-  #bar { position:absolute; right:14px; top:14px; bottom:154px; width:38px; min-height:130px;
+  /* the swatch, and so the bar: a share of the viewport, no smaller than a
+     24px target and no larger than it was on a full window */
+  :root { --swatch: clamp(24px, 2.6vw, 38px); }
+  #bar { position:absolute; right:14px; top:14px; bottom:154px; width:var(--swatch); min-height:130px;
          display:flex; flex-direction:column; align-items:center; gap:6px; }
   #strip { width:100%; flex:1; min-height:0; display:block; border-radius:5px; border:1px solid #0004; }
-  #swatches { display:flex; flex-direction:column-reverse; gap:3px; width:100%; flex:1; min-height:0; }
-  .sw { flex:1; width:100%; border-radius:3px; border:1px solid #0006; cursor:pointer; position:relative; padding:0; font:inherit; }
+  /* squares stacked from the bottom right, index 0 lowest; past the bar's height
+     they wrap into a further column to the left rather than shrinking */
+  #swatches { position:absolute; right:0; top:40px; bottom:0; display:flex; flex-direction:column-reverse;
+              flex-wrap:wrap-reverse; align-content:flex-start; justify-content:flex-start; gap:3px; }
+  .sw { flex:none; width:var(--swatch); height:var(--swatch); border-radius:3px; border:1px solid #0006; cursor:pointer; position:relative; padding:0; font:inherit; }
   .sw[data-sel=true] { outline:2px solid #fff; outline-offset:1px; }
   .sw[data-bad=true]::after { content:'!'; position:absolute; inset:0; display:grid; place-items:center;
                               color:var(--hot); font-weight:700; text-shadow:0 0 3px #000; }
@@ -511,6 +517,8 @@
         <div class="seg" id="mode"><button data-v="continuous">Continuous</button><button data-v="discrete">Discrete</button></div>
         <div class="row" style="margin-top:6px"><label class="f" for="loadbtn">load</label>
           <button id="loadbtn" style="flex:1">load…</button></div>
+        <div class="row" id="orderrow"><label class="f" for="orderbtn">order</label>
+          <button id="orderbtn" style="flex:1">most distinct first</button></div>
       </section>
 
       <section id="selpanel">
@@ -641,7 +649,7 @@ import {
 import {
   LK, LSEP, M, OBJ, OPT_IN, PER_SPAN, S, WARN_EPS, W_DEFAULT, angDiff, angGap, apcaLc, clamp01,
   constrain, contrastRatio, ctxOf, curve, curveOf, curves, degree, derive, disturb, dot3, hueOf,
-  inHueArc, norm360, observer, palette, primary, rnd, runs, setRuns, syncProfiles, takeDisturbed, targetH, targetL,
+  distinctOrder, inHueArc, norm360, observer, palette, primary, rnd, runs, setRuns, syncProfiles, takeDisturbed, targetH, targetL,
   totalTurn, view, whereIs,
 } from './solver.js';
 
@@ -671,6 +679,7 @@ const esc = (x) => x.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g
  */
 let FRAME = null;
 let stepShare = null;   // each term's share of the solver's last step, from the worker
+let plotsShown = null;  // whether the profile plots were in the layout at the last sidebar paint
 const world = (c) => new T.Vector3((c[1] - FRAME.mid[1]) * FRAME.s, (c[0] - FRAME.mid[0]) * FRAME.s, (c[2] - FRAME.mid[2]) * FRAME.s);
 const unworld = (v) => [v.y / FRAME.s + FRAME.mid[0], v.x / FRAME.s + FRAME.mid[1], v.z / FRAME.s + FRAME.mid[2]];
 const wpt = (p) => world(toSpace(p));            // chart point → world
@@ -1902,32 +1911,13 @@ function layout() {
   }
   // the color bar stops above the strip whenever there is one, whether or not
   // the preview is one of its cells
-  const bar = $('bar');
-  bar.style.top = '14px';
-  bar.style.bottom = stripH ? `${stripH + 12}px` : '';
-  /**
-   * The bar and a floating preview share the right edge, the preview at the
-   * bottom of it and the bar stopping above.
-   *
-   * Where the bottom IS depends on what else is down there — the cut strip, or
-   * the profile plots on a full window, or nothing — and the bar already knows,
-   * because it stops above the same things. So the gap is read off the bar's
-   * own box rather than reconstructed from the three bottoms it can have.
-   *
-   * Stacking the two needs a tall view, and a phone does not have one: with the
-   * cuts showing it leaves 187px, and the bar came out 60 tall, which is a
-   * swatch rather than a color bar. So when stacking would leave the bar a
-   * stub, the preview steps to the LEFT of it and the bar keeps its height.
-   */
-  if (!cell) {
-    const gap = main.clientHeight - (bar.offsetTop + bar.offsetHeight);
-    tip.style.bottom = `${gap}px`;
-    bar.style.bottom = `${gap + tip.offsetHeight + 14}px`;
-    if (bar.offsetHeight < 120) {
-      bar.style.bottom = `${gap}px`;
-      tip.style.right = `${main.clientWidth - bar.offsetLeft + 8}px`;
-    }
-  }
+  $('bar').style.top = '14px';
+  // above the strip when there is one; otherwise the stylesheet's reserve for
+  // the profile plots, which a discrete palette does not have, so there it
+  // goes to the corner
+  BAR_BOTTOM = stripH ? `${stripH + 12}px` : S.mode === 'continuous' ? '' : '14px';
+  TIP_FLOATS = !cell;
+  placeTip();
   QUADS.forEach((q, i) => {
     q.rect = RECTS[i];
     q.el.hidden = !q.rect;
@@ -1996,6 +1986,8 @@ function sidebar() {
   // sitting there inert.
   const cont = S.mode === 'continuous';
   lplotEl.style.display = cont ? '' : 'none';
+  // the bar and the preview stop above the plots only while there are plots
+  if (plotsShown !== cont) { plotsShown = cont; layout(); }
   if (cont) layoutPlot();
   if (ramp) {
     sctx.clearRect(0, 0, W, H);
@@ -2011,11 +2003,13 @@ function sidebar() {
         aria-label="swatch ${i + 1}, ${toHex(p)}, ${colorName(p)}${bad ? ', out of gamut' : ''}"></button>`;
     }).join('');
   }
+  if (TIP_FLOATS) placeTip();                  // the swatch columns may have changed width
 
   // worst swatch against the contrast ground, live next to the two knobs that
   // set it. Discrete only, with the term: a ramp is read as a surface and needs
   // its dark end, so there is nothing here for a continuous palette to answer.
   $('contrastrow').style.display = S.mode === 'discrete' ? '' : 'none';
+  $('orderrow').style.display = S.mode === 'discrete' ? '' : 'none';
   if (S.mode === 'discrete') {
     const bg = fromHex(S.cbg);
     const set = pal;
@@ -2364,11 +2358,15 @@ const ident = () => stem().replace(/\W/g, '_').replace(/^(?=\d)/, 'cmap_');
 const expCont = () => S.mode === 'continuous' && S.pts.length >= 2;
 const expCols = () => (expCont() ? rampOf(256) : palette());
 
+/** the link to this setup, put in the address bar as an export is made */
+let exportLink = '';
+
 /** provenance, as plain lines; each format wraps them in its own comment syntax */
 function headText(cols) {
   const outside = cols.filter((p) => !inGamut(p)).length;
   return [
     `${stem()} — generated by precept`,
+    ...(exportLink ? [`edit at ${exportLink}`] : []),
     `${SPACES[params.space].name} · ${GAMUTS[params.gamut].name} gamut`
       + `${S.cvd === 'none' ? '' : ` · optimized under ${S.cvd} at severity ${S.sev}`}`,
     `${S.pts.length} control point(s)${expCont() ? ', resampled to 256 by arc length' : ''}`,
@@ -2442,7 +2440,13 @@ const FORMATS = {
 };
 for (const [k, f] of Object.entries(FORMATS)) {
   const render = f.gen;
-  f.gen = () => { const cols = expCols(); return cols.length ? render(cols) : f.empty; };
+  // the link first, so the header can quote it
+  f.gen = async () => {
+    const cols = expCols();
+    if (!cols.length) return f.empty;
+    exportLink = await packLink();
+    return render(cols);
+  };
 }
 
 /**
@@ -2573,9 +2577,9 @@ $('sharelink').onclick = async (e) => {
   await copyText(e.target, url, 'copy link to this palette');
 };
 
-$('savepy').onclick = () => {
+$('savepy').onclick = async () => {
   const f = FORMATS[S.fmt];
-  download(`${f.ext === 'py' ? ident() : stem()}.${f.ext}`, f.gen() + '\n', f.mime);
+  download(`${f.ext === 'py' ? ident() : stem()}.${f.ext}`, (await f.gen()) + '\n', f.mime);
 };
 /**
  * Clipboard writes reject for reasons the page cannot see coming — an insecure
@@ -2601,7 +2605,7 @@ async function copyText(btn, text, label) {
   return ok;
 }
 
-$('copypy').onclick = (e) => copyText(e.target, FORMATS[S.fmt].gen(), 'copy');
+$('copypy').onclick = async (e) => copyText(e.target, await FORMATS[S.fmt].gen(), 'copy');
 $('exportfmt').onchange = (e) => { S.fmt = e.target.value; };
 
 // ─── the selection, in whichever notation you think in ───────────────────────
@@ -2863,19 +2867,19 @@ function paintShare(el, share) {
 
 /** one line per term, shown under the table while its ? is hovered */
 const HELP = {
-  rep:      "Spread swatches apart.",
-  repcvd:   "Spread apart for every observer.",
-  arc:      "Total length of the ramp.",
+  rep:      "Pushes swatches apart.",
+  repcvd:   "Pushes swatches apart under every color vision.",
+  arc:      "Length of the ramp.",
   lramp:    "Distance from the lightness profile.",
   chroma:   "Distance from the middle of the chroma band.",
   hprof:    "Distance from the hue profile.",
-  feas:     "Curve outside the feasible set.",
-  pair:     "Equal perceived steps along the ramp.",
-  contr:    "Swatches under the contrast floor.",
-  lsep:     "Pairs closer in lightness than the band allows for this many swatches.",
-  bend:     "Squared curvature along the ramp. A circle is 1, a straight line 0.",
-  sym:      "Lightness asymmetry between a diverging map's two arms.",
-  space:    "Uneven control point spacing.",
+  feas:     "How far the curve leaves the feasible set.",
+  pair:     "Unevenness of the perceived steps along the ramp.",
+  contr:    "Swatches below the contrast floor.",
+  lsep:     "Pairs too close in lightness to spread over the band.",
+  bend:     "Bending of the ramp. A circle is 1, a straight line 0.",
+  sym:      "Lightness difference between the two arms.",
+  space:    "Unevenness of the control point spacing.",
 };
 
 
@@ -3447,6 +3451,41 @@ function applyBg() {
   slices.forEach((s) => s.edge.material.color.set(light ? 0x3a3a42 : 0xc6c6d0));
   boxLines.material.color.set(light ? 0x3a3a42 : 0xc6c6d0);
   drawPlots();
+}
+
+let BAR_BOTTOM = '', TIP_FLOATS = true;   // what layout() decided, for placeTip()
+/**
+ * The bar and a floating preview share the right edge, the preview at the
+ * bottom of it and the bar stopping above.
+ *
+ * Where the bottom IS depends on what else is down there — the cut strip, or
+ * the profile plots on a full window, or nothing — and the bar already knows,
+ * because it stops above the same things. So the gap is read off the bar's
+ * own box rather than reconstructed from the three bottoms it can have.
+ *
+ * Stacking the two needs a tall view, and a phone does not have one: with the
+ * cuts showing it leaves 187px, and the bar came out 60 tall, which is a
+ * swatch rather than a color bar. So when stacking would leave the bar a
+ * stub, the preview steps to the LEFT of it and the bar keeps its height.
+ * The swatches wrap into columns to the left of the bar, so beside it the
+ * preview clears the widest of them; sidebar() calls this again once it has
+ * laid the swatches out.
+ */
+function placeTip() {
+  const tip = $('tip'), bar = $('bar');
+  bar.style.bottom = BAR_BOTTOM;
+  if (!TIP_FLOATS) return;
+  tip.style.right = '';
+  const gap = main.clientHeight - (bar.offsetTop + bar.offsetHeight);
+  tip.style.bottom = `${gap}px`;
+  bar.style.bottom = `${gap + tip.offsetHeight + 14}px`;
+  if (bar.offsetHeight < 120) {
+    bar.style.bottom = `${gap}px`;
+    const m = main.getBoundingClientRect().left, sw = $('swatches');
+    const left = Math.min(bar.getBoundingClientRect().left,
+      ...(sw.style.display === 'none' ? [] : [...sw.children].map((e) => e.getBoundingClientRect().left))) - m;
+    tip.style.right = `${main.clientWidth - left + 8}px`;
+  }
 }
 
 /** Slices track the node you touched, so every panel is cut through it. */
@@ -4422,6 +4461,13 @@ $('panelbtn').onclick = () => {
 };
 
 $('loadbtn').onclick = () => { paintLoadList(); $('loaddlg').showModal(); };
+/** one run in farthest-first order; pins, marks and the selection follow their colors */
+$('orderbtn').onclick = () => {
+  if (S.mode !== 'discrete' || S.pts.length < 3) return;
+  setRuns([{ nodes: distinctOrder(S.pts), closed: false }]);
+  disturb(); sync();
+  announce('palette reordered, most distinct first');
+};
 $('loadclose').onclick = () => $('loaddlg').close();
 $('loaddlg').onclick = (e) => { if (e.target === $('loaddlg')) $('loaddlg').close(); };
 $('loadlist').onclick = (e) => {
@@ -4770,27 +4816,28 @@ function paintGamutList() {
 
 const HINTS = {
   mode: 'Ramp or swatch set.',
-  loadbtn: 'Published palettes, as swatches. Click one to load it.',
-  spacesel: 'Space the panels are drawn in and distances measured in.',
-  gamutsel: 'Which colors are reachable. ICC loads a matrix/TRC RGB profile, \u25b3 draws the gamut on a chromaticity diagram.',
-  cvd: 'Simulate a color-vision deficiency. Machado 2009, and Brettel 1997 for tritanopia.',
-  sev: 'Below 1 is anomalous trichromacy; 1 is dichromacy. Tritan crosses to Brettel above 0.8.',
+  loadbtn: 'Load a published palette.',
+  orderbtn: 'Reorder: the two most distant first, then each as far as possible from those before it.',
+  spacesel: 'Space for the panels and for distances.',
+  gamutsel: 'Which colors are reachable. ICC\u2026 loads a profile, \u25b3 shows the chromaticity diagram.',
+  cvd: 'Simulate a color vision deficiency.',
+  sev: 'Severity. 1 is dichromacy, less is anomalous trichromacy.',
   shell: 'Opacity of the gamut solid.',
-  sliceop: 'Opacity of the three cut planes.',
+  sliceop: 'Opacity of the cut planes.',
   bg: 'Backdrop color. The panel follows it.',
-  planes3d: 'Draw the cut planes in the 3D view too.',
+  planes3d: 'Show the cut planes in the 3D view.',
   lock: 'Cuts follow the node you touch.',
-  colorfmt: 'Notation for the selected node.',
+  colorfmt: 'Notation for the selected color.',
   lmin: 'Lightness band.',
   cmin: 'Chroma band.',
   huewheel: 'Allowed hue arc.',
-  cbg: 'Contrast ground and target ratio.',
+  cbg: 'Background and minimum contrast ratio.',
   rate: 'Step size.',
-  restart: 'Jolt and retry on a stall, keeping the best.',
-  run: 'Run Adam over every enabled term until you stop it.',
+  restart: 'On a stall, jolt the points and keep the best result.',
+  run: 'Optimize the enabled terms until stopped.',
   scenename: 'Name for saved files and exports.',
-  sharelink: 'Put the whole setup in the address bar and copy it.',
-  exportfmt: 'What copy and save produce.',
+  sharelink: 'Copy a link that holds this whole setup.',
+  exportfmt: 'Format for copy and save.',
 };for (const [k, text] of Object.entries(HINTS)) {
   const el = document.getElementById(k);
   // a hint for a control that no longer exists is a typo, not a reason to take

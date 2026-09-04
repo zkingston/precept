@@ -33,7 +33,7 @@ export const S = {
   seed: 20260831,                                // the restart jitter, so a run repeats
   panels: true,                                  // the three cut views, or the 3D one alone
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection color format
-  restart: false,                                // kick the solver out of stalls
+  restart: true,                                 // kick the solver out of stalls
   cbg: '#ffffff', cmin: 3,                       // contrast: against what, and how much
   tip: true,                                     // the test image preview, over the 3D view
   tipKind: 'sineramp',                           // which test image is showing
@@ -272,6 +272,39 @@ export function repulsionAt(P, views, i) {
 }
 
 export const WARN_EPS = 0.005;    // below this a `bad` term reads 0.00, so do not flag it
+
+/**
+ * Farthest-first order for a discrete palette: each next color is the remaining
+ * one whose nearest placed color is farthest, by the perceived difference
+ * repulsion uses, under every observer in play. Every prefix is then as spread
+ * as it can be, which is how a categorical palette is used: the first k colors
+ * for k classes.
+ *
+ * The start is chosen the same way. Every color is tried as the first, and the
+ * run kept is the one whose prefix separations are largest, first pair first:
+ * the opening pair is the two most distant colors, and the later prefixes
+ * settle which of the two leads. The distances are computed once, so the scan
+ * over starts is a cubic number of lookups.
+ */
+export function distinctOrder(P, views = criteria()) {
+  const g = M(), n = P.length;
+  const D = P.map((a) => P.map((b) => Math.min(...views.map((v) => pd(v(a), v(b), g)))));
+  const from = (start) => {
+    const order = [start], left = new Set(P.map((_, i) => i)), near = D[start].slice(), mins = [];
+    left.delete(start);
+    while (left.size) {
+      let next = -1, best = -Infinity;
+      for (const j of left) if (near[j] > best) { best = near[j]; next = j; }
+      mins.push(best); order.push(next); left.delete(next);
+      for (const j of left) near[j] = Math.min(near[j], D[next][j]);
+    }
+    return { order, mins };
+  };
+  const ahead = (a, b) => { for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) return a[k] > b[k]; return false; };
+  let best = null;
+  for (let s = 0; s < n; s++) { const c = from(s); if (!best || ahead(c.mins, best.mins)) best = c; }
+  return best ? best.order : [];
+}
 /**
  * Knots in the editable profile: one per swatch.
  *
@@ -800,7 +833,7 @@ S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
  * range to get there. At parity they flatten what the rest of the terms are
  * trying to shape, so they come in at half and a quarter.
  */
-export const W_DEFAULT = { lramp: 1.5, hprof: 1.5, arc: 0.5, bend: 0.25 };
+export const W_DEFAULT = { lramp: 1.5, hprof: 1.5, lsep: 1.5, arc: 0.5, bend: 0.25 };
 S.w = Object.fromEntries(OBJ.map((o) => [o.key, W_DEFAULT[o.key] ?? 1]));
 
 /**
@@ -1340,6 +1373,20 @@ function demo() {
   ok(targetH(350) === 350 && targetH(30) === 30 && targetH(200) === 300 && targetH(160) === 60, 'and to an arc through zero');
   S.lo = [0, 0]; S.hi = [100, 40]; S.hue = [0, 360];
   ok(targetH(0) === 0 && targetL(100) === 100, 'a full circle and a full band keep everything');
+
+  // farthest-first, under one observer: a permutation that opens with the
+  // two most distant colors and leaves one of the two near-duplicate blues
+  // for last
+  {
+    setup('discrete', ['#1f77b4', '#2a80c0', '#d62728', '#ff7f0e', '#2ca02c', '#9467bd'].map(fromHex));
+    const o = distinctOrder(S.pts, [NORMAL]), g = M();
+    ok([...o].sort((a, b) => a - b).join() === '0,1,2,3,4,5', 'distinctOrder is a permutation');
+    let widest = 0;
+    for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) widest = Math.max(widest, pd(S.pts[i], S.pts[j], g));
+    ok(Math.abs(pd(S.pts[o[0]], S.pts[o[1]], g) - widest) < 1e-9, 'it opens with the two most distant colors');
+    ok(o[5] === 0 || o[5] === 1, 'and ends on one of the two near-duplicate blues');
+    ok(distinctOrder(S.pts).length === 6 && distinctOrder([]).length === 0, 'under every observer it is still a full order, and empty stays empty');
+  }
 
   // the windowed repulsion is the whole thing, differentiated
   for (const mode of ['discrete', 'continuous']) {
