@@ -41,6 +41,10 @@ provides a number of metrics to help design pleasing and scientifically validate
 - The tools switch between nodes, keep-out spheres and halfplanes. A sphere is placed by
   double-clicking a cut panel and resized by dragging the small handle beside it; a halfplane is cut
   the same way, then slid by its center or turned by its tip.
+- With a node selected, the arrow keys nudge it in the panel under the pointer, ten units with shift.
+  **[** and **]** step the selection through the nodes, keep-out spheres and halfplanes, and
+  **Delete** removes it. In the profile plots, left and right pick a knot and up and down move it; on
+  the hue wheel, left and right move the start of the arc and up and down its end.
 - Under **Optimize**, tick the terms to include and set how hard each one pulls in the **×**
   column — type a weight, or drag one up and down. Then press **run optimizer**.
 - Under **View**, **space** picks the coordinates the panels are drawn in and the metric distances

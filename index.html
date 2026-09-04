@@ -67,7 +67,7 @@
      They are now what applyBg() derives from the default backdrop, #f0ead6,
      which is the ground the interface is about to have. Change that default
      and these want recomputing with it. */
-  :root { --bg:#f0ead6; --panel:#f0ead6; --line:#0000002e; --fg:#1b1a16; --dim:#75736f; --hot:#ee0012;
+  :root { --bg:#f0ead6; --panel:#f0ead6; --line:#0000002e; --fg:#1b1a16; --dim:#696864; --hot:#c4000c;
           --sel:#bbb9b4; --hud:#53514d; --ctl:#00000012; --link:#005fa4;
           /* chips sit over the 3D view, not in the panel, so they keep their own
              dark scheme however the panel is themed */
@@ -109,15 +109,18 @@
                       border:1px solid var(--line); border-radius:4px; }
   input[type=checkbox] { accent-color:var(--link); width:14px; height:14px; }
   /* no native dual range exists, so stack two: tracks inert, thumbs live */
-  .dual { position:relative; flex:1; height:18px; min-width:0; }
-  .dual::before { content:''; position:absolute; left:0; right:0; top:8px; height:3px; border-radius:2px; background:#3a3a42; }
-  .dual .fill { position:absolute; left:0; right:0; top:8px; height:3px; border-radius:2px; }
-  .dual input { position:absolute; inset:0; width:100%; height:18px; margin:0; background:none;
+  /* drawn to the measurements of the native accent-colored range the other
+     sliders are: an 8px rounded track, light when inactive, and a 14px thumb */
+  .dual { position:relative; flex:1; height:24px; min-width:0; }
+  .dual::before { content:''; position:absolute; left:0; right:0; top:8px; height:8px; border-radius:4px;
+                  background:#efefef; box-shadow:inset 0 0 0 1px #0000001a; }
+  .dual .fill { position:absolute; left:0; right:0; top:8px; height:8px; border-radius:4px; }
+  .dual input { position:absolute; inset:0; width:100%; height:24px; margin:0; background:none;
                 pointer-events:none; -webkit-appearance:none; appearance:none; }
   .dual input::-webkit-slider-thumb { pointer-events:auto; -webkit-appearance:none; appearance:none;
-    width:13px; height:13px; border-radius:50%; background:var(--link); border:1px solid var(--panel); cursor:pointer; }
-  .dual input::-moz-range-thumb { pointer-events:auto; width:13px; height:13px; border-radius:50%;
-    background:var(--link); border:1px solid var(--panel); cursor:pointer; }
+    width:14px; height:14px; border-radius:50%; background:var(--link); border:0; cursor:pointer; }
+  .dual input::-moz-range-thumb { pointer-events:auto; width:14px; height:14px; border-radius:50%;
+    background:var(--link); border:0; cursor:pointer; }
   .dual input::-moz-range-track { background:none; }
   /* inline-flex, not flex: as a block it claimed the whole table cell and
      pushed the ? marker onto a line of its own */
@@ -131,7 +134,7 @@
   /* one HUD column down the 3D view's left edge; layout() supplies the left */
   #hud { position:absolute; top:12px; display:flex; flex-direction:column; flex-wrap:wrap;
          gap:5px; align-items:flex-start; }
-  #tool { display:flex; flex-direction:column; gap:4px; }
+  #tool, #tool2 { display:flex; flex-direction:column; gap:4px; }
   #tip { position:absolute; right:14px; bottom:14px; width:264px; }
   /* a grid cell rather than a floating card: layout() sizes it, so the canvas
      fills what is left after the buttons */
@@ -146,10 +149,10 @@
      it was last drawn at and cannot be the thing that decides the shape */
   #tipcanvas { display:block; border-radius:3px; width:100%; height:auto; aspect-ratio:264/128; }
   #tipbtns { display:flex; gap:4px; margin-top:6px; }
-  #tipbtns button { flex:1; font-size:10px; padding:2px 0; }
+  #tipbtns button { flex:1; font-size:10px; padding:2px 0; min-height:24px; }
   /* the one button that is not a test image, and the only thing left of the
      preview when it is off — so it does not take an equal share of the row */
-  #tipbtns #tipoff { flex:0 0 auto; padding:1px 6px; font-size:11px; line-height:1.4; }
+  #tipbtns #tipoff { flex:0 0 auto; padding:0 6px; min-width:24px; font-size:11px; line-height:1.4; }
   #tip.off #tipcanvas, #tip.off #tipbtns button[data-tip] { display:none; }
   #tip.off #tipbtns { margin-top:0; }
   #tipbtns button[aria-pressed=true] { background:var(--sel); border-color:var(--link); }
@@ -162,25 +165,27 @@
   #ctxmenu button { background:none; border:0; color:var(--hudfg); text-align:left; cursor:pointer;
                     padding:5px 9px; border-radius:4px; font:12px 'Fira Sans',ui-sans-serif,system-ui,sans-serif; }
   #ctxmenu button:hover { background:#3d5a6c; }
-  #tool button, #graybtn, #hist button, #aboutbtn { width:34px; height:34px; padding:0; display:grid; place-items:center;
+  #tool button, #tool2 button, #graybtn, #hist button, #aboutbtn { width:34px; height:34px; padding:0; display:grid; place-items:center;
     background:var(--hudbg); border:1px solid #32323a; border-radius:5px; cursor:pointer;
     color:var(--hudfg); font-size:15px; line-height:1; }
-  #tool button:hover, #graybtn:hover, #hist button:not(:disabled):hover, #aboutbtn:hover { background:#32323ae6; }
-  #tool button[aria-pressed=true], #graybtn[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
-  #tool svg { width:19px; height:19px; fill:none; stroke:var(--hudfg); stroke-width:1.5;
+  #tool button:hover, #tool2 button:hover, #graybtn:hover, #hist button:not(:disabled):hover, #aboutbtn:hover { background:#32323ae6; }
+  #tool button[aria-pressed=true], #tool2 button[aria-pressed=true], #graybtn[aria-pressed=true] { background:#3d5a6c; border-color:#5f8ba6; }
+  #tool svg, #tool2 svg { width:19px; height:19px; fill:none; stroke:var(--hudfg); stroke-width:1.5;
     stroke-linecap:round; stroke-linejoin:round; }
-  #lplot { position:absolute; bottom:14px; right:14px; height:126px; display:flex; gap:16px; }
+  #lplot { position:absolute; bottom:14px; right:14px; height:132px; display:flex; gap:16px; }
   .pplot { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
   /* the controls sit above the plot rather than beside it: inside, they landed
      exactly where the curve ends up once lightness rises to the right */
-  .phead { display:flex; align-items:center; gap:6px; height:18px;
+  .phead { display:flex; align-items:center; gap:6px; height:24px;
            font:10px 'Fira Sans',ui-sans-serif,system-ui,sans-serif; color:var(--hud); }
   .phead .pbtns { margin-left:auto; display:flex; gap:3px; }
-  .phead button { padding:1px 7px; font:10px 'Fira Mono',ui-monospace,monospace; background:#26262bcc;
+  .phead > .chk { min-height:24px; display:inline-flex; align-items:center; }
+  .phead button { padding:1px 7px; min-height:24px; font:10px 'Fira Mono',ui-monospace,monospace; background:#26262bcc;
     color:var(--hudfg); border:1px solid #32323a; border-radius:3px; cursor:pointer; }
   .pcanvas { flex:1; min-height:0; width:100%; display:block; cursor:ns-resize; touch-action:none; }
   #hex { flex:1; min-width:0; font:12px 'Fira Mono',ui-monospace,monospace; text-transform:lowercase; }
   #selcolor { flex:0 0 auto; width:40px; height:26px; }
+  #selsim { flex:0 0 auto; width:40px; height:26px; border-radius:4px; border:1px solid var(--line); box-sizing:border-box; }
 
 
   aside { background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:14px;
@@ -232,32 +237,36 @@
          display:flex; flex-direction:column; align-items:center; gap:6px; }
   #strip { width:100%; flex:1; min-height:0; display:block; border-radius:5px; border:1px solid #0004; }
   #swatches { display:flex; flex-direction:column-reverse; gap:3px; width:100%; flex:1; min-height:0; }
-  .sw { flex:1; width:100%; border-radius:3px; border:1px solid #0006; cursor:pointer; position:relative; }
+  .sw { flex:1; width:100%; border-radius:3px; border:1px solid #0006; cursor:pointer; position:relative; padding:0; font:inherit; }
   .sw[data-sel=true] { outline:2px solid #fff; outline-offset:1px; }
   .sw[data-bad=true]::after { content:'!'; position:absolute; inset:0; display:grid; place-items:center;
                               color:var(--hot); font-weight:700; text-shadow:0 0 3px #000; }
 
   table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  /* fixed: the value column and the weight column keep their width whatever
+     they hold, so a number, a share bar or a warning mark appearing during a
+     run moves nothing else */
+  #metrics { table-layout:fixed; }
   td { padding:2px 0; } td:first-child { color:var(--dim); } td:last-child { text-align:right; }
   td.warn { color:var(--hot); }
-  #metrics td:nth-child(2) { white-space:nowrap; }
-  .q { cursor:help; opacity:.4; margin-left:4px; font-size:10px; vertical-align:super; }
+  #metrics td:nth-child(2) { white-space:nowrap; width:66px; text-align:right; position:relative; padding-left:36px; }
+  .q { cursor:help; opacity:.65; margin-left:4px; font-size:10px; vertical-align:super; }
   /* A Metrics row has a help line under the table to write into; a control row
      does not, so these carry their own. */
   .row, section h2 { position:relative; }
-  .row:has(.q[data-h]:hover), section h2:has(.q[data-h]:hover) { z-index:30; }
+  .row:has(.q[data-h]:is(:hover, :focus-visible)), section h2:has(.q[data-h]:is(:hover, :focus-visible)) { z-index:30; }
   /* a table row is not a reliable containing block, and these markers all sit in
      the first column anyway, so they anchor to themselves and open rightward */
   #metrics .q[data-h] { position:relative; }
-  #metrics .q[data-h]:hover::after { left:0; right:auto; width:max-content; max-width:224px; }
-  .q[data-h]:hover::after {
+  #metrics .q[data-h]:is(:hover, :focus-visible)::after { left:0; right:auto; width:max-content; max-width:224px; }
+  .q[data-h]:is(:hover, :focus-visible)::after {
     content:attr(data-h); position:absolute; left:0; right:0; top:calc(100% + 6px); z-index:30;
     padding:6px 8px; text-align:left; white-space:normal;
     background:#111116; border:1px solid #32323a; border-radius:5px; color:var(--hudfg);
     font:11px/1.45 'Fira Sans',ui-sans-serif,system-ui,sans-serif; box-shadow:0 5px 16px #000a;
     text-transform:none; letter-spacing:normal;   /* h2 hosts would pass theirs down */
     vertical-align:baseline; pointer-events:none; }
-  .q:hover { opacity:1; color:var(--link); }
+  .q:is(:hover, :focus-visible) { opacity:1; color:var(--link); }
   #metrics td.w { width:52px; padding-left:4px; white-space:nowrap; }
   #metrics input.w { width:38px; background:var(--ctl); color:var(--fg); border:1px solid var(--line);
     border-radius:3px; padding:1px 3px; font:11px 'Fira Mono',ui-monospace,monospace; text-align:right;
@@ -268,10 +277,15 @@
   #metrics input.w:disabled { opacity:.3; cursor:default; }
   #metrics .mx { color:var(--dim); font-size:10px; margin-left:3px; }
   #metrics .mx[data-off] { opacity:.3; }
+  /* a term that should be zero and is not: the number is red, and this says so in text */
+  #metrics .bang { color:var(--hot); font-weight:700; position:absolute; left:26px; top:2px; }
+  #metrics .bang[hidden] { display:block; visibility:hidden; }   /* keeps its slot */
+  /* read by screen readers, drawn nowhere */
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
   /* each term's share of the solver's last step; red when the step moves against it */
-  #metrics .sh { display:none; width:22px; height:5px; margin-right:6px; vertical-align:middle; border-radius:2px;
-    background:linear-gradient(to right, var(--fg) calc(var(--v,0)*100%), var(--line) 0); opacity:.6; }
-  #metrics .sh[data-live] { display:inline-block; }
+  #metrics .sh { position:absolute; left:2px; top:50%; margin-top:-3px; width:22px; height:5px; border-radius:2px;
+    visibility:hidden; background:linear-gradient(to right, var(--fg) calc(var(--v,0)*100%), var(--line) 0); opacity:.6; }
+  #metrics .sh[data-live] { visibility:visible; }
   #metrics .sh[data-neg] { background:linear-gradient(to left, var(--hot) calc(var(--v,0)*100%), var(--line) 0); }
   .note { color:var(--dim); font-size:11px; }
 
@@ -424,40 +438,40 @@
 <div id="boot"><b>PRECEPT PALETTE OPTIMIZER</b><span>loading…</span></div>
 <div id="app">
   <main>
-    <canvas id="gl"></canvas>
+    <canvas id="gl" role="application" aria-label="palette view" tabindex="0"></canvas>
     <div id="tip">
-      <canvas id="tipcanvas" width="264" height="128"></canvas>
-      <div id="tipbtns"><button id="tipoff" title="hide the preview">&#9652;</button></div>
+      <canvas id="tipcanvas" width="264" height="128" role="img" aria-label="test image through the palette"></canvas>
+      <div id="tipbtns"><button id="tipoff" title="hide the preview" aria-label="hide the preview">&#9652;</button></div>
     </div>
     <div id="ctxmenu" hidden></div>
     <div id="hud">
-      <button id="aboutbtn" title="what this is and how to drive it">?</button>
+      <button id="aboutbtn" title="what this is and how to drive it" aria-label="about this tool">?</button>
       <div id="tool">
-        <button data-v="edit" title="Points"><svg viewBox="0 0 24 24">
+        <button data-v="edit" title="Points" aria-label="points tool"><svg viewBox="0 0 24 24">
           <polyline points="4,18 10,8 16,14 20,5"/><circle cx="4" cy="18" r="2.1"/>
           <circle cx="10" cy="8" r="2.1"/><circle cx="16" cy="14" r="2.1"/><circle cx="20" cy="5" r="2.1"/></svg></button>
-        <button data-v="obstacle" title="Keep-out spheres"><svg viewBox="0 0 24 24">
+        <button data-v="obstacle" title="Keep-out spheres" aria-label="keep-out spheres tool"><svg viewBox="0 0 24 24">
           <circle cx="11" cy="13" r="7"/><path d="M11 13 L16 8"/><circle cx="16.6" cy="7.4" r="2.1"/></svg></button>
-        <button data-v="plane" title="Halfplanes"><svg viewBox="0 0 24 24">
+        <button data-v="plane" title="Halfplanes" aria-label="halfplanes tool"><svg viewBox="0 0 24 24">
           <path d="M3 15 L12 10 L21 13 L12 18 Z"/><path d="M12 10 L12 3"/><circle cx="12" cy="3" r="1.9"/></svg></button>
       </div>
-      <div id="tool" class="one">
-        <button id="panelbtn" title="show or hide the cut views"><svg viewBox="0 0 24 24">
+      <div id="tool2" class="one">
+        <button id="panelbtn" title="show or hide the cut views" aria-label="show or hide the cut views"><svg viewBox="0 0 24 24">
           <rect x="3" y="3.5" width="18" height="11" rx="1"/>
           <rect x="3" y="17" width="5" height="4" rx="1"/><rect x="9.5" y="17" width="5" height="4" rx="1"/>
           <rect x="16" y="17" width="5" height="4" rx="1"/></svg></button>
       </div>
       <div id="hist">
-        <button id="undo" title="undo · ctrl+Z">↶</button>
-        <button id="redo" title="redo · ctrl+shift+Z">↷</button>
+        <button id="undo" title="undo · ctrl+Z" aria-label="undo">↶</button>
+        <button id="redo" title="redo · ctrl+shift+Z" aria-label="redo">↷</button>
       </div>
     </div>
     <div class="quad" id="q1">
-      <div class="sl"><i id="nL">L</i><input type="range" id="sL" min="0" max="100" step="0.5" value="55"><b id="vL">55</b></div></div>
+      <div class="sl"><i id="nL">L</i><input type="range" id="sL" aria-labelledby="nL" min="0" max="100" step="0.5" value="55"><b id="vL">55</b></div></div>
     <div class="quad" id="q2">
-      <div class="sl"><i id="nA">a</i><input type="range" id="sA" min="-36" max="36" step="0.5" value="0"><b id="vA">0</b></div></div>
+      <div class="sl"><i id="nA">a</i><input type="range" id="sA" aria-labelledby="nA" min="-36" max="36" step="0.5" value="0"><b id="vA">0</b></div></div>
     <div class="quad" id="q3">
-      <div class="sl"><i id="nB">b</i><input type="range" id="sB" min="-36" max="36" step="0.5" value="0"><b id="vB">0</b></div></div>
+      <div class="sl"><i id="nB">b</i><input type="range" id="sB" aria-labelledby="nB" min="-36" max="36" step="0.5" value="0"><b id="vB">0</b></div></div>
     <div class="quad" id="q0"></div>
     <div id="lplot">
       <div class="pplot" data-plot="L">
@@ -465,26 +479,27 @@
           <label class="chk"><input type="checkbox" data-on="lramp">lightness profile</label>
           <span class="pbtns"><button data-p="fit" title="target ← the ramp's current profile">fit</button>
             <button data-p="p1"></button><button data-p="p2"></button></span>
-        </div><canvas class="pcanvas"
-              title="drag a knot to shape the target · drag the bracket on the left to move the whole profile, or its ends to stretch it"></canvas>
+        </div><canvas class="pcanvas" role="application" tabindex="0" aria-label="lightness profile plot"
+              title="drag a knot to shape the target · drag the bracket on the left to move the whole profile, or its ends to stretch it · arrow keys pick and move a knot"></canvas>
       </div>
       <div class="pplot" data-plot="H">
         <div class="phead">
           <label class="chk"><input type="checkbox" data-on="hprof">hue profile</label>
           <span class="pbtns"><button data-p="fit" title="target ← the ramp's current profile">fit</button>
             <button data-p="p1"></button><button data-p="p2"></button></span>
-        </div><canvas class="pcanvas"
-              title="drag a knot to shape the target · drag the bracket on the left to turn the whole profile, or its ends to widen the turn"></canvas>
+        </div><canvas class="pcanvas" role="application" tabindex="0" aria-label="hue profile plot"
+              title="drag a knot to shape the target · drag the bracket on the left to turn the whole profile, or its ends to widen the turn · arrow keys pick and move a knot"></canvas>
       </div>
     </div>
     <div id="bar">
-      <button id="graybtn" title="show the output in grayscale">◐</button>
-      <canvas id="strip" width="40" height="600"></canvas><div id="swatches"></div>
+      <button id="graybtn" title="show the output in grayscale" aria-label="show the output in grayscale">◐</button>
+      <canvas id="strip" width="40" height="600" role="img" aria-label="the palette as a ramp"></canvas><div id="swatches" role="group" aria-label="swatches"></div>
     </div>
   </main>
 
   <aside>
     <h1>Precept Palette Optimizer</h1>
+    <div id="live" class="sr" aria-live="polite"></div>
 
     <!-- one column on a wide window; two or three when the panel is wider than it
          is tall, which is why the sections live in a box of their own -->
@@ -492,28 +507,30 @@
       <section>
         <h2>Palette</h2>
         <div class="seg" id="mode"><button data-v="continuous">Continuous</button><button data-v="discrete">Discrete</button></div>
-        <div class="row" style="margin-top:6px"><label class="f">load</label>
+        <div class="row" style="margin-top:6px"><label class="f" for="loadbtn">load</label>
           <button id="loadbtn" style="flex:1">load…</button></div>
       </section>
 
       <section id="selpanel">
         <h2>Selection</h2>
         <div class="row" id="selpreview">
-          <input type="color" id="selcolor" title="pick the selected color">
+          <input type="color" id="selcolor" title="pick the selected color" aria-label="selected color">
+          <span id="selsim" role="img" title="as the chosen observer sees it" hidden></span>
           <span id="selinfo" class="note"></span></div>
-        <div class="row"><select id="colorfmt" style="width:88px"></select>
-          <input type="text" id="hex" spellcheck="false" style="flex:1;min-width:0"></div>
+        <div class="row"><select id="colorfmt" style="width:88px" aria-label="color notation"></select>
+          <input type="text" id="hex" spellcheck="false" style="flex:1;min-width:0" aria-label="selected color, in the chosen notation"></div>
         <div class="row"><button id="flip" style="flex:1">flip the excluded side</button></div>
       </section>
 
-      <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2>
+      <section><h2>Optimize<button id="mathbtn" title="the problem being solved" aria-label="the problem being solved">?</button></h2>
         <button id="run">run optimizer</button>
+        <div id="runinfo" class="note" hidden></div>
         <table id="metrics"></table>
-        <div class="row" style="margin-top:8px"><label class="f">rate</label>
+        <div class="row" style="margin-top:8px"><label class="f" for="rate">rate</label>
           <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span>
           <label class="chk" title="jolt out of a stall and keep the best attempt"><input type="checkbox" id="restart">restarts</label></div>
-        <div class="row" id="contrastrow"><label class="f">contrast</label>
-          <input type="color" id="cbg" value="#ffffff" title="the ground swatches are judged against">
+        <div class="row" id="contrastrow"><label class="f" for="cfloor">contrast</label>
+          <input type="color" id="cbg" value="#ffffff" title="the ground swatches are judged against" aria-label="contrast background">
           <input type="number" id="cfloor" min="1" max="21" step="0.5" value="3"
                  style="width:52px" title="minimum contrast ratio the palette should reach">
           <span class="note" style="flex:1">:1 floor</span>
@@ -526,81 +543,81 @@
       </section>
       <section>
         <h2>Bounds</h2>
-        <div class="row"><label class="f">lightness</label>
+        <div class="row"><label class="f" for="lmin">lightness</label>
           <span class="dual" id="ldual"><span class="fill"></span>
-            <input type="range" id="lmin" min="0" max="100" step="1" value="0">
-            <input type="range" id="lmax" min="0" max="100" step="1" value="100"></span>
+            <input type="range" id="lmin" min="0" max="100" step="1" value="0" aria-label="lightness minimum" aria-describedby="lboundv">
+            <input type="range" id="lmax" min="0" max="100" step="1" value="100" aria-label="lightness maximum" aria-describedby="lboundv"></span>
           <span class="v" style="width:56px" id="lboundv">0–100</span></div>
-        <div class="row"><label class="f">chroma</label>
+        <div class="row"><label class="f" for="cmin">chroma</label>
           <span class="dual" id="cdual"><span class="fill"></span>
-            <input type="range" id="cmin" min="0" max="40" step="0.5" value="0">
-            <input type="range" id="cmax" min="0" max="40" step="0.5" value="40"></span>
+            <input type="range" id="cmin" min="0" max="40" step="0.5" value="0" aria-label="chroma minimum" aria-describedby="cboundv">
+            <input type="range" id="cmax" min="0" max="40" step="0.5" value="40" aria-label="chroma maximum" aria-describedby="cboundv"></span>
           <span class="v" style="width:56px" id="cboundv">0–40</span></div>
         <div class="row" style="align-items:flex-start"><label class="f" style="padding-top:44px">hue</label>
-          <span class="wheelwrap"><canvas id="huewheel" width="112" height="112" title="drag an edge of the arc"></canvas>
-            <button id="huereset" title="allow every hue">↺</button></span>
+          <span class="wheelwrap"><canvas id="huewheel" width="112" height="112" title="drag an edge of the arc · arrow keys move the ends" role="application" tabindex="0" aria-label="allowed hue arc" aria-describedby="hboundv"></canvas>
+            <button id="huereset" title="allow every hue" aria-label="allow every hue">↺</button></span>
           <span class="v" style="width:56px;padding-top:44px" id="hboundv">any</span></div>
       </section>
       <section>
         <h2>View</h2>
-        <div class="row"><label class="f">space</label><select id="spacesel" style="flex:1"></select>
-          <button id="spacebtn" title="what each space is" style="padding:4px 9px">?</button></div>
-        <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select>
+        <div class="row"><label class="f" for="spacesel">space</label><select id="spacesel" style="flex:1"></select>
+          <button id="spacebtn" title="what each space is" style="padding:4px 9px" aria-label="what each space is">?</button></div>
+        <div class="row"><label class="f" for="gamutsel">gamut</label><select id="gamutsel" style="flex:1"></select>
           <button id="iccbtn" style="padding:4px 7px">ICC…</button>
-          <button id="chromabtn" title="the gamut on a chromaticity diagram" style="padding:4px 8px">&#9651;</button>
+          <button id="chromabtn" title="the gamut on a chromaticity diagram" style="padding:4px 8px" aria-label="the gamut on a chromaticity diagram">&#9651;</button>
           <input type="file" id="iccfile" accept=".icc,.icm,application/vnd.iccprofile" hidden></div>
-        <div class="row"><label class="f">vision</label>
+        <div class="row"><label class="f" for="cvd">vision</label>
           <select id="cvd" style="flex:1">
             <option value="none">normal</option><option value="protan">protan · red</option>
             <option value="deutan">deutan · green</option><option value="tritan">tritan · blue</option></select></div>
-        <div class="row"><label class="f">severity</label>
+        <div class="row"><label class="f" for="sev">severity</label>
           <input type="range" id="sev" min="0" max="1" step="0.05" value="1"><span class="v" id="sevv">1.0</span></div>
-        <div class="row"><label class="f">solid</label>
+        <div class="row"><label class="f" for="shell">solid</label>
           <input type="range" id="shell" min="0" max="1" step="0.02" value="0.8"><span class="v" id="shellv">0.8</span></div>
-        <div class="row"><label class="f">slices</label>
+        <div class="row"><label class="f" for="sliceop">slices</label>
           <input type="range" id="sliceop" min="0.1" max="1" step="0.05" value="0.8"><span class="v" id="sliceopv">0.8</span></div>
-        <div class="row"><label class="f">backdrop</label><input type="color" id="bg" value="#f0ead6"></div>
+        <div class="row"><label class="f" for="bg">backdrop</label><input type="color" id="bg" value="#f0ead6"></div>
         <div class="row"><label class="chk"><input type="checkbox" id="planes3d">slice planes in 3D</label></div>
         <div class="row"><label class="chk"><input type="checkbox" id="lock">lock slices to node</label></div>
       </section>
 
       <section><h2>Export</h2>
-        <div class="row"><label class="f">name</label>
+        <div class="row"><label class="f" for="scenename">name</label>
           <input type="text" id="scenename" value="precept" style="flex:1;min-width:0"></div>
-        <div class="row"><label class="f">link</label>
+        <div class="row"><label class="f" for="sharelink">link</label>
           <button id="sharelink" style="flex:1">copy link to this palette</button></div>
-        <div class="row"><label class="f">format</label><select id="exportfmt" style="flex:1"></select></div>
+        <div class="row"><label class="f" for="exportfmt">format</label><select id="exportfmt" style="flex:1"></select></div>
         <div class="row"><button id="copypy" style="flex:1">copy</button>
           <button id="savepy" style="flex:1">save</button></div></section>
     </div>
   </aside>
 </div>
 
-<dialog id="aboutdlg">
-  <button id="aboutclose" title="close">&times;</button>
+<dialog id="aboutdlg" aria-label="About">
+  <button id="aboutclose" title="close" aria-label="close">&times;</button>
   <div id="aboutbody"></div>
 </dialog>
 
-<dialog id="loaddlg">
-  <button id="loadclose" title="close">&times;</button>
+<dialog id="loaddlg" aria-label="Load a palette">
+  <button id="loadclose" title="close" aria-label="close">&times;</button>
   <h3>Load a palette</h3>
   <div id="loadlist"></div>
 </dialog>
 
-<dialog id="chromadlg" class="doc">
-  <button class="x" id="chromaclose" title="close">&times;</button>
+<dialog id="chromadlg" aria-label="Chromaticity" class="doc">
+  <button class="x" id="chromaclose" title="close" aria-label="close">&times;</button>
   <h3>Chromaticity</h3>
-  <canvas id="chroma"></canvas>
+  <canvas id="chroma" role="img" aria-label="chromaticity diagram" aria-describedby="chromacap"></canvas>
   <p id="chromacap" class="note"></p>
 </dialog>
 
-<dialog id="spacedlg" class="doc">
-  <button class="x" id="spaceclose" title="close">&times;</button>
+<dialog id="spacedlg" aria-label="Spaces" class="doc">
+  <button class="x" id="spaceclose" title="close" aria-label="close">&times;</button>
   <div id="spacebody"></div>
 </dialog>
 
-<dialog id="mathdlg" class="doc">
-  <button class="x" id="mathclose" title="close">&times;</button>
+<dialog id="mathdlg" aria-label="Formulation" class="doc">
+  <button class="x" id="mathclose" title="close" aria-label="close">&times;</button>
   <div id="mathbody"></div>
 </dialog>
 
@@ -622,7 +639,7 @@ import {
 import {
   LK, LSEP, M, OBJ, OPT_IN, PER_SPAN, S, WARN_EPS, W_DEFAULT, angDiff, angGap, apcaLc, clamp01,
   constrain, contrastRatio, ctxOf, curve, curveOf, curves, degree, derive, disturb, dot3, hueOf,
-  inHueArc, norm360, observer, palette, primary, rnd, runs, setRuns, syncProfiles, takeDisturbed,
+  inHueArc, norm360, observer, palette, primary, rnd, runs, setRuns, syncProfiles, takeDisturbed, targetH, targetL,
   totalTurn, view, whereIs,
 } from './solver.js';
 
@@ -1619,7 +1636,8 @@ const ptGroup = new T.Group(), obsGroup = new T.Group(), planeGroup = new T.Grou
 scene.add(ptGroup, obsGroup, planeGroup);
 const DOT = new T.SphereGeometry(2.6, 20, 14), RING = new T.SphereGeometry(3.4, 20, 14);
 const HALO = new T.SphereGeometry(4.6, 20, 14);
-const OBS_DIR = new T.Vector3(0.62, 0.5, 0.6).normalize();   // off-axis on purpose
+// the handle's direction from the center, in the chart: off-axis on purpose
+const OBS_U = [0.5, 0.62, 0.6].map((v, _, a) => v / Math.hypot(...a));
 
 function buildPoints() {
   ptGroup.clear();
@@ -1653,31 +1671,32 @@ function buildPoints() {
  * everything it depends on, because sync rebuilds the group every frame.
  */
 const SHELLS = new Map();
+/** the point of the keep-out boundary in chart direction u from the center */
+function shellPoint(o, u, g = spaceMetric()) {
+  const R = unperceive(o.r);
+  const at = (t) => o.c.map((cc, k) => cc + t * u[k]);
+  if (!g.space) return at(R);                     // the chart itself: exact, no search
+  let t = R;
+  // the length grows about linearly in t, so scaling by the shortfall lands
+  // within a tenth of a percent in two or three rounds
+  for (let k = 0; k < 6; k++) {
+    const len = unperceive(lineDelta(o.c, at(t), g));
+    if (Math.abs(len - R) < 1e-3 * R) break;
+    t *= R / len;
+  }
+  return at(t);
+}
 function obstacleShell(o) {
   const key = `${params.space}|${params.gamut}|${o.c.map((v) => v.toFixed(3))}|${o.r.toFixed(3)}`;
   let geo = SHELLS.get(key);
   if (geo) return geo;
-  const g = spaceMetric(), R = unperceive(o.r), NU = 24, NV = 16;
-  const at = (u, t) => o.c.map((cc, k) => cc + t * u[k]);
-  const reach = (u) => {
-    if (!g.space) return R;                       // the chart itself: exact, no search
-    let t = R;
-    // the length grows about linearly in t, so scaling by the shortfall lands
-    // within a tenth of a percent in two or three rounds
-    for (let k = 0; k < 6; k++) {
-      const len = unperceive(lineDelta(o.c, at(u, t), g));
-      if (Math.abs(len - R) < 1e-3 * R) break;
-      t *= R / len;
-    }
-    return t;
-  };
+  const g = spaceMetric(), NU = 24, NV = 16;
   const pos = [], idx = [];
   for (let j = 0; j <= NV; j++) {
     const ph = (j / NV) * Math.PI;
     for (let i = 0; i <= NU; i++) {
       const th = (i / NU) * 2 * Math.PI;
-      const u = [Math.cos(ph), Math.sin(ph) * Math.cos(th), Math.sin(ph) * Math.sin(th)];
-      const w = wpt(at(u, reach(u)));
+      const w = wpt(shellPoint(o, [Math.cos(ph), Math.sin(ph) * Math.cos(th), Math.sin(ph) * Math.sin(th)], g));
       pos.push(w.x, w.y, w.z);
     }
   }
@@ -1703,13 +1722,13 @@ function buildObstacles() {
     m.add(new T.Mesh(g, new T.MeshBasicMaterial({
       color: sel ? 0xffffff : 0xff5b5b, wireframe: true, transparent: true, opacity: 0.3 })));
     m.userData = { kind: 'obs', i };
-    // Handle near the surface, in a deliberately oblique direction: along an
-    // axis it would project onto the center in whichever panel looks down that
+    // Handle on the shell, in a deliberately oblique direction: along an axis
+    // it would project onto the center in whichever panel looks down that
     // axis, and a handle you cannot separate from the center is one you cannot
-    // grab. Placed at the chart radius, which is on the shell exactly in Oklab.
+    // grab.
     const h = new T.Mesh(DOT, overlay({ color: sel ? 0xffd76a : 0xc94f4f }));
     h.scale.setScalar(0.7);
-    h.position.copy(wpt(o.c)).addScaledVector(OBS_DIR, unperceive(o.r) * FRAME.s);
+    h.position.copy(wpt(shellPoint(o, OBS_U)));
     h.renderOrder = 8;
     h.userData = { kind: 'obsr', i };
     obsGroup.add(m, h);
@@ -1964,6 +1983,7 @@ function frame() {
 const strip = $('strip'), sctx = strip.getContext('2d');
 
 function sidebar() {
+  $('gl').setAttribute('aria-label', `palette view: ${S.pts.length} control points, ${S.mode}, ${SPACES[params.space].name}`);
   const pal = palette(), W = strip.width, H = strip.height;
   // one representation per mode: a ramp is not a set of swatches and a set of
   // swatches is not a ramp. Index 0 sits at the bottom either way, colorbar side up.
@@ -1980,9 +2000,14 @@ function sidebar() {
     // uniform in ARC LENGTH — the additive quantity. See color-space.ts.
     rampOf(H).forEach((p, i) => { sctx.fillStyle = out(p); sctx.fillRect(0, H - 1 - i, W, 1); });
   } else {
-    $('swatches').innerHTML = pal.map((p, i) =>
-      `<div class="sw" data-i="${i}" data-sel="${S.sel?.kind === 'pt' && S.sel.i === i}"
-        data-bad="${!inGamut(p)}" style="background:${out(p)}" title="${toHex(p)}"></div>`).join('');
+    // buttons: a click selects the node, so the keyboard can too. The name is
+    // what a sighted user reads off the color, plus the nearest named color.
+    $('swatches').innerHTML = pal.map((p, i) => {
+      const sel = S.sel?.kind === 'pt' && S.sel.i === i, bad = !inGamut(p);
+      return `<button class="sw" data-i="${i}" data-sel="${sel}" aria-pressed="${sel}" data-bad="${bad}"
+        style="background:${out(p)}" title="${toHex(p)}"
+        aria-label="swatch ${i + 1}, ${toHex(p)}, ${colorName(p)}${bad ? ', out of gamut' : ''}"></button>`;
+    }).join('');
   }
 
   // worst swatch against the contrast ground, live next to the two knobs that
@@ -2042,6 +2067,13 @@ function sidebar() {
   // the true value, not the value through the active view: this is a picker
   // now, and it has to open on the color you would be editing
   if (target && document.activeElement !== $('selcolor')) $('selcolor').value = toHex(target);
+  // the picker holds the true color; this is the same color through the view
+  const simulated = S.cvd !== 'none' || S.gray;
+  $('selsim').hidden = !(target && simulated);
+  if (target && simulated) {
+    $('selsim').style.background = out(target);
+    $('selsim').setAttribute('aria-label', `as ${S.gray ? 'grayscale' : observer()} sees it: ${out(target)}`);
+  }
   $('flip').closest('.row').style.display = s?.kind === 'plane' || s?.kind === 'planerot' ? '' : 'none';
   if (s?.kind === 'pt' && S.pts[s.i]) {
     const [L, C, h] = toLCh(S.pts[s.i]);
@@ -2471,10 +2503,15 @@ function applyScene(o) {
   // where it has one.
   S.w = Object.fromEntries(OBJ.map((t) => [t.key, o.w?.[t.key] ?? W_DEFAULT[t.key] ?? 1]));
   S.on = Object.fromEntries(OBJ.map((t) => [t.key, o.on?.[t.key] ?? !OPT_IN.includes(t.key)]));
+  // a stored profile keeps to the stored bounds, as an edited one does
+  S.lprof = S.lprof.map(PLOTS.L.clamp); S.hprof = S.hprof.map(PLOTS.H.clamp);
   S.sel = null;
   reframe(); layout(); buildShell(); capKey = null;   // a new chart moves everything
   mirror();
-  sync({ colors: true, light: true });
+  // a full sync: the sidebar has to describe the scene just applied, and a
+  // light one leaves it showing the previous palette's numbers and swatches
+  // until something else repaints it
+  sync({ colors: true });
 }
 
 /**
@@ -2769,9 +2806,11 @@ function paintMetrics(rows) {
       // data-help, not title: the OS tooltip makes you wait a second to find out
       // whether hovering does anything, and the sidebar scrolls, which would clip
       // a positioned one. A line under the table is instant and never clipped.
-      const q = help ? `<span class="q" data-h="${esc(help)}">?</span>` : '';
-      return `<tr data-k="${esc(obj ?? k)}"><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}${q}</td>` +
-      `<td class="${warn ? 'warn' : ''}"><i class="sh"></i><span>${v}</span></td>` +
+      // the marker can take focus, so the keyboard reaches the hint, and the
+      // checkbox is described by it, so a screen reader reads both together
+      const q = help ? `<span class="q"${obj ? ` id="q-${obj}"` : ''} role="note" tabindex="0" aria-label="${esc(help)}" data-h="${esc(help)}">?</span>` : '';
+      return `<tr data-k="${esc(obj ?? k)}"><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}" aria-describedby="q-${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}${q}</td>` +
+      `<td class="${warn ? 'warn' : ''}"><i class="sh"></i><b class="bang"${warn ? '' : ' hidden'}>!<span class="sr"> nonzero</span></b><span>${v}</span></td>` +
       // the multiplier sits against its own number rather than over the column:
       // one mark per weight says what that weight is, where a heading says it
       // once and then leaves eleven bare numbers to be taken on trust
@@ -2790,6 +2829,7 @@ function paintMetrics(rows) {
     if (!cell) return;
     if (cell.lastChild.textContent !== String(v)) cell.lastChild.textContent = v;
     paintShare(cell.firstChild, share);
+    cell.children[1].hidden = !warn;
     const cls = warn ? 'warn' : '';
     if (cell.className !== cls) cell.className = cls;
     if (!obj) return;
@@ -2892,13 +2932,21 @@ const namedColors = () => (NAMED ??= (() => {
     return c.fillStyle === '#010203' ? [] : [[n, fromHex(c.fillStyle)]];
   });
 })());
+// memoized on the hex, since the swatch column asks for every swatch at each
+// sidebar repaint and the answer only changes with the color or the space
+const NAMES = new Map();
 const colorName = (p) => {
+  const key = `${params.space}|${toHex(p)}`;
+  let best = NAMES.get(key);
+  if (best) return best;
   const g = spaceMetric();
-  let best = null, bd = Infinity;
+  let bd = Infinity;
   for (const [n, q] of namedColors()) {
     const d = lineDelta(p, q, g, 4);
     if (d < bd) { bd = d; best = n; }
   }
+  if (NAMES.size > 1024) NAMES.clear();
+  NAMES.set(key, best);
   return best;
 };
 
@@ -2940,9 +2988,10 @@ function fromSolver(pts, done) {
   if (pts.length !== S.pts.length) return;
   applying = true;
   S.pts = pts;
-  // the sidebar rebuilds its whole table and re-evaluates every term, which is
-  // far too much to do at frame rate; the views stay live, the numbers lag
-  sync({ light: !done && ++frames % 8 !== 0 });
+  // the sidebar re-evaluates every term and repaints the panel, which is too
+  // much to do at frame rate; the views stay live and the numbers follow at a
+  // third of it
+  sync({ light: !done && ++frames % 3 !== 0 });
   applying = false;
 }
 
@@ -2955,23 +3004,39 @@ function solverWorker() {
     // button back to `run optimizer` over a worker that is still stepping, and every
     // `pts` after that is dropped, so the palette freezes with no way back.
     if (m.id !== runId) return;
-    if (m.t === 'pts') { if (running) { stepShare = m.share; fromSolver(m.pts, false); } return; }
+    if (m.t === 'pts') {
+      if (!running) return;
+      stepShare = m.share;
+      const info = `step ${m.tick}${m.restarts ? ` · ${m.restarts} restart${m.restarts > 1 ? 's' : ''}` : ''}`;
+      if ($('runinfo').textContent !== info) $('runinfo').textContent = info;
+      $('runinfo').hidden = false;
+      if (m.restarts > restarts) announce(`restart ${m.restarts}`);
+      restarts = m.restarts;
+      fromSolver(m.pts, false);
+      return;
+    }
     // the last jolt is not the answer: the worker returns whichever attempt
     // scored best, and this is also how a converged run reports that it stopped
-    if (m.t === 'final') { endRun(); fromSolver(m.pts, true); }
+    if (m.t === 'final') { if (running) announce('Optimizer converged.'); endRun(); fromSolver(m.pts, true); }
   };
   return solver;
 }
 
+/** what a screen reader hears about the solver; the button's text changes silently */
+const announce = (text) => { $('live').textContent = text; };
+
+let restarts = 0;                            // the last count the worker reported
 function startSolver() {
   if (running) return;
-  running = true; frames = 0;
+  running = true; frames = 0; restarts = 0;
+  announce('Optimizer running.');
   $('run').textContent = 'stop'; $('run').dataset.on = '';
   solverWorker().postMessage({ t: 'start', id: ++runId, ...solverState() });
 }
 /** the button answers now; the worker's last word arrives as `final` */
 function stopSolver() {
   if (!running) return;
+  announce('Optimizer stopped.');
   endRun();
   solver.postMessage({ t: 'stop' });
 }
@@ -2998,13 +3063,22 @@ const LPAD = { l: 36, r: 10, t: 10, b: 15 };
 const PLOTS = {
   L: { key: 'lprof', term: 'lramp', lo: 0, hi: 100, ticks: [0, 50, 100], hue: false,
        meas: (P) => P.map((p) => p[0]),
-       clamp: (v) => Math.min(100, Math.max(0, v)),          // lightness has ends
+       // the lightness band, not the axis: a target outside it is one the
+       // palette cannot reach
+       band: () => [S.lo[0], S.hi[0]],
+       clamp: targetL,
+       excluded: () => [[0, S.lo[0]], [S.hi[0], 100]].filter(([a, b]) => b > a),
        fit: lprofFit, p1: lprofLine, p2: lprofArch, labels: ['line', 'arch'],
        tips: ['straight ramp · double-click to reverse',
               'tent · double-click for a dark middle'] },
   H: { key: 'hprof', term: 'hprof', lo: 0, hi: 360, ticks: [0, 90, 180, 270, 360], hue: true,
        meas: (P) => P.map(hueOf).map(norm360),
-       clamp: norm360,                                       // hue does not, so it wraps
+       clamp: targetH,                                       // the arc: outside it, the nearer end
+       excluded: () => {
+         const [lo, hi] = S.hue;
+         if (lo === 0 && hi === 360) return [];
+         return lo < hi ? [[0, lo], [hi, 360]].filter(([a, b]) => b > a) : [[hi, lo]];
+       },
        fit: hprofFit, p1: hprofSweep, p2: hprofSplit, labels: ['sweep', 'split'],
        tips: ['steady turn · double-click to reverse',
               'two plateaus · double-click for the long way'] },
@@ -3093,11 +3167,12 @@ function lpstretch(p, d, y) {
   const lo = Math.min(...u), hi = Math.max(...u);
   const dv = lpv(p, y) - lpv(p, d.y);
   const put = (v, i) => (prof[i] = p.hue ? norm360(v) : v);
+  const [blo, bhi] = p.hue ? [p.lo, p.hi] : p.band();    // the band, where the axis has ends
 
   if (grip === 'move') {
-    // a circle simply turns; a bounded axis stops at its end rather than
+    // a circle simply turns; a bounded axis stops at the band rather than
     // flattening the profile against it
-    const s = p.hue ? dv : Math.min(p.hi - hi, Math.max(p.lo - lo, dv));
+    const s = p.hue ? dv : Math.min(bhi - hi, Math.max(blo - lo, dv));
     u.forEach((v, i) => put(v + s, i));
     return;
   }
@@ -3112,8 +3187,8 @@ function lpstretch(p, d, y) {
   const kMax = p.hue && step > 0 ? 179 / step : Infinity;
   const wall = (v, a, b) => (p.hue ? v : Math.min(b, Math.max(a, v)));
   const k = Math.min(kMax, grip === 'hi'
-    ? (Math.max(lo, wall(hi + dv, lo, p.hi)) - lo) / (hi - lo)
-    : (hi - Math.min(hi, wall(lo + dv, p.lo, hi))) / (hi - lo));
+    ? (Math.max(lo, wall(hi + dv, lo, bhi)) - lo) / (hi - lo)
+    : (hi - Math.min(hi, wall(lo + dv, blo, hi))) / (hi - lo));
   const anchor = grip === 'hi' ? lo : hi;
   u.forEach((v, i) => put(anchor + (v - anchor) * k, i));
 }
@@ -3142,6 +3217,9 @@ function drawPlot(p) {
   const meas = P.length >= 2 ? p.meas(P) : [];
 
   ctx.clearRect(0, 0, W, H);
+  // what the bounds exclude is shaded, and the knots stay out of it
+  ctx.fillStyle = hud; ctx.globalAlpha = 0.1;
+  for (const [a, b] of p.excluded()) ctx.fillRect(LPAD.l, lpy(p, b), W - LPAD.l - LPAD.r, lpy(p, a) - lpy(p, b));
   ctx.strokeStyle = hud; ctx.globalAlpha = 0.28; ctx.lineWidth = 1;
   ctx.font = "9px 'Fira Mono',ui-monospace,monospace"; ctx.fillStyle = hud;
   for (const v of p.ticks) {
@@ -3214,10 +3292,12 @@ function drawPlot(p) {
     ctx.beginPath(); ctx.moveTo(x, LPAD.t); ctx.lineTo(x, p.el.clientHeight - LPAD.b); ctx.stroke();
     ctx.globalAlpha = 1;
   }
+  const focused = document.activeElement === p.el;   // the knot the keys hold is drawn larger
   prof.forEach((v, i) => {
-    ctx.beginPath(); ctx.arc(lpx(p, i / (LK - 1)), lpy(p, v), 3.6, 0, 7);
-    ctx.fillStyle = hud; ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1; ctx.stroke();
+    const held = focused && i === p.k;
+    ctx.beginPath(); ctx.arc(lpx(p, i / (LK - 1)), lpy(p, v), held ? 5.5 : 3.6, 0, 7);
+    ctx.fillStyle = held ? '#fff' : hud; ctx.fill();
+    ctx.strokeStyle = held ? hud : 'rgba(255,255,255,.7)'; ctx.lineWidth = held ? 2 : 1; ctx.stroke();
   });
 }
 
@@ -3238,11 +3318,34 @@ for (const p of PLOTLIST) {
   p.el.addEventListener('pointermove', (e) => {
     if (lDrag?.p !== p) return;
     const [, y] = at(e);
-    if (lDrag.grip) lpstretch(p, lDrag, y);
-    else p.prof()[lDrag.i] = p.clamp(lpv(p, y));     // to the visible window, no further
+    if (lDrag.grip) { lpstretch(p, lDrag, y); p.prof().forEach((v, i, a) => { a[i] = p.clamp(v); }); }
+    else p.prof()[lDrag.i] = p.clamp(lpv(p, y));     // to the band, no further
     sidebar();
   });
   p.el.addEventListener('pointerup', () => { lDrag = null; });
+
+  // The knots by keyboard: left and right pick one, up and down move it, page
+  // up and page down move the whole profile, and shift makes the step five
+  // times larger. Handled here and stopped, so the window's keys for the
+  // selected node do not also fire.
+  p.k = 0;
+  p.el.addEventListener('focus', () => drawPlot(p));
+  p.el.addEventListener('blur', () => drawPlot(p));
+  p.el.addEventListener('keydown', (e) => {
+    const prof = p.prof();
+    if (!prof.length) return;
+    p.k = Math.min(p.k, LK - 1);
+    const step = (p.hue ? 2 : 1) * (e.shiftKey ? 5 : 1);
+    const dir = { ArrowUp: 1, ArrowDown: -1, PageUp: 1, PageDown: -1 }[e.key];
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') p.k = Math.min(LK - 1, Math.max(0, p.k + (e.key === 'ArrowRight' ? 1 : -1)));
+    else if (dir && e.key.startsWith('Page')) prof.forEach((v, i) => { prof[i] = p.clamp(v + dir * step); });
+    else if (dir) prof[p.k] = p.clamp(prof[p.k] + dir * step);
+    else return;
+    e.preventDefault(); e.stopPropagation();
+    sidebar();
+    const v = prof[p.k].toFixed(0);
+    announce(`${p.hue ? 'hue' : 'lightness'} knot ${p.k + 1} of ${LK}: ${v}${p.hue ? '°' : ''}`);
+  });
 }
 
 /** Each plot's checkbox is the same flag as its row in Metrics, so both are
@@ -3308,21 +3411,28 @@ for (const p of PLOTLIST) {
  * scheme, since they float over a colored solid rather than sit on the panel.
  */
 function applyBg() {
-  renderer.setClearColor(new T.Color(S.bg), 1);
+  // As the chosen observer sees it: the backdrop, and every color derived from
+  // it, go through the vision view and the grayscale switch, so the whole page
+  // is looked at the way the palette is.
+  const seen = (p) => toGamut(S.gray ? [p[0], 0, 0] : view(p), 'srgb');
+  const ground = toHex(seen(fromHex(S.bg)));
+  renderer.setClearColor(new T.Color(ground), 1);
   // Text and accent are derived from the backdrop rather than picked from two
   // fixed palettes: the same hue, pushed the other way along lightness by a
   // fixed amount, which is a contrast the chart can actually promise. The
-  // accent takes the opposite hue when the backdrop has one to oppose.
+  // accent takes the opposite hue when the backdrop has one to oppose. The
+  // offsets for --dim and --hot are the smallest that clear 4.5:1 on the
+  // default backdrop.
   const [L, C, h] = toLCh(fromHex(S.bg));
   const light = L > 55, dir = light ? -1 : 1;
   const at = (dL, c2, hue = h) =>
-    toHex(toGamut(fromLCh([Math.min(100, Math.max(0, L + dir * dL)), c2, hue])));
+    toHex(seen(toGamut(fromLCh([Math.min(100, Math.max(0, L + dir * dL)), c2, hue]))));
   const v = document.documentElement.style;
   for (const [k, val] of Object.entries({
-    '--panel': S.bg, '--bg': S.bg,
+    '--panel': ground, '--bg': ground,
     '--fg': at(72, Math.min(C * 0.25, 5)),
-    '--dim': at(38, Math.min(C * 0.25, 4)),
-    '--hot': at(34, 32, 28),
+    '--dim': at(42, Math.min(C * 0.25, 4)),
+    '--hot': at(42, 32, 28),
     '--link': at(46, 26, C > 3 ? h + 170 : 250),
     // A pressed toggle reads as filled by being a step away from the ground,
     // not by being colored: an accent-hue fill was a slab of light blue in the
@@ -4113,10 +4223,10 @@ canvas.addEventListener('pointermove', (e) => {
   if (!hit) return;
   const p = cpt(hit);
   if (drag.kind === 'obsr') {
-    // radius from the drag distance, measured the way the sphere is DRAWN, so
-    // the handle stays under the cursor
+    // the radius that puts the shell through the pointer: the same measure the
+    // solver enforces, so the handle lands where it was dragged in every space
     const o = S.obs[drag.i];
-    S.obs[drag.i].r = Math.min(60, Math.max(1, perceive(hit.distanceTo(wpt(o.c)) / FRAME.s)));
+    S.obs[drag.i].r = Math.min(60, Math.max(1, lineDelta(o.c, p, spaceMetric())));
   } else if (drag.kind === 'plane') S.planes[drag.i].d = dot3(S.planes[drag.i].n, toSpace(p));   // slide along the normal
   else if (drag.kind === 'planerot') {
     const pl = S.planes[drag.i], c = planeCenter(pl);
@@ -4138,6 +4248,23 @@ addEventListener('keydown', (e) => {
   const z = (e.ctrlKey || e.metaKey) && e.key.toLowerCase();
   if (z === 'z' || z === 'y') { e.preventDefault(); return z === 'y' || e.shiftKey ? redo() : undo(); }
   if (e.key === 'r' && hovered?.axis !== undefined) { resetView(hovered.cam); return; }
+  // [ and ] walk the selection through the nodes, then the keep-out balls, then
+  // the planes, so the canvas can be driven without a pointer
+  if (e.key === '[' || e.key === ']') {
+    const all = [...S.pts.map((_, i) => ({ kind: 'pt', i })), ...S.obs.map((_, i) => ({ kind: 'obs', i })),
+                 ...S.planes.map((_, i) => ({ kind: 'plane', i }))];
+    if (!all.length) return;
+    const kind = { obsr: 'obs', planerot: 'plane' }[S.sel?.kind] ?? S.sel?.kind;
+    const at = all.findIndex((x) => x.kind === kind && x.i === S.sel?.i);
+    const from = at < 0 ? (e.key === ']' ? -1 : 0) : at;
+    const next = all[(from + (e.key === ']' ? 1 : -1) + all.length) % all.length];
+    select(next); sync();
+    const p = next.kind === 'pt' ? S.pts[next.i] : null;
+    announce(next.kind === 'pt' ? `selected node ${next.i + 1}, ${toHex(p)}, ${colorName(p)}`
+      : next.kind === 'obs' ? `selected keep-out ball ${next.i + 1}, radius ${S.obs[next.i].r.toFixed(1)}`
+      : `selected halfplane ${next.i + 1}`);
+    return;
+  }
   if (!S.sel) return;
   // arrows nudge the selection in the plane of the panel under the pointer, the
   // way a drag there would move it: one space unit a press, ten with shift
@@ -4393,7 +4520,7 @@ addEventListener('pointermove', (e) => {
 for (const ev of ['pointerup', 'pointercancel'])
   addEventListener(ev, () => { wDrag = null; });
 $('run').onclick = () => (running ? stopSolver() : startSolver());
-$('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; sidebar(); };
+$('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; applyBg(); sidebar(); };
 // The preview folds away to its own button, which stays where the preview was
 // — so the way back is in the place the thing that left used to be.
 $('tipoff').onclick = () => { S.tip = !S.tip; layout(); mirror(); sidebar(); };
@@ -4502,6 +4629,21 @@ wheel.addEventListener('pointermove', (e) => {
   boundsChanged();
 });
 wheel.addEventListener('pointerup', () => { wheelDrag = null; });
+// The arc by keyboard: left and right move its start, up and down its end, two
+// degrees a press and ten with shift. On a full circle the first press opens a
+// quarter arc, as a click does. Delete allows every hue again. Stopped, so the
+// window does not read Delete as removing the selected node.
+wheel.addEventListener('keydown', (e) => {
+  const d = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowDown: [1, -1], ArrowUp: [1, 1] }[e.key];
+  if (e.key === 'Delete' || e.key === 'Backspace') S.hue = [0, 360];
+  else if (d) {
+    if (S.hue[0] === 0 && S.hue[1] === 360) S.hue = [0, 90];
+    S.hue[d[0]] = (((S.hue[d[0]] + d[1] * (e.shiftKey ? 10 : 2)) % 360) + 360) % 360;
+  } else return;
+  e.preventDefault(); e.stopPropagation();
+  boundsChanged();
+  announce(S.hue[0] === 0 && S.hue[1] === 360 ? 'every hue allowed' : `hue arc ${S.hue[0].toFixed(0)}° to ${S.hue[1].toFixed(0)}°`);
+});
 wheel.addEventListener('dblclick', () => { S.hue = [0, 360]; boundsChanged(); });
 
 /**
@@ -4534,6 +4676,9 @@ function paintBounds() {
   drawWheel();
 }
 const boundsChanged = () => {
+  // the profiles follow the band in, so no target is left where the palette
+  // cannot go
+  S.lprof = S.lprof.map(PLOTS.L.clamp); S.hprof = S.hprof.map(PLOTS.H.clamp);
   paintBounds();
   sync({ colors: true });
 };
@@ -4557,6 +4702,7 @@ $('swatches').onclick = (e) => {
 
 function setView() {
   sync({ colors: true });                          // derive() picks the observer up
+  applyBg();                                       // and the page around the palette follows
 }
 
 for (const id of ['mode', 'tool']) {
@@ -4650,7 +4796,10 @@ const HINTS = {
   if (!el) { console.warn(`hint for missing control: ${k}`); continue; }
   const host = el.closest('label.chk') ?? el.closest('.row')?.querySelector('label.f')
             ?? el.closest('.row') ?? el.closest('section').querySelector('h2');
-  host.insertAdjacentHTML('beforeend', `<span class="q" data-h="${esc(text)}">?</span>`);
+  const id = `q-${k}`;
+  host.insertAdjacentHTML('beforeend', `<span class="q" id="${id}" role="note" tabindex="0" aria-label="${esc(text)}" data-h="${esc(text)}">?</span>`);
+  // the control is described by its hint, so a screen reader reads both
+  el.setAttribute('aria-describedby', [el.getAttribute('aria-describedby'), id].filter(Boolean).join(' '));
 }
 
 // The 3D view is the one worth opening on at any size — the three cuts are a

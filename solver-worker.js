@@ -12,7 +12,7 @@
  * of those messages is `stop`.
  */
 import {
-  S, RESTART, LAST, step, adamReset, resetTick, reseedJitter, better, derive, constrain, incumbent,
+  S, RESTART, LAST, step, adamReset, resetTick, reseedJitter, better, derive, constrain, incumbent, tick,
 } from './solver.js';
 import { params, GAMUTS } from './color-space.ts';
 
@@ -61,7 +61,7 @@ function loop() {
     postMessage({ t: 'final', pts: S.pts, id });
     throw err;
   }
-  postMessage({ t: 'pts', pts: S.pts, id, share: LAST.share });
+  postMessage({ t: 'pts', pts: S.pts, id, share: LAST.share, tick, restarts: RESTART.n });
   if (!alive) return finish();                 // converged: nothing moved
   setTimeout(loop, 0);                         // yield, so `stop` can be heard
 }

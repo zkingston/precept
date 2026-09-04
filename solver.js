@@ -286,9 +286,19 @@ export const WARN_EPS = 0.005;    // below this a `bad` term reads 0.00, so do n
  */
 export let LK = 9;
 
+/** a lightness target kept to the band, and a hue target kept to the arc, at
+ *  the nearer end when it is outside: a target the palette cannot reach is not
+ *  a target */
+export const targetL = (v) => Math.min(S.hi[0], Math.max(S.lo[0], v));
+export const targetH = (v) => {
+  const h = norm360(v);
+  return inHueArc(h) ? h : angGap(h, S.hue[0]) <= angGap(h, S.hue[1]) ? S.hue[0] : S.hue[1];
+};
+
 /**
- * Resize the profiles when the palette does, keeping the shape they had.
- * Called from sync(), so nothing that adds or removes a point has to remember.
+ * Resize the profiles when the palette does, keeping the shape they had, and
+ * inside the bounds. Called from sync(), so nothing that adds or removes a
+ * point has to remember.
  */
 export function syncProfiles() {
   const want = Math.max(2, S.pts.length);
@@ -300,8 +310,8 @@ export function syncProfiles() {
   };
   const [l, h] = [S.lprof, S.hprof];
   LK = want;
-  S.lprof = Array.from({ length: LK }, (_, k) => at(l, k, false));
-  S.hprof = Array.from({ length: LK }, (_, k) => at(h, k, true));
+  S.lprof = Array.from({ length: LK }, (_, k) => targetL(at(l, k, false)));
+  S.hprof = Array.from({ length: LK }, (_, k) => targetH(at(h, k, true)));
 }
 
 /**
@@ -1322,6 +1332,14 @@ function demo() {
   ok(term('bend').f(setup('continuous', line(5, 8))) < 1e-9, 'bending of a straight ramp is 0');
   ok(term('space').f(setup('continuous', line(6, 7))) < 1e-9, 'spacing of equal gaps is 0');
   ok(term('space').f(setup('continuous', [...line(3, 7), [70, 5, -5]])) > 0.1, 'spacing sees an uneven gap');
+
+  S.lo = [20, 0]; S.hi = [80, 40]; S.hue = [30, 200];
+  ok(targetL(90) === 80 && targetL(5) === 20 && targetL(50) === 50, 'lightness targets keep to the band');
+  ok(targetH(0) === 30 && targetH(250) === 200 && targetH(100) === 100 && targetH(-20) === 30, 'hue targets keep to the arc');
+  S.hue = [300, 60];
+  ok(targetH(350) === 350 && targetH(30) === 30 && targetH(200) === 300 && targetH(160) === 60, 'and to an arc through zero');
+  S.lo = [0, 0]; S.hi = [100, 40]; S.hue = [0, 360];
+  ok(targetH(0) === 0 && targetL(100) === 100, 'a full circle and a full band keep everything');
 
   // the windowed repulsion is the whole thing, differentiated
   for (const mode of ['discrete', 'continuous']) {
