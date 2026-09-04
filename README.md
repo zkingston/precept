@@ -19,6 +19,7 @@ the small steps that make them up.
 npm install
 npm run serve     # http://localhost:8080
 npm run check     # self-check
+npm run browser   # drives the page in a local headless chromium: names, keys, contrast, sizes
 ```
 
 No build step for development. The dev server strips TypeScript types on the way
@@ -32,14 +33,12 @@ npm run build     # writes docs/
 
 GitHub Pages is a plain static host, which the dev setup is not: browsers cannot
 parse TypeScript, and the import map points at absolute `/node_modules` paths
-that would resolve to the *domain* root on a project site. `build.js` undoes
-both — types stripped once into `docs/color-space.js`, three and its addons
-vendored into `docs/vendor/`, and every specifier rewritten relative.
-
-It vendors by following imports rather than by naming files, because
-`three.module.js` is a shim that re-exports `three.core.js`. Naming the two
-files the page imports leaves a 404 that only appears once it is served
-statically.
+that would resolve to the *domain* root on a project site. `build.js` lifts the
+page's inline module out of `index.html` and bundles it and the worker with
+esbuild, minified, with their shared code split into one chunk, so no import map
+is needed and only the parts of three the page reaches are shipped. MathJax, its
+Fira font and the interface fonts are copied under `docs/vendor/`, and the three
+markdown documents the dialogs fetch are copied beside `index.html`.
 
 `docs/` is a build artifact and is not committed. `.github/workflows/pages.yml`
 runs the self-check, builds it, and deploys it to GitHub Pages on every push to
