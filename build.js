@@ -12,8 +12,8 @@
 // readable code with real names in a stack trace. The bundle is for the
 // deployed copy only.
 //
-// docs/ is a build artifact but is committed, because Pages serves from the
-// repo. Rebuild before pushing.
+// docs/ is a build artifact and is not committed: the Pages workflow builds it
+// on every push to main.
 import { readFile, writeFile, mkdir, rm, cp, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { build } from 'esbuild';

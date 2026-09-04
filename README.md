@@ -41,8 +41,9 @@ It vendors by following imports rather than by naming files, because
 files the page imports leaves a 404 that only appears once it is served
 statically.
 
-`docs/` is a build artifact but is committed, since Pages serves from the repo.
-Rebuild before pushing, then point Pages at `/docs` on `main`.
+`docs/` is a build artifact and is not committed. `.github/workflows/pages.yml`
+runs the self-check, builds it, and deploys it to GitHub Pages on every push to
+`main`; Pages is set to deploy from GitHub Actions.
 
 ## The space
 

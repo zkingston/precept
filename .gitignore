@@ -8,3 +8,6 @@ node_modules/
 # 67 MB of per-format exports for 40 maps, of which this repo keeps only the
 # control points. Get it again from https://www.fabiocrameri.ch/colourmaps/
 ScientificColourMaps*.zip
+
+# Build output, deployed by .github/workflows/pages.yml
+docs/
