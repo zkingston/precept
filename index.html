@@ -129,20 +129,29 @@
               display:grid; place-items:center; }
   /* tools live over the viewport, where the things they make are */
   /* one HUD column down the 3D view's left edge; layout() supplies the left */
-  #hud { position:absolute; top:12px; display:flex; flex-direction:column; gap:5px; align-items:flex-start; }
+  #hud { position:absolute; top:12px; display:flex; flex-direction:column; flex-wrap:wrap;
+         gap:5px; align-items:flex-start; }
   #tool { display:flex; flex-direction:column; gap:4px; }
-  #tip { position:absolute; right:14px; top:12px; }
+  #tip { position:absolute; right:14px; bottom:14px; width:264px; }
   /* a grid cell rather than a floating card: layout() sizes it, so the canvas
      fills what is left after the buttons */
   #tip.cell { display:flex; flex-direction:column; gap:2px; padding:2px; }
   #tip.cell #tipcanvas { width:100%; height:auto; flex:1; min-height:0; }
-  #tip.cell #tipbtns { margin-top:0; gap:2px; }
-  #tip.cell #tipbtns button { font-size:9px; padding:1px 0; }
-  #tipdock #tip { position:static; }
-  #tipdock #tipcanvas { width:100%; height:auto; }
-  #tipcanvas { display:block; border-radius:3px; width:264px; height:128px; }
+  #tip.cell #tipbtns, #tip.mini #tipbtns { margin-top:3px; gap:2px; }
+  /* [data-tip] only: these squeeze the test NAMES, and the toggle beside them
+     is one glyph that still has to be hittable */
+  #tip.cell #tipbtns button[data-tip], #tip.mini #tipbtns button[data-tip] { font-size:9px; padding:1px 0; }
+  /* aspect rather than a height: drawTest sizes the backing store from the box
+     it is given, so the element's own width and height attributes are whatever
+     it was last drawn at and cannot be the thing that decides the shape */
+  #tipcanvas { display:block; border-radius:3px; width:100%; height:auto; aspect-ratio:264/128; }
   #tipbtns { display:flex; gap:4px; margin-top:6px; }
   #tipbtns button { flex:1; font-size:10px; padding:2px 0; }
+  /* the one button that is not a test image, and the only thing left of the
+     preview when it is off — so it does not take an equal share of the row */
+  #tipbtns #tipoff { flex:0 0 auto; padding:1px 6px; font-size:11px; line-height:1.4; }
+  #tip.off #tipcanvas, #tip.off #tipbtns button[data-tip] { display:none; }
+  #tip.off #tipbtns { margin-top:0; }
   #tipbtns button[aria-pressed=true] { background:var(--sel); border-color:var(--link); }
   #hist { display:flex; flex-direction:column; gap:4px; }
   #hist button:disabled { opacity:.3; cursor:default; }
@@ -176,6 +185,7 @@
 
   aside { background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:14px;
           display:flex; flex-direction:column; gap:13px; }
+  #panelcols { display:flex; flex-direction:column; gap:13px; }
   h1 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0; font-weight:600; }
   h2 { font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin:0 0 6px; font-weight:600; }
   section { border-top:1px solid var(--line); padding-top:11px; }
@@ -210,7 +220,7 @@
      than as a convenience. Its buttons stay, and take the panel's own chrome
      instead of the dark chip they wear over the 3D view. */
   #metrics tr.plotrow > td { padding:1px 0 9px; }
-  #metrics tr.plotrow .pplot { height:84px; }
+  #metrics tr.plotrow .pplot { height:104px; }   /* 64px of curve was thin between the 0 and 100 ticks */
   #metrics tr.plotrow .phead > .chk { display:none; }
   #metrics tr.plotrow .phead button { background:var(--ctl); color:var(--fg); border-color:var(--line); }
   #metrics tr.plotrow .phead button:hover { background:var(--sel); }
@@ -258,6 +268,11 @@
   #metrics input.w:disabled { opacity:.3; cursor:default; }
   #metrics .mx { color:var(--dim); font-size:10px; margin-left:3px; }
   #metrics .mx[data-off] { opacity:.3; }
+  /* each term's share of the solver's last step; red when the step moves against it */
+  #metrics .sh { display:none; width:22px; height:5px; margin-right:6px; vertical-align:middle; border-radius:2px;
+    background:linear-gradient(to right, var(--fg) calc(var(--v,0)*100%), var(--line) 0); opacity:.6; }
+  #metrics .sh[data-live] { display:inline-block; }
+  #metrics .sh[data-neg] { background:linear-gradient(to left, var(--hot) calc(var(--v,0)*100%), var(--line) 0); }
   .note { color:var(--dim); font-size:11px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
@@ -284,14 +299,6 @@
   @media (max-width: 560px) {
     .doc dl { grid-template-columns:1fr; gap:0; }
     .doc dd { margin:1px 0 7px 14px; }
-    /* The dock is one column at this width, so the preview takes the whole of
-       it, and at its natural 2.06 that came back 180px tall — a third of the
-       panel for the one thing there that is already legible small.
-       An aspect rather than a height: a fixed height is one shape at 412 and
-       another at 540, and the wide end of this tier is where it looked pulled.
-       Every test image is drawn from the canvas's own size, so a wider box is
-       a wider picture rather than a squashed one. */
-    #tipdock #tipcanvas { height:auto; aspect-ratio:2.7; }
   }
   /* Wide formulas scroll sideways on a narrow viewport. The vertical padding is
      not decoration: MathJax's box arithmetic leaves each container overflowing
@@ -346,23 +353,19 @@
   #aboutclose:hover { color:var(--fg); }
   /* ── narrow ────────────────────────────────────────────────────────────────
      One column: canvas above, controls below. 48vh of canvas cannot also carry
-     a 278px preview, a color bar and two plots on top of four viewports, so
-     the preview and the plots move into the panel — see reflow(). They are the
-     two overlays that are readouts and editors rather than camera furniture,
-     and the plots want the full width anyway, since you drag their knots.
+     two plots on top of four viewports, so the profiles move into the panel —
+     see reflow(). They are the overlay that is an editor rather than camera
+     furniture, and they want the full width anyway, since you drag their knots.
+     The preview stays over the view and shrinks with it; see layout().
      The breakpoint is shared with the JS through matchMedia; the viewport
      split it selects lives in layout(). */
-  #tipdock { display:none; }
-
-  /* ── compact: the panel takes the overlays ──────────────────────────────
+  /* ── compact: the panel takes the profiles ─────────────────────────────
      Two thresholds, not one. The SHELL only has to stack on a phone, but the
-     overlays stop fitting long before that: at 1280x720 the preview is most
-     of the 3D panel's width, and by 933 the two plots are ~180px each and
-     their button strips collide with their own labels. So the preview and the
-     profiles move into the side panel here, while the layout stays side by
-     side, and the tools rise to the top now that nothing sits above them. */
+     profiles stop fitting long before that: by 933 the two plots are ~180px
+     each and their button strips collide with their own labels. So they move
+     into the side panel here, while the layout stays side by side, and the
+     tools rise to the top now that nothing sits above them. */
   @media (max-width: 1280px), (max-height: 719px) {
-    #tipdock { display:block; margin-bottom:9px; }
     #lplot { position:static; height:auto; flex-direction:column; gap:9px; }
     .pplot { flex:none; height:84px; }          /* flex:1 would beat the height */
     #hud { top:12px; }
@@ -371,10 +374,25 @@
 
   @media (max-width: 860px) {
     #app { grid-template-columns:1fr; grid-template-rows:48vh minmax(0,1fr); height:100dvh; }
-    aside { border-left:0; border-top:1px solid var(--line); gap:11px;
-            display:grid; grid-template-columns:repeat(auto-fill,minmax(258px,1fr)); align-content:start; }
-    h1, section { grid-column:1/-1; }
-    section { grid-column:auto; }
+    aside { border-left:0; border-top:1px solid var(--line); gap:11px; }
+    /* Columns, not a grid of them. A grid lays the sections out a ROW at a
+       time, so a row is as tall as the tallest thing in it and Optimize — the
+       one section that is 600px long — left Palette beside it as a strip of
+       controls over 500px of nothing, with Bounds and View pushed off the
+       bottom of the panel. Multicol fills one column before it starts the
+       next, so the short sections gather in the other column instead of
+       queueing behind the tall one, and reading order still runs down a column
+       and across, which is also the order the keyboard tabs in. The panel
+       scrolls, so the height the columns balance against has to be the
+       wrapper's own and not the panel's, or the overflow would go sideways.
+
+       Two at most, though the tier is wide enough for three at 860. Columns
+       are filled in order, and Optimize is taller than a third of the panel,
+       so a third column can only be [Palette][Optimize][the rest] — which puts
+       an 89px section alone in a column and is the same complaint in another
+       shape. At two it comes out 720 against 668. */
+    #panelcols { display:block; columns:258px 2; column-gap:11px; }
+    #panelcols > section { break-inside:avoid; margin-bottom:11px; }
 
     /* the preview is the fourth cell of the cut strip; layout() places it.
        position must come BACK: the compact tier above sets it static to dock,
@@ -409,7 +427,7 @@
     <canvas id="gl"></canvas>
     <div id="tip">
       <canvas id="tipcanvas" width="264" height="128"></canvas>
-      <div id="tipbtns"></div>
+      <div id="tipbtns"><button id="tipoff" title="hide the preview">&#9652;</button></div>
     </div>
     <div id="ctxmenu" hidden></div>
     <div id="hud">
@@ -468,90 +486,93 @@
   <aside>
     <h1>Precept Palette Optimizer</h1>
 
-    <section>
-      <h2>Palette</h2>
-      <div id="tipdock"></div>
-      <div class="seg" id="mode"><button data-v="continuous">Continuous</button><button data-v="discrete">Discrete</button></div>
-      <div class="row" style="margin-top:6px"><label class="f">load</label>
-        <button id="loadbtn" style="flex:1">load…</button></div>
-    </section>
+    <!-- one column on a wide window; two or three when the panel is wider than it
+         is tall, which is why the sections live in a box of their own -->
+    <div id="panelcols">
+      <section>
+        <h2>Palette</h2>
+        <div class="seg" id="mode"><button data-v="continuous">Continuous</button><button data-v="discrete">Discrete</button></div>
+        <div class="row" style="margin-top:6px"><label class="f">load</label>
+          <button id="loadbtn" style="flex:1">load…</button></div>
+      </section>
 
-    <section id="selpanel">
-      <h2>Selection</h2>
-      <div class="row" id="selpreview">
-        <input type="color" id="selcolor" title="pick the selected color">
-        <span id="selinfo" class="note"></span></div>
-      <div class="row"><select id="colorfmt" style="width:88px"></select>
-        <input type="text" id="hex" spellcheck="false" style="flex:1;min-width:0"></div>
-      <div class="row"><button id="flip" style="flex:1">flip the excluded side</button></div>
-    </section>
+      <section id="selpanel">
+        <h2>Selection</h2>
+        <div class="row" id="selpreview">
+          <input type="color" id="selcolor" title="pick the selected color">
+          <span id="selinfo" class="note"></span></div>
+        <div class="row"><select id="colorfmt" style="width:88px"></select>
+          <input type="text" id="hex" spellcheck="false" style="flex:1;min-width:0"></div>
+        <div class="row"><button id="flip" style="flex:1">flip the excluded side</button></div>
+      </section>
 
-    <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2>
-      <button id="run">run optimizer</button>
-      <table id="metrics"></table>
-      <div class="row" style="margin-top:8px"><label class="f">rate</label>
-        <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span>
-        <label class="chk" title="jolt out of a stall and keep the best attempt"><input type="checkbox" id="restart">restarts</label></div>
-      <div class="row" id="contrastrow"><label class="f">contrast</label>
-        <input type="color" id="cbg" value="#ffffff" title="the ground swatches are judged against">
-        <input type="number" id="cfloor" min="1" max="21" step="0.5" value="3"
-               style="width:52px" title="minimum contrast ratio the palette should reach">
-        <span class="note" style="flex:1">:1 floor</span>
-        <span class="v" id="lcnow" style="width:auto;opacity:.7"
-              title="the same worst swatch in APCA Lc — 60 is the floor for body text"></span>
-        <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
-      <div class="row" id="lseprow"><label class="f">grayscale</label>
-        <span class="note" style="flex:1">ΔL floor <b id="lsepv">–</b>, closest pair</span>
-        <span class="v" id="lnow" style="width:auto" title="closest pair in lightness">–</span></div>
-    </section>
-    <section>
-      <h2>Bounds</h2>
-      <div class="row"><label class="f">lightness</label>
-        <span class="dual" id="ldual"><span class="fill"></span>
-          <input type="range" id="lmin" min="0" max="100" step="1" value="0">
-          <input type="range" id="lmax" min="0" max="100" step="1" value="100"></span>
-        <span class="v" style="width:56px" id="lboundv">0–100</span></div>
-      <div class="row"><label class="f">chroma</label>
-        <span class="dual" id="cdual"><span class="fill"></span>
-          <input type="range" id="cmin" min="0" max="40" step="0.5" value="0">
-          <input type="range" id="cmax" min="0" max="40" step="0.5" value="40"></span>
-        <span class="v" style="width:56px" id="cboundv">0–40</span></div>
-      <div class="row" style="align-items:flex-start"><label class="f" style="padding-top:44px">hue</label>
-        <span class="wheelwrap"><canvas id="huewheel" width="112" height="112" title="drag an edge of the arc"></canvas>
-          <button id="huereset" title="allow every hue">↺</button></span>
-        <span class="v" style="width:56px;padding-top:44px" id="hboundv">any</span></div>
-    </section>
-    <section>
-      <h2>View</h2>
-      <div class="row"><label class="f">space</label><select id="spacesel" style="flex:1"></select>
-        <button id="spacebtn" title="what each space is" style="padding:4px 9px">?</button></div>
-      <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select>
-        <button id="iccbtn" style="padding:4px 7px">ICC…</button>
-        <button id="chromabtn" title="the gamut on a chromaticity diagram" style="padding:4px 8px">&#9651;</button>
-        <input type="file" id="iccfile" accept=".icc,.icm,application/vnd.iccprofile" hidden></div>
-      <div class="row"><label class="f">vision</label>
-        <select id="cvd" style="flex:1">
-          <option value="none">normal</option><option value="protan">protan · red</option>
-          <option value="deutan">deutan · green</option><option value="tritan">tritan · blue</option></select></div>
-      <div class="row"><label class="f">severity</label>
-        <input type="range" id="sev" min="0" max="1" step="0.05" value="1"><span class="v" id="sevv">1.0</span></div>
-      <div class="row"><label class="f">solid</label>
-        <input type="range" id="shell" min="0" max="1" step="0.02" value="0.8"><span class="v" id="shellv">0.8</span></div>
-      <div class="row"><label class="f">slices</label>
-        <input type="range" id="sliceop" min="0.1" max="1" step="0.05" value="0.8"><span class="v" id="sliceopv">0.8</span></div>
-      <div class="row"><label class="f">backdrop</label><input type="color" id="bg" value="#f0ead6"></div>
-      <div class="row"><label class="chk"><input type="checkbox" id="planes3d">slice planes in 3D</label></div>
-      <div class="row"><label class="chk"><input type="checkbox" id="lock">lock slices to node</label></div>
-    </section>
+      <section><h2>Optimize<button id="mathbtn" title="the problem being solved">?</button></h2>
+        <button id="run">run optimizer</button>
+        <table id="metrics"></table>
+        <div class="row" style="margin-top:8px"><label class="f">rate</label>
+          <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span>
+          <label class="chk" title="jolt out of a stall and keep the best attempt"><input type="checkbox" id="restart">restarts</label></div>
+        <div class="row" id="contrastrow"><label class="f">contrast</label>
+          <input type="color" id="cbg" value="#ffffff" title="the ground swatches are judged against">
+          <input type="number" id="cfloor" min="1" max="21" step="0.5" value="3"
+                 style="width:52px" title="minimum contrast ratio the palette should reach">
+          <span class="note" style="flex:1">:1 floor</span>
+          <span class="v" id="lcnow" style="width:auto;opacity:.7"
+                title="the same worst swatch in APCA Lc — 60 is the floor for body text"></span>
+          <span class="v" id="cnow" style="width:auto" title="worst swatch against that ground">–</span></div>
+        <div class="row" id="lseprow"><label class="f">grayscale</label>
+          <span class="note" style="flex:1">ΔL floor <b id="lsepv">–</b>, closest pair</span>
+          <span class="v" id="lnow" style="width:auto" title="closest pair in lightness">–</span></div>
+      </section>
+      <section>
+        <h2>Bounds</h2>
+        <div class="row"><label class="f">lightness</label>
+          <span class="dual" id="ldual"><span class="fill"></span>
+            <input type="range" id="lmin" min="0" max="100" step="1" value="0">
+            <input type="range" id="lmax" min="0" max="100" step="1" value="100"></span>
+          <span class="v" style="width:56px" id="lboundv">0–100</span></div>
+        <div class="row"><label class="f">chroma</label>
+          <span class="dual" id="cdual"><span class="fill"></span>
+            <input type="range" id="cmin" min="0" max="40" step="0.5" value="0">
+            <input type="range" id="cmax" min="0" max="40" step="0.5" value="40"></span>
+          <span class="v" style="width:56px" id="cboundv">0–40</span></div>
+        <div class="row" style="align-items:flex-start"><label class="f" style="padding-top:44px">hue</label>
+          <span class="wheelwrap"><canvas id="huewheel" width="112" height="112" title="drag an edge of the arc"></canvas>
+            <button id="huereset" title="allow every hue">↺</button></span>
+          <span class="v" style="width:56px;padding-top:44px" id="hboundv">any</span></div>
+      </section>
+      <section>
+        <h2>View</h2>
+        <div class="row"><label class="f">space</label><select id="spacesel" style="flex:1"></select>
+          <button id="spacebtn" title="what each space is" style="padding:4px 9px">?</button></div>
+        <div class="row"><label class="f">gamut</label><select id="gamutsel" style="flex:1"></select>
+          <button id="iccbtn" style="padding:4px 7px">ICC…</button>
+          <button id="chromabtn" title="the gamut on a chromaticity diagram" style="padding:4px 8px">&#9651;</button>
+          <input type="file" id="iccfile" accept=".icc,.icm,application/vnd.iccprofile" hidden></div>
+        <div class="row"><label class="f">vision</label>
+          <select id="cvd" style="flex:1">
+            <option value="none">normal</option><option value="protan">protan · red</option>
+            <option value="deutan">deutan · green</option><option value="tritan">tritan · blue</option></select></div>
+        <div class="row"><label class="f">severity</label>
+          <input type="range" id="sev" min="0" max="1" step="0.05" value="1"><span class="v" id="sevv">1.0</span></div>
+        <div class="row"><label class="f">solid</label>
+          <input type="range" id="shell" min="0" max="1" step="0.02" value="0.8"><span class="v" id="shellv">0.8</span></div>
+        <div class="row"><label class="f">slices</label>
+          <input type="range" id="sliceop" min="0.1" max="1" step="0.05" value="0.8"><span class="v" id="sliceopv">0.8</span></div>
+        <div class="row"><label class="f">backdrop</label><input type="color" id="bg" value="#f0ead6"></div>
+        <div class="row"><label class="chk"><input type="checkbox" id="planes3d">slice planes in 3D</label></div>
+        <div class="row"><label class="chk"><input type="checkbox" id="lock">lock slices to node</label></div>
+      </section>
 
-    <section><h2>Export</h2>
-      <div class="row"><label class="f">name</label>
-        <input type="text" id="scenename" value="precept" style="flex:1;min-width:0"></div>
-      <div class="row"><label class="f">link</label>
-        <button id="sharelink" style="flex:1">copy link to this palette</button></div>
-      <div class="row"><label class="f">format</label><select id="exportfmt" style="flex:1"></select></div>
-      <div class="row"><button id="copypy" style="flex:1">copy</button>
-        <button id="savepy" style="flex:1">save</button></div></section>
+      <section><h2>Export</h2>
+        <div class="row"><label class="f">name</label>
+          <input type="text" id="scenename" value="precept" style="flex:1;min-width:0"></div>
+        <div class="row"><label class="f">link</label>
+          <button id="sharelink" style="flex:1">copy link to this palette</button></div>
+        <div class="row"><label class="f">format</label><select id="exportfmt" style="flex:1"></select></div>
+        <div class="row"><button id="copypy" style="flex:1">copy</button>
+          <button id="savepy" style="flex:1">save</button></div></section>
+    </div>
   </aside>
 </div>
 
@@ -630,6 +651,7 @@ const esc = (x) => x.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g
  * lie about every distance in them. Isometric or nothing.
  */
 let FRAME = null;
+let stepShare = null;   // each term's share of the solver's last step, from the worker
 const world = (c) => new T.Vector3((c[1] - FRAME.mid[1]) * FRAME.s, (c[0] - FRAME.mid[0]) * FRAME.s, (c[2] - FRAME.mid[2]) * FRAME.s);
 const unworld = (v) => [v.y / FRAME.s + FRAME.mid[0], v.x / FRAME.s + FRAME.mid[1], v.z / FRAME.s + FRAME.mid[2]];
 const wpt = (p) => world(toSpace(p));            // chart point → world
@@ -1622,26 +1644,72 @@ function buildPoints() {
   });
 }
 
+/**
+ * The keep-out set is {p : lineDelta(p, c, g) < r}, measured in the chart under
+ * the working space's metric. In Oklab that is a sphere of radius f⁻¹(r). In
+ * every other space the metric changes along the way out from the center, so
+ * the boundary is found one direction at a time: walk out from c along u until
+ * the length reads f⁻¹(r), and put that point through the view. Cached on
+ * everything it depends on, because sync rebuilds the group every frame.
+ */
+const SHELLS = new Map();
+function obstacleShell(o) {
+  const key = `${params.space}|${params.gamut}|${o.c.map((v) => v.toFixed(3))}|${o.r.toFixed(3)}`;
+  let geo = SHELLS.get(key);
+  if (geo) return geo;
+  const g = spaceMetric(), R = unperceive(o.r), NU = 24, NV = 16;
+  const at = (u, t) => o.c.map((cc, k) => cc + t * u[k]);
+  const reach = (u) => {
+    if (!g.space) return R;                       // the chart itself: exact, no search
+    let t = R;
+    // the length grows about linearly in t, so scaling by the shortfall lands
+    // within a tenth of a percent in two or three rounds
+    for (let k = 0; k < 6; k++) {
+      const len = unperceive(lineDelta(o.c, at(u, t), g));
+      if (Math.abs(len - R) < 1e-3 * R) break;
+      t *= R / len;
+    }
+    return t;
+  };
+  const pos = [], idx = [];
+  for (let j = 0; j <= NV; j++) {
+    const ph = (j / NV) * Math.PI;
+    for (let i = 0; i <= NU; i++) {
+      const th = (i / NU) * 2 * Math.PI;
+      const u = [Math.cos(ph), Math.sin(ph) * Math.cos(th), Math.sin(ph) * Math.sin(th)];
+      const w = wpt(at(u, reach(u)));
+      pos.push(w.x, w.y, w.z);
+    }
+  }
+  for (let j = 0; j < NV; j++) for (let i = 0; i < NU; i++) {
+    const a = j * (NU + 1) + i, b = a + NU + 1;
+    idx.push(a, a + 1, b, a + 1, b + 1, b);
+  }
+  geo = new T.BufferGeometry();
+  geo.setIndex(idx);
+  geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+  if (SHELLS.size > 64) { SHELLS.forEach((old) => old.dispose()); SHELLS.clear(); }
+  SHELLS.set(key, geo);
+  return geo;
+}
+
 function buildObstacles() {
   obsGroup.clear();
   S.obs.forEach((o, i) => {
     const sel = (S.sel?.kind === 'obs' || S.sel?.kind === 'obsr') && S.sel.i === i;
-    // r is stored in PERCEIVED units, so the ball's geometric radius is f⁻¹(r)
-    // ponytail: drawn as a sphere in every space. Only true in Oklab — in a
-    // warped chart the keep-out set is that ball pushed through the map.
-    const g = new T.SphereGeometry(unperceive(o.r) * FRAME.s, 28, 18);
+    const g = obstacleShell(o);                   // in world coordinates already
     const m = new T.Mesh(g, new T.MeshBasicMaterial({
       color: 0xff5b5b, transparent: true, opacity: sel ? 0.26 : 0.13, depthWrite: false }));
     m.add(new T.Mesh(g, new T.MeshBasicMaterial({
       color: sel ? 0xffffff : 0xff5b5b, wireframe: true, transparent: true, opacity: 0.3 })));
-    m.position.copy(wpt(o.c));
     m.userData = { kind: 'obs', i };
-    // Handle on the surface, in a deliberately oblique direction: along an axis
-    // it would project onto the center in whichever panel looks down that axis,
-    // and a handle you cannot separate from the center is one you cannot grab.
+    // Handle near the surface, in a deliberately oblique direction: along an
+    // axis it would project onto the center in whichever panel looks down that
+    // axis, and a handle you cannot separate from the center is one you cannot
+    // grab. Placed at the chart radius, which is on the shell exactly in Oklab.
     const h = new T.Mesh(DOT, overlay({ color: sel ? 0xffd76a : 0xc94f4f }));
     h.scale.setScalar(0.7);
-    h.position.copy(m.position).addScaledVector(OBS_DIR, unperceive(o.r) * FRAME.s);
+    h.position.copy(wpt(o.c)).addScaledVector(OBS_DIR, unperceive(o.r) * FRAME.s);
     h.renderOrder = 8;
     h.userData = { kind: 'obsr', i };
     obsGroup.add(m, h);
@@ -1760,10 +1828,11 @@ function layout() {
     // row only letterboxes the content it holds. Capped so the strip cannot eat
     // the 3D view on a short canvas.
     //
-    // Four cells when the preview is one of them, three when the panel has
-    // taken it: on a phone a quarter of the width is a hundred pixels, and
-    // three cuts at a third are worth more than four at a quarter.
-    const four = !DOCK.matches;
+    // Four cells when the preview is one of them, three when it is floating
+    // over the view instead: on a phone a quarter of the width is a hundred
+    // pixels, and three cuts at a third are worth more than four at a quarter.
+    // Hidden, it is not one of them either, and the cuts take the width back.
+    const four = !DOCK.matches && S.tip;
     const colW = Math.floor(w / (four ? 4 : 3)), rowH = Math.min(colW, Math.round(h * 0.4));
     stripH = rowH;
     RECTS = [
@@ -1784,30 +1853,60 @@ function layout() {
     ];
   }
   /**
-   * The preview is the fourth cell when the split has one for it, and lives in
-   * the side panel only when it has nowhere on the canvas to be. layout() owns
-   * that call rather than reflow(), because it is the one that computed the
-   * split — reflow was deciding from main's size before the grid had settled,
-   * and on a phone that parked the preview in the panel while layout was
-   * holding a cell open for it.
+   * The preview is the fourth cell when the split has one for it, and floats
+   * over the 3D view when it does not. layout() owns that call rather than
+   * reflow(), because it is the one that computed the split.
+   *
+   * Switched off it is never a cell: what is left is one button, and a button
+   * does not want a quarter of the cut strip.
    */
+  if (!S.tip) cell = null;
   const tip = $('tip');
-  const home = cell || !DOCK.matches ? main : $('tipdock');
-  if (tip.parentElement !== home) home.appendChild(tip);
+  if (tip.parentElement !== main) main.appendChild(tip);
   tip.classList.toggle('cell', !!cell);
+  // Floating, it keeps the share of the view it has on a full-size window: 264
+  // over the 777 that a 1440 leaves for the 3D panel. Held to the share rather
+  // than to 264 pixels, a phone gets a thumbnail instead of a card lying across
+  // the gamut, and the preview never has to be somewhere other than the view it
+  // is previewing. Under 200 it is too narrow for the test names at full size.
+  const tw = cell ? cell.w : Math.min(264, Math.round(RECTS[3].w * 0.34));
+  tip.classList.toggle('mini', !cell && tw < 200);
+  tip.classList.toggle('off', !S.tip);
   if (cell) {
     Object.assign(tip.style, { left: `${cell.x}px`, top: `${cell.y}px`, right: 'auto',
-      width: `${cell.w}px`, height: `${cell.h}px` });
+      bottom: 'auto', width: `${cell.w}px`, height: S.tip ? `${cell.h}px` : 'auto' });
   } else {
     tip.removeAttribute('style');
+    tip.style.width = S.tip ? `${tw}px` : 'auto';   // off, it is one button wide
   }
   // the color bar stops above the strip whenever there is one, whether or not
   // the preview is one of its cells
-  $('bar').style.bottom = stripH ? `${stripH + 12}px` : '';
-  // the bar takes everything the tools used to occupy; only a FLOATING preview
-  // is still above it, and only in the column split is the preview floating
-  const floating = tip.parentElement === main && !cell;
-  $('bar').style.top = floating ? `${tip.offsetTop + tip.offsetHeight + 14}px` : '14px';
+  const bar = $('bar');
+  bar.style.top = '14px';
+  bar.style.bottom = stripH ? `${stripH + 12}px` : '';
+  /**
+   * The bar and a floating preview share the right edge, the preview at the
+   * bottom of it and the bar stopping above.
+   *
+   * Where the bottom IS depends on what else is down there — the cut strip, or
+   * the profile plots on a full window, or nothing — and the bar already knows,
+   * because it stops above the same things. So the gap is read off the bar's
+   * own box rather than reconstructed from the three bottoms it can have.
+   *
+   * Stacking the two needs a tall view, and a phone does not have one: with the
+   * cuts showing it leaves 187px, and the bar came out 60 tall, which is a
+   * swatch rather than a color bar. So when stacking would leave the bar a
+   * stub, the preview steps to the LEFT of it and the bar keeps its height.
+   */
+  if (!cell) {
+    const gap = main.clientHeight - (bar.offsetTop + bar.offsetHeight);
+    tip.style.bottom = `${gap}px`;
+    bar.style.bottom = `${gap + tip.offsetHeight + 14}px`;
+    if (bar.offsetHeight < 120) {
+      bar.style.bottom = `${gap}px`;
+      tip.style.right = `${main.clientWidth - bar.offsetLeft + 8}px`;
+    }
+  }
   QUADS.forEach((q, i) => {
     q.rect = RECTS[i];
     q.el.hidden = !q.rect;
@@ -1824,9 +1923,25 @@ function layout() {
     }
     q.cam.updateProjectionMatrix();
   });
-  $('hud').style.left = `${RECTS[3].x + 12}px`;
+  /**
+   * The tools are one column, and the 3D view is not always tall enough for it.
+   * With the cuts showing, a phone in portrait leaves the view 187px and the
+   * column wants 265, so undo and redo sat on top of the first cut view — over
+   * its nodes, and over the taps meant for them. Given the height the view
+   * actually has, the column wraps into a second one beside it rather than
+   * running off the end of the thing it belongs to. Nothing wraps on a desktop,
+   * where the view is the full height of the window.
+   */
+  const hud = $('hud');
+  hud.style.left = `${RECTS[3].x + 12}px`;
+  hud.style.maxHeight = `${RECTS[3].y + RECTS[3].h - hud.offsetTop - 12}px`;
   // only while it is an overlay; docked in the panel it is laid out by flow
   if (!DOCK.matches) lplotEl.style.left = RECTS[3].x + 14 + 'px';
+  // drawTest sizes the backing store from the box the preview is given, and
+  // that box now moves with the split rather than staying 264 wide — so a
+  // resize that changes it has to redraw, or the picture stays at the old
+  // resolution with CSS stretching it to the new one.
+  if (S.tip && (tipc.width !== Math.round(tipc.clientWidth) || tipc.height !== Math.round(tipc.clientHeight))) drawTest();
   layoutPlot();
 }
 
@@ -1911,7 +2026,7 @@ function sidebar() {
     if (o.mode && o.mode !== S.mode) continue;
     const v = o.f(cx);
     rows.push([typeof o.label === 'function' ? o.label() : o.label,
-      v < 10 ? v.toFixed(2) : v.toFixed(0), !!o.bad && v > WARN_EPS, o.key, HELP[o.key]]);
+      v < 10 ? v.toFixed(2) : v.toFixed(0), !!o.bad && v > WARN_EPS, o.key, HELP[o.key], stepShare?.[o.key]]);
   }
   paintMetrics(rows);
 
@@ -1991,8 +2106,8 @@ const TERRAIN = (() => {
 const TIP_DEFAULT = { continuous: 'sineramp', discrete: 'lines' };
 
 const TESTS = {
-  sineramp: { mode: 'continuous', label: 'sineramp',
-    note: 'Kovesi\u2019s test: a constant-amplitude sine riding a linear ramp, fading out downward. '
+  sineramp: { mode: 'continuous', label: 'ramp',        // 'sineramp' overran the button when small
+    note: 'Kovesi\u2019s sineramp: a constant-amplitude sine riding a linear ramp, fading out downward. '
         + 'Where the map loses contrast the wave disappears early; where it has a false edge the flat ramp shows a band.',
     f: (x, y) => x + 0.05 * Math.sin(x * 32 * Math.PI) * (1 - y) },
   field: { mode: 'continuous', label: 'field',
@@ -2025,6 +2140,7 @@ function rampOf(n) {
 const lutOf = (n) => rampOf(n).map((p) => rgb(S.gray ? [p[0], 0, 0] : p).map((c) => Math.round(255 * c)));
 
 function drawTest() {
+  if (!S.tip) return;                            // hidden: no box to draw into, and nothing to show
   // the cell it sits in is a wide strip on desktop and a tall quarter of the
   // cut row on a phone, so the image is drawn at whatever shape it is given
   const W = Math.max(1, Math.round(tipc.clientWidth)), H = Math.max(1, Math.round(tipc.clientHeight));
@@ -2655,7 +2771,7 @@ function paintMetrics(rows) {
       // a positioned one. A line under the table is instant and never clipped.
       const q = help ? `<span class="q" data-h="${esc(help)}">?</span>` : '';
       return `<tr data-k="${esc(obj ?? k)}"><td>${obj ? `<label class="chk"><input type="checkbox" data-on="${obj}"${S.on[obj] ? ' checked' : ''}>${k}</label>` : k}${q}</td>` +
-      `<td class="${warn ? 'warn' : ''}">${v}</td>` +
+      `<td class="${warn ? 'warn' : ''}"><i class="sh"></i><span>${v}</span></td>` +
       // the multiplier sits against its own number rather than over the column:
       // one mark per weight says what that weight is, where a heading says it
       // once and then leaves eleven bare numbers to be taken on trust
@@ -2665,15 +2781,15 @@ function paintMetrics(rows) {
            : '<td class="w"></td>') + '</tr>';
     }).join('') + '</tbody>';
     homePlots();                    // the rebuild took any docked plot with it
-    return;
   }
   // the plot rows are interleaved with these, so index against the term rows
   // alone rather than against every row in the table
   const trs = [...tbl.tBodies[0].rows].filter((r) => !r.classList.contains('plotrow'));
-  rows.forEach(([, v, warn, obj], i) => {
+  rows.forEach(([, v, warn, obj, , share], i) => {
     const tr = trs[i], cell = tr?.cells[1];
     if (!cell) return;
-    if (cell.textContent !== String(v)) cell.textContent = v;
+    if (cell.lastChild.textContent !== String(v)) cell.lastChild.textContent = v;
+    paintShare(cell.firstChild, share);
     const cls = warn ? 'warn' : '';
     if (cell.className !== cls) cell.className = cls;
     if (!obj) return;
@@ -2685,6 +2801,22 @@ function paintMetrics(rows) {
     if (w.disabled === !!S.on[obj]) w.disabled = !S.on[obj];
     tr.querySelector('.mx')?.toggleAttribute('data-off', !S.on[obj]);
   });
+}
+
+/**
+ * The bar beside a term's value: its share of the solver's last step. The
+ * weights say how hard each term pulls; this says where that pull went, which
+ * is what a stalled run needs to show. A step moving against a term paints it
+ * red. Hidden until a run has produced a step.
+ */
+function paintShare(el, share) {
+  const live = share !== undefined;
+  el.toggleAttribute('data-live', live);
+  if (!live) return;
+  el.style.setProperty('--v', (share === null ? 0 : Math.min(1, Math.abs(share))).toFixed(3));
+  el.toggleAttribute('data-neg', share < 0);
+  el.title = share === null ? 'no pull in the last step'
+    : `${share < 0 ? '−' : '+'}${Math.abs(share).toFixed(2)} of the last step${share < 0 ? ', against it' : ''}`;
 }
 
 /** one line per term, shown under the table while its ? is hovered */
@@ -2823,7 +2955,7 @@ function solverWorker() {
     // button back to `run optimizer` over a worker that is still stepping, and every
     // `pts` after that is dropped, so the palette freezes with no way back.
     if (m.id !== runId) return;
-    if (m.t === 'pts') { if (running) fromSolver(m.pts, false); return; }
+    if (m.t === 'pts') { if (running) { stepShare = m.share; fromSolver(m.pts, false); } return; }
     // the last jolt is not the answer: the worker returns whichever attempt
     // scored best, and this is also how a converged run reports that it stopped
     if (m.t === 'final') { endRun(); fromSolver(m.pts, true); }
@@ -3224,6 +3356,7 @@ let running = false, frames = 0;
 
 /** Rebuild whatever the change touched. Small enough to be blunt about it. */
 function sync({ colors = false, light = false } = {}) {
+  if (!applying) stepShare = null;             // an edit: the last step no longer describes this palette
   derive();
   constrain();
   slices.forEach(paintSlice);
@@ -4006,6 +4139,20 @@ addEventListener('keydown', (e) => {
   if (z === 'z' || z === 'y') { e.preventDefault(); return z === 'y' || e.shiftKey ? redo() : undo(); }
   if (e.key === 'r' && hovered?.axis !== undefined) { resetView(hovered.cam); return; }
   if (!S.sel) return;
+  // arrows nudge the selection in the plane of the panel under the pointer, the
+  // way a drag there would move it: one space unit a press, ten with shift
+  const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+  if (dir && (S.sel.kind === 'pt' || S.sel.kind === 'obs')) {
+    e.preventDefault();
+    const q = hovered ?? QUADS[0], by = (e.shiftKey ? 10 : 1) * FRAME.s;
+    const right = new T.Vector3(1, 0, 0).applyQuaternion(q.cam.quaternion);
+    const up = new T.Vector3(0, 1, 0).applyQuaternion(q.cam.quaternion);
+    const was = S.sel.kind === 'pt' ? S.pts[S.sel.i] : S.obs[S.sel.i].c;
+    const p = cpt(wpt(was).addScaledVector(right, dir[0] * by).addScaledVector(up, dir[1] * by));
+    if (S.sel.kind === 'pt') { S.pts[S.sel.i] = p; if (S.lock) setSlices(p); } else S.obs[S.sel.i].c = p;
+    disturb(); sync();
+    return;
+  }
   if (e.key === 'Backspace' || e.key === 'Delete') {
     removeAt(S.sel.kind, S.sel.i);
   }
@@ -4247,6 +4394,9 @@ for (const ev of ['pointerup', 'pointercancel'])
   addEventListener(ev, () => { wDrag = null; });
 $('run').onclick = () => (running ? stopSolver() : startSolver());
 $('graybtn').onclick = (e) => { S.gray = !S.gray; e.currentTarget.ariaPressed = S.gray; sidebar(); };
+// The preview folds away to its own button, which stays where the preview was
+// — so the way back is in the place the thing that left used to be.
+$('tipoff').onclick = () => { S.tip = !S.tip; layout(); mirror(); sidebar(); };
 $('rate').oninput = (e) => {
   S.rate = +e.target.value; $('ratev').textContent = S.rate.toFixed(2).slice(1);
   pushState();                                   // read every step, repaints nothing
@@ -4430,6 +4580,8 @@ function mirror() {
   $('shell').value = S.shell; $('bg').value = S.bg;
   $('lock').checked = S.lock; $('planes3d').checked = S.planes3d; setPlanes3d();
   $('panelbtn').ariaPressed = String(S.panels);
+  $('tipoff').innerHTML = S.tip ? '&#9652;' : '&#9662;';        // folds up, unfolds down
+  $('tipoff').title = S.tip ? 'hide the preview' : 'show the preview';
   $('sliceop').value = S.sliceOp; $('sliceopv').textContent = unit1(S.sliceOp);
   $('rate').value = S.rate; $('ratev').textContent = S.rate.toFixed(2).slice(1);
   $('restart').checked = S.restart;
@@ -4519,19 +4671,27 @@ loadFromHash();
  *
  * Lift both out before touching the rows. The table is regenerated whenever its
  * shape changes and takes whatever is inside it along, so a plot left in a row
- * is a plot removed from the document; putting them back in the overlay first
- * makes that impossible rather than unlikely. Discrete mode has no profile
- * terms at all, so there is no row to find and they stay in the overlay, which
- * sidebar() has already hidden.
+ * is a plot removed from the document. Discrete mode has no profile terms at
+ * all, so there is no row to find and they stay in the overlay, which sidebar()
+ * has already hidden.
+ *
+ * The elements come from PLOTS, not from a query, and that is the whole of what
+ * makes the lift safe. paintMetrics regenerates the table by innerHTML with the
+ * plots still inside it and only then calls here, so by this point they are
+ * detached and the document has no .pplot to find. Detached is all they are —
+ * canvas, context and listeners intact — so re-appending them is the repair.
+ * Querying instead is how switching on a CVD lost both profiles for the rest of
+ * the session: the observer decides which terms the table lists, so it changes
+ * the shape, and the rebuild carried them out of the document.
  */
 function homePlots() {
-  const plots = ['L', 'H'].map((id) => document.querySelector(`.pplot[data-plot=${id}]`));
-  lplotEl.append(...plots.filter(Boolean));
+  const plots = ['L', 'H'].map((id) => PLOTS[id].root);
+  lplotEl.append(...plots);
   $('metrics').querySelectorAll('tr.plotrow').forEach((r) => r.remove());
   if (!DOCK.matches) return;
   ['lramp', 'hprof'].forEach((term, i) => {
     const tr = $('metrics').querySelector(`tr[data-k="${term}"]`);
-    if (!tr || !plots[i]) return;
+    if (!tr) return;
     const row = tr.parentElement.insertBefore(document.createElement('tr'), tr.nextSibling);
     row.className = 'plotrow';
     const td = row.appendChild(document.createElement('td'));
@@ -4541,14 +4701,14 @@ function homePlots() {
 }
 
 /**
- * The two overlays that are readouts rather than camera furniture move into the
- * panel when there is no room for them over the canvas. Reparenting rather than
- * duplicating: one plot canvas with one set of listeners, in whichever place
- * the width can afford.
+ * The profiles are an editor rather than camera furniture, and they move into
+ * the panel when there is no room for them over the canvas. Reparenting rather
+ * than duplicating: one plot canvas with one set of listeners, in whichever
+ * place the width can afford.
  */
 function reflow() {
   homePlots();                               // the profiles, into Optimize or back out
-  layout();                                  // and the preview, which layout() places
+  layout();                                  // and the preview, which layout() sizes
   sidebar();                                 // both canvases were just resized
 }
 for (const mq of [NARROW, DOCK]) mq.addEventListener('change', reflow);

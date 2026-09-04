@@ -15,8 +15,8 @@
  * reaches into the other. See solver-worker.js.
  */
 import {
-  fromHex, toGamut, inGamut, fromLCh, arcLength, segLength, perceive, unperceive, resample, spline,
-  gamutPenalty, obstaclePenalty, toLinear, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, toSpace, fromSpace,
+  fromHex, toGamut, inGamut, fromLCh, arcLength, segLength, pairLength, perceive, unperceive, resample,
+  spline, gamutPenalty, obstaclePenalty, toLinear, simulate, NORMAL, ALL_VIEWS, EUCLIDEAN, toSpace, fromSpace,
   spaceMetric,
 } from './color-space.ts';
 
@@ -35,6 +35,7 @@ export const S = {
   fmt: 'matplotlib', cfmt: 'hex',                // export format, selection color format
   restart: false,                                // kick the solver out of stalls
   cbg: '#ffffff', cmin: 3,                       // contrast: against what, and how much
+  tip: true,                                     // the test image preview, over the 3D view
   tipKind: 'sineramp',                           // which test image is showing
   lprof: [],                                     // target lightness profile, evenly spaced along t
   hprof: [],                                     // target hue profile, UNWRAPPED degrees
@@ -219,7 +220,7 @@ export function ctxOf(pts, reuse) {
   return { pts, curves, pal, probe: curves.flat(), seg };
 }
 /** perceived chord — the cheap version of `delta` for use inside a gradient */
-export const pd = (a, b, g) => perceive(segLength(a, b, g));
+export const pd = (a, b, g) => perceive(pairLength(a, b, g));
 
 /**
  * The observers the discrimination terms answer to. Choosing a deficiency in
@@ -250,6 +251,24 @@ export function repulsion(P, views) {
     for (let i = 0; i < P.length; i++)
       for (let j = i + 1; j < P.length; j++) e += 1 / Math.max(0.5, pd(v(P[i]), v(P[j]), g));
   return e;                                        // the floor keeps coincident colors finite
+}
+
+/**
+ * The part of repulsion a probe can change. In discrete mode a probe moves one
+ * swatch, so only the pairs it is in move and every other pair cancels in the
+ * central difference: the gradient goes from cubic in the palette to quadratic.
+ * In continuous mode the swatches are resampled by arc length and every one of
+ * them moves, so the window is the whole sum.
+ */
+export function repulsionAt(P, views, i) {
+  if (S.mode !== 'discrete') return repulsion(P, views);
+  const g = M();
+  let e = 0;
+  for (const v of views) {
+    const vi = v(P[i]);
+    for (let j = 0; j < P.length; j++) if (j !== i) e += 1 / Math.max(0.5, pd(vi, v(P[j]), g));
+  }
+  return e;
 }
 
 export const WARN_EPS = 0.005;    // below this a `bad` term reads 0.00, so do not flag it
@@ -457,9 +476,10 @@ export const planePenalty = (p) => {
 
 
 export const OBJ = [
-  { key: 'rep', label: () => `repulsion · ${observer()}`, f: (x) => repulsion(x.pal, [primary()]) },
+  { key: 'rep', label: () => `repulsion · ${observer()}`, f: (x) => repulsion(x.pal, [primary()]),
+    part: (x, w, i) => repulsionAt(x.pal, [primary()], i) },
   { key: 'repcvd', label: () => `repulsion · ${S.cvd === 'none' ? 'all' : '+' + S.cvd}`,
-    f: (x) => repulsion(x.pal, criteria()) },
+    f: (x) => repulsion(x.pal, criteria()), part: (x, w, i) => repulsionAt(x.pal, criteria(), i) },
   /**
    * Both of these are sums of numbers ctxOf is already holding.
    *
@@ -832,6 +852,14 @@ export function probeRanges(i) {
   return null;
 }
 
+/**
+ * How the last gradient was made up, for the panel: each term's share of the
+ * combined step, the projection of its weighted gradient onto the total. The
+ * shares sum to one. A negative share is a term the step is moving against,
+ * and null is a term with no gradient at all.
+ */
+export const LAST = { share: {} };
+
 export function gradientOf(terms) {
   const base = S.pts.map((p) => [...p]);
   const h = 0.25;
@@ -850,18 +878,22 @@ export function gradientOf(terms) {
       lo[i][k] -= h; hi[i][k] += h;
       const [cl, ch] = [ctxOf(lo, reuse), ctxOf(hi, reuse)];
       terms.forEach((t, m) => {
-        const ev = t.part && rng ? (x) => t.part(x, rng) : t.f;
+        const ev = t.part && rng ? (x) => t.part(x, rng, i) : t.f;
         per[m][i][k] = (ev(ch) - ev(cl)) / (2 * h);
       });
     }
   }
   const total = base.map(() => [0, 0, 0]);
-  per.forEach((g, m) => {
+  const scale = per.map((g, m) => {
     const mx = Math.max(...g.flat().map(Math.abs));
-    if (!Number.isFinite(mx) || mx === 0) return;            // flat term: no opinion
+    if (!Number.isFinite(mx) || mx === 0) return 0;          // flat term: no opinion
     const w = (S.w[terms[m].key] * (terms[m].key === 'feas' ? AL.rho : 1)) / mx;
     g.forEach((row, i) => row.forEach((v, k) => { total[i][k] += v * w; }));
+    return w;
   });
+  const flat = total.flat(), dd = flat.reduce((a, v) => a + v * v, 0);
+  LAST.share = Object.fromEntries(terms.map((t, m) => [t.key, scale[m] && dd > 0
+    ? (per[m].flat().reduce((a, v, j) => a + v * flat[j], 0) * scale[m]) / dd : null]));
   return { base, total };
 }
 
@@ -1275,8 +1307,34 @@ function demo() {
        `the incumbent is not left describing a palette of another size (added at ${at})`);
   }
 
+  // one check per term whose value has a known answer
+  const term = (k) => OBJ.find((o) => o.key === k);
+  const setup = (mode, pts, loop = []) => {
+    S.mode = mode; S.pts = pts; S.pin = []; S.cut = []; S.loop = loop; S.marks = []; S.sel = null;
+    S.w = { ...S.w, rep: 1 }; derive();
+    return ctxOf(S.pts);
+  };
+  const circle = Array.from({ length: 16 }, (_, k) =>
+    [50, 20 * Math.cos((2 * Math.PI * k) / 16), 20 * Math.sin((2 * Math.PI * k) / 16)]);
+  const line = (n, gap) => Array.from({ length: n }, (_, k) => [30 + k * gap, 5, -5]);
+  const bendC = term('bend').f(setup('continuous', circle, [true]));
+  ok(Math.abs(bendC - 1) < 0.02, `bending of a circle is 1, got ${bendC.toFixed(4)}`);
+  ok(term('bend').f(setup('continuous', line(5, 8))) < 1e-9, 'bending of a straight ramp is 0');
+  ok(term('space').f(setup('continuous', line(6, 7))) < 1e-9, 'spacing of equal gaps is 0');
+  ok(term('space').f(setup('continuous', [...line(3, 7), [70, 5, -5]])) > 0.1, 'spacing sees an uneven gap');
+
+  // the windowed repulsion is the whole thing, differentiated
+  for (const mode of ['discrete', 'continuous']) {
+    setup(mode, HEX.slice(0, 7).map(fromHex));
+    const a = gradientOf([term('rep')]).total.flat();
+    const b = gradientOf([{ ...term('rep'), part: undefined }]).total.flat();
+    ok(Math.max(...a.map((v, i) => Math.abs(v - b[i]))) < 1e-9, `repulsion's window matches the full sum (${mode})`);
+    const sh = Object.values(LAST.share);
+    ok(sh.length === 1 && Math.abs(sh[0] - 1) < 1e-9, 'one term takes the whole step');
+  }
+
   if (bad) process.exit(1);
-  console.log('ok — a node added mid-run survives, 5 cases');
+  console.log('ok — a node added mid-run survives, 5 cases; bending, spacing, repulsion window');
 }
 
 // Browsers have no `process`; this file is imported by the page and the worker.

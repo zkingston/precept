@@ -815,7 +815,7 @@ export function spaceExtent(k = params.space, g = params.gamut): { lo: Vec3; hi:
 
 // ─── g: the local metric ─────────────────────────────────────────────────────
 
-export type Metric = (p: Vec3) => Mat3;
+export type Metric = ((p: Vec3) => Mat3) & { space?: string };
 
 /** Oklab is already an approximately uniform chart, so identity is the default. */
 export const EUCLIDEAN: Metric = () => [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
@@ -1016,14 +1016,18 @@ export function spaceMetric(k = params.space): Metric {
       w * (col[i][0] * Ac[j][0] + col[i][1] * Ac[j][1] + col[i][2] * Ac[j][2]))) as Mat3;
   };
 
+  // named, so pairLength can tell the one space whose pair formula is not its
+  // tensor
+  const tag = (m: Metric) => { m.space = k; return m; };
+
   const dSpace = D_SPACE[k];
-  if (dSpace) return (p) => {
+  if (dSpace) return tag((p) => {
     const J = mm(dSpace(toXYZ(p)), dXyzDChart(p));     // rows: space, columns: chart
     return gram([0, 1, 2].map((i) => [J[0][i], J[1][i], J[2][i]] as Vec3),
                 form ? form(metricSpace(p, k)) : null);
-  };
+  });
 
-  return (p) => {
+  return tag((p) => {
     const col: Vec3[] = [];
     for (let i = 0; i < 3; i++) {                      // central differences: J's columns
       const a = [...p] as Vec3, b = [...p] as Vec3;
@@ -1032,7 +1036,7 @@ export function spaceMetric(k = params.space): Metric {
       col.push(sb.map((v, j) => (v - sa[j]) / (2 * h)) as Vec3);
     }
     return gram(col, form ? form(metricSpace(p, k)) : null);
-  };
+  });
 }
 
 const quad = (g: Mat3, d: Vec3) =>
@@ -1051,6 +1055,48 @@ export function segLength(p: Vec3, q: Vec3, g: Metric = EUCLIDEAN): number {
 /** Additive. The trajectory cost, and the thing you divide up for even spacing. */
 export const arcLength = (path: Vec3[], g: Metric = EUCLIDEAN): number =>
   path.slice(1).reduce((acc, q, i) => acc + segLength(path[i], q, g), 0);
+
+/**
+ * The full CIEDE2000 formula between two colors, as in Sharma, Wu and Dalal
+ * 2005. Its weights are taken at the mean of the pair, which is what makes it
+ * a difference between two colors rather than a metric at one point.
+ * de2000Form is its small-difference limit; the two agree to first order.
+ */
+export function dE2000([L1, a1, b1]: Vec3, [L2, a2, b2]: Vec3): number {
+  const Cab = (Math.hypot(a1, b1) + Math.hypot(a2, b2)) / 2;
+  const G = 0.5 * (1 - Math.sqrt(Cab ** 7 / (Cab ** 7 + P25_7)));
+  const ap1 = a1 * (1 + G), ap2 = a2 * (1 + G);
+  const C1 = Math.hypot(ap1, b1), C2 = Math.hypot(ap2, b2);
+  const hue = (a: number, b: number) => (a === 0 && b === 0 ? 0 : ((Math.atan2(b, a) / DEG) % 360 + 360) % 360);
+  const h1 = hue(ap1, b1), h2 = hue(ap2, b2);
+  let dh = 0, hm = h1 + h2;
+  if (C1 * C2 !== 0) {
+    dh = h2 - h1;
+    if (dh > 180) dh -= 360; else if (dh < -180) dh += 360;
+    if (Math.abs(h1 - h2) > 180) hm += hm < 360 ? 360 : -360;
+    hm /= 2;
+  }
+  const dL = L2 - L1, dC = C2 - C1, dH = 2 * Math.sqrt(C1 * C2) * Math.sin((dh / 2) * DEG);
+  const Lm = (L1 + L2) / 2, Cm = (C1 + C2) / 2, dl = Lm - 50;
+  const T = 1 - 0.17 * Math.cos((hm - 30) * DEG) + 0.24 * Math.cos(2 * hm * DEG)
+              + 0.32 * Math.cos((3 * hm + 6) * DEG) - 0.2 * Math.cos((4 * hm - 63) * DEG);
+  const SL = 1 + (0.015 * dl * dl) / Math.sqrt(20 + dl * dl);
+  const SC = 1 + 0.045 * Cm, SH = 1 + 0.015 * Cm * T;
+  const RT = -2 * Math.sqrt(Cm ** 7 / (Cm ** 7 + P25_7)) * Math.sin(60 * Math.exp(-(((hm - 275) / 25) ** 2)) * DEG);
+  const l = dL / SL, c = dC / SC, h = dH / SH;
+  return Math.sqrt(l * l + c * c + h * h + RT * c * h);
+}
+
+/**
+ * The length between two colors compared as a pair. Under every space but one
+ * it is the chord under g. CIEDE2000 is a formula for pairs, so between two
+ * colors it is used whole rather than through its small-difference tensor,
+ * scaled the way g is so that the gray axis still reads 100.
+ */
+export const pairLength = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN): number =>
+  g.space === 'de2000'
+    ? neutralScale('de2000') * dE2000(SPACES.cielab.from(toXYZ(p)), SPACES.cielab.from(toXYZ(q)))
+    : segLength(p, q, g);
 
 /**
  * The shortest path between two colors under g, as a polyline.
@@ -1101,7 +1147,7 @@ export function geodesic(p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8, sweeps 
  * only bites once a working space or a weighted metric bends the geometry.
  */
 export const delta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
-  perceive(arcLength(geodesic(p, q, g, n), g));
+  perceive(g.space === 'de2000' ? pairLength(p, q, g) : arcLength(geodesic(p, q, g, n), g));
 
 /**
  * The same thing along the straight line, for the inner loop.
@@ -1117,7 +1163,8 @@ export const delta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
  * nothing at all in the chart, where the line IS the path.
  */
 export const lineDelta = (p: Vec3, q: Vec3, g: Metric = EUCLIDEAN, n = 8): number =>
-  perceive(arcLength(Array.from({ length: n + 1 }, (_, i) => lerp(p, q, i / n)), g));
+  perceive(g.space === 'de2000' ? pairLength(p, q, g)
+                                : arcLength(Array.from({ length: n + 1 }, (_, i) => lerp(p, q, i / n)), g));
 
 // ─── color vision deficiency: a projection on M ──────────────────────────────
 
@@ -1388,6 +1435,21 @@ function demo() {
   for (const a of pts) for (const b of pts) for (const c of pts)
     ok(delta(a, c) <= delta(a, b) + delta(b, c) + 1e-9, 'triangle inequality');
   ok(delta([20, 0, 0], [80, 0, 0]) < arcLength([[20, 0, 0], [80, 0, 0]]), 'D underestimates arc length');
+
+  // CIEDE2000 whole, against the published test pairs (Sharma et al. 2005)
+  for (const [l1, l2, want] of [
+    [[50, 2.6772, -79.7751], [50, 0, -82.7485], 2.0425],
+    [[50, 2.5, 0], [73, 25, -18], 27.1492],
+    [[50, 2.5, 0], [50, 3.1736, 0.5854], 1.0],
+    [[50, 2.5, 0], [50, 3.2972, 0], 1.0],
+    [[2.0776, 0.0795, -1.135], [0.9033, -0.0636, -0.5514], 0.9082]] as [Vec3, Vec3, number][]) {
+    ok(close(dE2000(l1, l2), want, 5e-5) && close(dE2000(l2, l1), want, 5e-5), `dE2000 ${want}`);
+  }
+  {
+    const g2k = spaceMetric('de2000'), a: Vec3 = [55, 12, -20], b: Vec3 = [55.3, 12.2, -20.4];
+    ok(close(pairLength(a, b, g2k) / segLength(a, b, g2k), 1, 0.02), 'the pair formula meets its tensor in the small');
+    ok(close(pairLength(a, b, spaceMetric('cielab')), segLength(a, b, spaceMetric('cielab'))), 'every other space pairs by the chord');
+  }
 
   // gamut
   const wild: Vec3 = [50, 90, 40];
