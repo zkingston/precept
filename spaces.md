@@ -243,8 +243,7 @@ $$
 The axes are $J'$, $a'$, and $b'$.
 CIECAM02 gives a hue angle and a colorfulness.
 $a'$ and $b'$ are that pair in Cartesian form, so that Euclidean distance applies.
-CAM02-UCS fits the color difference data best of the spaces here.
-It is also the slowest to evaluate.
+It is the slowest space here to evaluate.
 
 The compression $M'$ has the same logarithmic shape as this tool's $f$, with $s_0=1/0.0228\approx 43.9$.
 Applying $f$ to a metric computed from $M'$ would compress chroma twice.
