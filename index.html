@@ -288,6 +288,8 @@
   #metrics .sh[data-live] { visibility:visible; }
   #metrics .sh[data-neg] { background:linear-gradient(to left, var(--hot) calc(var(--v,0)*100%), var(--line) 0); }
   .note { color:var(--dim); font-size:11px; }
+  /* always in the layout, so the count appearing at the first frame moves nothing */
+  #runinfo { min-height:15px; line-height:15px; margin-top:3px; }
 
   #aboutbtn { font-size:17px; flex:0 0 auto; }
   h2 #mathbtn { float:right; margin:-3px 0 0; padding:0 6px; font:11px/1.5 'Fira Sans',ui-sans-serif,system-ui,sans-serif;
@@ -524,7 +526,7 @@
 
       <section><h2>Optimize<button id="mathbtn" title="the problem being solved" aria-label="the problem being solved">?</button></h2>
         <button id="run">run optimizer</button>
-        <div id="runinfo" class="note" hidden></div>
+        <div id="runinfo" class="note">not run yet</div>
         <table id="metrics"></table>
         <div class="row" style="margin-top:8px"><label class="f" for="rate">rate</label>
           <input type="range" id="rate" min="0" max="1" step="0.02" value="0.3"><span class="v" id="ratev">.30</span>
@@ -3009,7 +3011,6 @@ function solverWorker() {
       stepShare = m.share;
       const info = `step ${m.tick}${m.restarts ? ` · ${m.restarts} restart${m.restarts > 1 ? 's' : ''}` : ''}`;
       if ($('runinfo').textContent !== info) $('runinfo').textContent = info;
-      $('runinfo').hidden = false;
       if (m.restarts > restarts) announce(`restart ${m.restarts}`);
       restarts = m.restarts;
       fromSolver(m.pts, false);
@@ -3029,6 +3030,7 @@ let restarts = 0;                            // the last count the worker report
 function startSolver() {
   if (running) return;
   running = true; frames = 0; restarts = 0;
+  $('runinfo').textContent = 'step 0';
   announce('Optimizer running.');
   $('run').textContent = 'stop'; $('run').dataset.on = '';
   solverWorker().postMessage({ t: 'start', id: ++runId, ...solverState() });
