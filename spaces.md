@@ -1,39 +1,29 @@
 ### Spaces
 
-This setting picks the color space the panels are drawn in and distances are measured in.
-Changing it does not move any color.
-It changes the coordinates you see and edit, and the metric $g$ that sets the cost of a step.
-Everything in the Formulation dialog is built on $g$.
-
+This setting picks the color space the palette is displayed in and the metric $g$ that measures the distance between colors.
 Colors are stored in Oklab, called the chart.
 Each space is a map from the chart to its own coordinates, with Jacobian $J$.
-The metric is $g=J^{\top}AJ$, where $A$ is the identity unless the space says otherwise.
-Every Jacobian here is analytic.
-The **Formulation** dialog, under Optimize, defines the metric.
+The metric is $g=J^{\top}AJ$, where $A$ is the identity for every space except CIEDE2000.
+The **Formulation** dialog, under Optimize, describes how the optimizer uses $g$.
 
 #### What a color space is
 
-Light is a spectrum: a power at every wavelength.
-The eye has three kinds of cone, and each reports one number: the spectrum weighted by that cone's sensitivity and summed over wavelength.
-So the eye reduces every spectrum to three numbers.
+The eye has three kinds of cone.
+Each cone's response is the spectrum of the light weighted by that cone's sensitivity and summed over wavelength.
+The eye therefore reduces every spectrum to three numbers.
 Two different spectra that give the same three numbers look identical.
-They are called [metamers](https://en.wikipedia.org/wiki/Metamerism_%28color%29), and metamerism is why a display needs only three primaries.
+Such spectra are called [metamers](https://en.wikipedia.org/wiki/Metamerism_%28color%29).
 
-Color is therefore three-dimensional, and the CIE standardized coordinates for it in 1931.
+The [International Commission on Illumination (CIE)](https://en.wikipedia.org/wiki/International_Commission_on_Illumination) standardized three coordinates for color in 1931.
 The [tristimulus values](https://en.wikipedia.org/wiki/CIE_1931_color_space) $X$, $Y$, and $Z$ are the spectrum integrated against three color matching functions.
 The matching functions are linear combinations of the cone sensitivities, chosen so that $Y$ is luminance and all three are positive everywhere.
-$Y$ has a perceptual meaning.
-$X$ and $Z$ are the other two combinations that keep everything positive, and they have no perceptual meaning of their own.
+$X$ and $Z$ have no perceptual meaning of their own.
 
 A color space is a choice of coordinates on those three dimensions.
-XYZ itself is one.
-In XYZ the distance between two colors says nothing about how different they look.
-CIELAB, Oklab, and the others were built so that it does.
-They disagree with each other, so the space is a setting here rather than a constant.
-
-The spaces below are listed oldest first.
-In the equations, $(X,Y,Z)$ are relative tristimulus values with $Y=1$ at the chart's white $(X_n,Y_n,Z_n)$.
-Matrices are given to four decimals.
+In XYZ, the Euclidean distance between two colors is not a measure of how different they look.
+In the other spaces here, distance approximates perceived difference.
+They disagree with one another.
+In the equations below, $(X,Y,Z)$ are relative tristimulus values with $Y=1$ at the chart's white $(X_n,Y_n,Z_n)$.
 
 #### CIE XYZ (1931)
 
@@ -63,19 +53,12 @@ $\bar y$ is also the luminous efficiency function, so $Y$ is luminance.
 <figcaption style="color:var(--dim);font-size:11px;margin-top:2px">The CIE 1931 2° color matching functions at 5 nm, as tabulated by the <a href="http://cvrl.ioo.ucl.ac.uk/cmfs.htm">Colour &amp; Vision Research Laboratory</a>.</figcaption>
 </figure>
 
-$\bar y$ peaks at 555 nm and $\bar z$ at 445 nm.
-$\bar x$ has a second, smaller lobe in the blue.
 Every other space here is computed from XYZ.
-XYZ is linear in light: mix two lights and their coordinates add.
-It is the only linear space on this list.
-$X$ and $Z$ have no perceptual meaning.
-Equal steps in XYZ do not look equal.
-Every later space on this list was built to fix that, and viewing a gamut in XYZ and then in a uniform space shows how large the fix is.
-The Jacobian is constant, so XYZ is the cheapest space to evaluate after Oklab.
+XYZ is linear in light: the coordinates of a mixture of two lights are the sum of their coordinates.
 
 #### CIELAB (1976)
 
-CIELAB is the CIE's [first uniform space](https://en.wikipedia.org/wiki/CIELAB_color_space) and still the reference for industrial color difference.
+CIELAB is the CIE's [first uniform space](https://en.wikipedia.org/wiki/CIELAB_color_space).
 
 $$
 f(t)=\begin{cases}\sqrt[3]{t} & t>\delta^3\\ \dfrac{t}{3\delta^2}+\dfrac{4}{29} & \text{otherwise}\end{cases},\qquad \delta=\tfrac{6}{29}
@@ -88,16 +71,14 @@ b^*=200\left[f\!\left(\tfrac{Y}{Y_n}\right)-f\!\left(\tfrac{Z}{Z_n}\right)\right
 $$
 
 $L^*$ is lightness, 0 at black and 100 at white.
-$a^*$ runs green to red and $b^*$ blue to yellow, the two opponent pairs of the visual system.
+$a^*$ runs green to red and $b^*$ blue to yellow.
 The linear piece of $f$ below $\delta^3$ keeps the slope finite at black.
 Distance is $\Delta E_{ab}^*$, the Euclidean distance in these coordinates.
-Its weakness is high chroma: a step far from the neutral axis measures larger than it looks.
-CIEDE2000 and CAM02-UCS both correct this, one by weighting chroma differences and the other by compressing colorfulness.
+CIELAB overstates differences at high chroma: a step far from the neutral axis measures larger than it looks.
 
 #### CIELUV (1976)
 
-[CIELUV](https://en.wikipedia.org/wiki/CIELUV) was recommended in the same year as CIELAB and is kept for additive mixture.
-It shares $L^*$ with CIELAB.
+[CIELUV](https://en.wikipedia.org/wiki/CIELUV) shares $L^*$ with CIELAB.
 Its chromatic axes are the displacement from the white point in the $u'v'$ chromaticity diagram, scaled by $13L^*$:
 
 $$
@@ -109,15 +90,19 @@ u^*=13L^*\,(u'-u'_n),\qquad v^*=13L^*\,(v'-v'_n)
 $$
 
 The factor of $L^*$ takes $u^*$ and $v^*$ to zero at black.
-In the $u'v'$ diagram a mixture of two lights lies on the straight line between them.
-Displays mix light additively, which is why CIELUV was kept.
-CIELAB does not have this property.
-CIELUV overstates high-chroma differences just as CIELAB does.
+In the $u'v'$ diagram, a mixture of two lights lies on the straight line between them.
+CIELUV overstates high-chroma differences, as CIELAB does.
 
 #### sRGB cube (1996)
 
 The sRGB cube is the [encoded sRGB channel values](https://en.wikipedia.org/wiki/SRGB) scaled by 100.
-Linear RGB is $M^{-1}(X,Y,Z)$, where $M$ is the matrix built from the Rec.709 primaries at $(0.64,0.33)$, $(0.30,0.60)$, $(0.15,0.06)$ and the D65 white at $(0.3127,0.3290)$.
+Linear RGB is $M^{-1}(X,Y,Z)$, where $M$ is the matrix built from the [Rec.709](https://en.wikipedia.org/wiki/Rec._709) primaries at $(0.64,0.33)$, $(0.30,0.60)$, $(0.15,0.06)$ and the D65 white at $(0.3127,0.3290)$:
+
+$$
+M=\begin{pmatrix}0.4124&0.3576&0.1805\\0.2126&0.7152&0.0722\\0.0193&0.1192&0.9505\end{pmatrix},\qquad
+M^{-1}=\begin{pmatrix}3.2406&-1.5372&-0.4986\\-0.9689&1.8758&0.0415\\0.0557&-0.2040&1.0570\end{pmatrix}
+$$
+
 Each channel is then encoded:
 
 $$
@@ -125,12 +110,9 @@ $$
 (R,G,B)=100\,\operatorname{enc}\!\left(M^{-1}\,\mathrm{XYZ}\right)
 $$
 
-The transfer function is from the [HP and Microsoft proposal](https://www.w3.org/Graphics/Color/sRGB.html), later standardized as IEC 61966-2-1.
-Each axis is how hard one primary is driven.
-None has a perceptual meaning.
+Each axis is the drive level of one primary.
 The sRGB gamut is a cube in these coordinates, so its boundary is easy to see.
-Distance here is what a tool measures when it interpolates between two hex codes.
-It is not perceptual.
+Distance in these coordinates does not correspond to perceived difference.
 
 #### IPT (1998)
 
@@ -152,19 +134,17 @@ $$
 $$
 
 $M'$ and $S'$ are computed like $L'$.
-This tool divides the cone responses by the chart white's before the power, so that gray lies exactly on the $I$ axis.
-The published space does not.
+This tool divides the cone responses by those of the chart white before the power, so that gray lies exactly on the $I$ axis.
+The published space does not normalize.
 $I$ is intensity.
 $P$ runs green to red and $T$ blue to yellow.
-They are named for protanopia and tritanopia, the deficiencies that confuse colors along each axis.
-IPT was designed so that lines of constant perceived hue are straight.
-In CIELAB they curve, most visibly in the blues, so a ramp at fixed CIELAB hue angle there drifts toward purple.
-Use IPT when controlling hue.
+In IPT, lines of constant perceived hue are straight.
+IPT is a good choice when the palette's hue path matters.
 
 #### CIEDE2000 (2001)
 
-[CIEDE2000](https://en.wikipedia.org/wiki/Color_difference#CIEDE2000) is not a set of coordinates.
-It is a distance formula on CIELAB, and this entry is CIELAB measured with it instead of with Euclidean distance.
+[CIEDE2000](https://en.wikipedia.org/wiki/Color_difference#CIEDE2000) is a distance formula on CIELAB coordinates.
+This entry is CIELAB with distance measured by CIEDE2000 instead of by Euclidean distance.
 For a small difference the formula
 
 $$
@@ -194,20 +174,19 @@ $$
 
 In the small-difference limit, $\Delta H'\to C'\mathrm{d}h'$ and the mean chroma in $G$ is the chroma at the point.
 The parametric factors $k_L$, $k_C$, $k_H$ are 1.
-The limit is a metric tensor, and the solver uses it like any other $g$.
+The limit is a metric tensor, and the solver uses it like any other $g$ along paths.
+Between two colors compared as a pair, the solver uses the full formula.
 
 $S_C$ and $S_H$ grow with chroma, so the same CIELAB step measures less far from the neutral axis.
-That is the correction to CIELAB's high-chroma error.
+This weighting corrects CIELAB's high-chroma error.
 $R_T$ couples chroma and hue.
-It is active only in the blue, within about $25^\circ$ of $h'=275^\circ$, where CIELAB is worst.
+It is active only in the blue, within about $25^\circ$ of $h'=275^\circ$.
 Because of that cross term, $g$ is not $J^{\top}J$ for any map.
-CIEDE2000 is the only space here where $A$ is not the identity.
 The coordinates are CIELAB's, so the Jacobian is CIELAB's.
 
 #### CAM02-UCS (2006)
 
 CAM02-UCS is a uniform space fitted on top of [CIECAM02](https://en.wikipedia.org/wiki/CIECAM02), a full color appearance model.
-It is the most elaborate space here.
 CIECAM02 is evaluated under the conditions the fit assumed: an average surround with $F=1$, $c=0.69$, and $N_c=1$, an adapting luminance $L_A=64/5\pi\ \mathrm{cd/m^2}$, and a background $Y_b=20$ against a white $Y_w=100$.
 From those, $n=Y_b/Y_w$, $z=1.48+\sqrt n$, $N_{bb}=N_{cb}=0.725\,n^{-0.2}$, $k=1/(5L_A+1)$, and $F_L=0.2k^4(5L_A)+0.1(1-k^4)^2(5L_A)^{1/3}$.
 
@@ -262,14 +241,14 @@ a'=M'\cos h,\qquad b'=M'\sin h
 $$
 
 The axes are $J'$, $a'$, and $b'$.
-CIECAM02 gives a hue angle and a colorfulness, and $a'$ and $b'$ are that pair in Cartesian form so that a Euclidean distance can be taken.
+CIECAM02 gives a hue angle and a colorfulness.
+$a'$ and $b'$ are that pair in Cartesian form, so that Euclidean distance applies.
 CAM02-UCS fits the color difference data best of the spaces here.
 It is also the slowest to evaluate.
-It agrees with CIEDE2000: viridis measures 154 under one and 160 under the other, against 67 to 257 across the rest.
 
 The compression $M'$ has the same logarithmic shape as this tool's $f$, with $s_0=1/0.0228\approx 43.9$.
-Applying $f$ to a metric pulled back through $M'$ would compress chroma twice.
-So the view shows $M'$, and the metric differentiates the uncompressed $M$.
+Applying $f$ to a metric computed from $M'$ would compress chroma twice.
+The view therefore shows $M'$, and the metric differentiates the uncompressed $M$.
 
 #### ICtCp (BT.2100, 2016)
 
@@ -302,14 +281,13 @@ That placement only scales $I$, and $K$ then rescales $I$ so that white reads 10
 $I$ is intensity, $C_t$ is tritan chroma, and $C_p$ is protan chroma, the same meanings as IPT's axes.
 Lines of constant hue stay straight, as in IPT.
 PQ covers a luminance range far beyond an sRGB display, so inside the sRGB gamut ICtCp is close to a rescaling of IPT.
-Viridis measures 116 here and 134 in IPT.
 
 #### Oklab (2020)
 
 [Oklab](https://en.wikipedia.org/wiki/Oklab_color_space) is [Ottosson's](https://bottosson.github.io/posts/oklab/) space, scaled by 100.
-It is the chart: every color in this tool is stored in Oklab, and the other spaces are views of it.
+Oklab is the chart: every color in this tool is stored in it, and the other spaces are views of it.
 The structure is IPT's, with a cube root as the nonlinearity.
-Both matrices are numerical fits to CAM16-UCS and IPT difference data, not measured cone sensitivities:
+Both matrices are numerical fits to CAM16-UCS and IPT difference data.
 
 $$
 \begin{pmatrix}l\\m\\s\end{pmatrix}=
@@ -324,9 +302,6 @@ $$
 $$
 
 $L$ is lightness, $a$ runs green to red, and $b$ blue to yellow, as in CIELAB.
-Oklab takes the cube root of cone responses, and CIELAB takes the cube root of tristimulus values.
 With Oklab as the working space, $J$ is the identity, $g=I$, and lengths are ordinary Euclidean.
-It is the cheapest option and the default.
-It was fitted to much the same data as the other spaces here, so it is a fair stand-in for them.
-It has no appearance model: it does not account for adapting luminance or surround.
-Of the spaces here, only CAM02-UCS does.
+Oklab is the cheapest option and the default.
+It has no appearance model: unlike CIECAM02, it does not account for adapting luminance or surround.

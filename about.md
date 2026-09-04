@@ -11,9 +11,9 @@ probably a gamut called [sRGB](https://en.wikipedia.org/wiki/SRGB)). Many people
 [color vision deficiency](https://en.wikipedia.org/wiki/Color_blindness), which affects the
 distinctness of colors in this space. A colormap is either a continuous path through that space or
 a set of points for categorical data, subject to some constraints that you'd like to enforce, like
-uniform perception, maximal distinctness, and so on. This tool solves that palette generation
-problem with optimization, and provides a number of metrics to help design pleasing and
-scientifically validated palettes.
+[uniform perception](https://nightingaledvs.com/color-in-a-perceptual-uniform-way/), maximal
+distinctness, and so on. This tool solves that palette generation problem with optimization, and
+provides a number of metrics to help design pleasing and scientifically validated palettes.
 
 #### Getting around
 
@@ -43,6 +43,11 @@ scientifically validated palettes.
   the same way, then slid by its center or turned by its tip.
 - Under **Optimize**, tick the terms to include and set how hard each one pulls in the **×**
   column — type a weight, or drag one up and down. Then press **run optimizer**.
+- Under **View**, **space** picks the coordinates the panels are drawn in and the metric distances
+  are measured with. It moves no color, but it changes what the optimizer calls far apart; the **?**
+  beside it defines each of the nine.
+- **gamut** is which colors are reachable, and the solid in the 3D view. **ICC…** takes a
+  matrix/TRC RGB profile of your own, and **&#9651;** draws the gamut on a chromaticity diagram.
 - Export as matplotlib, CSS, CSV, ParaView or JSON, or copy a link that carries the whole palette.
 - Every control and every metric has a <span class="q">?</span> beside it: hover one for what it does.
 
