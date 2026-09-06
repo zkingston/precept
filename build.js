@@ -8,9 +8,9 @@
 // resolves every specifier at build time so no map is needed, and it keeps
 // only the parts of three the page actually reaches.
 //
-// The dev server serves the sources untouched, so `node serve.js` still runs
-// readable code with real names in a stack trace. The bundle is for the
-// deployed copy only.
+// `node serve.js` serves this bundle and reruns this script on every edit.
+// `node serve.js .` serves the sources untouched, for readable code with real
+// names in a stack trace.
 //
 // docs/ is a build artifact and is not committed: the Pages workflow builds it
 // on every push to main.

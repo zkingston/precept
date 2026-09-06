@@ -17,13 +17,15 @@ the small steps that make them up.
 
 ```
 npm install
-npm run serve     # http://localhost:8080
+npm run serve     # http://localhost:8080, docs/ rebuilt on every edit
 npm run check     # self-check
 npm run browser   # drives the page in a local headless chromium: names, keys, contrast, sizes
 ```
 
-No build step for development. The dev server strips TypeScript types on the way
-out, so the browser imports `color-space.ts` directly and edits are live.
+The dev server serves the built copy, so what you see is what Pages ships, and
+rebuilds it whenever a source changes. `node serve.js .` serves the sources
+instead, with TypeScript types stripped on the way out, so a stack trace keeps
+its real names.
 
 ## Deploy
 
