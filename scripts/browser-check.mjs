@@ -153,10 +153,12 @@ try {
   ok((await ev(`document.getElementById('rate').getAttribute('aria-describedby')`)) === 'q-rate', 'a control is described by its hint');
   await ev(`document.querySelectorAll('.pcanvas')[0].focus()`);
   for (let i = 0; i < 30; i++) await key('ArrowUp', 'ArrowUp', 8);
-  ok(/: 80$/.test(await live()), 'a lightness knot stops at the band', await live());
+  ok(/: 100$/.test(await live()), 'a lightness knot goes past the band to the top of the axis', await live());
   await ev(`document.querySelectorAll('.pcanvas')[1].focus()`);
+  await key('ArrowDown', 'ArrowDown', 8);
+  const h0 = +/: (\d+)°$/.exec(await live())[1];
   for (let i = 0; i < 30; i++) await key('ArrowUp', 'ArrowUp', 8);
-  ok(/: 200°$/.test(await live()), 'a hue knot stops at the arc', await live());
+  ok(new RegExp(`: ${(h0 + 300) % 360}°$`).test(await live()), 'a hue knot goes past the arc, round the circle', await live());
   await ev(`document.getElementById('huewheel').focus()`);
   await key('ArrowRight', 'ArrowRight');
   ok(/^hue arc 32° to 200°$/.test(await live()), 'the wheel takes arrow keys', await live());

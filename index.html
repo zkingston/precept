@@ -517,8 +517,6 @@
         <div class="seg" id="mode"><button data-v="continuous">Continuous</button><button data-v="discrete">Discrete</button></div>
         <div class="row" style="margin-top:6px"><label class="f" for="loadbtn">load</label>
           <button id="loadbtn" style="flex:1">load…</button></div>
-        <div class="row" id="orderrow"><label class="f" for="orderbtn">order</label>
-          <button id="orderbtn" style="flex:1">most distinct first</button></div>
       </section>
 
       <section id="selpanel">
@@ -649,7 +647,7 @@ import {
 import {
   LK, LSEP, M, OBJ, OPT_IN, PER_SPAN, S, WARN_EPS, W_DEFAULT, angDiff, angGap, apcaLc, clamp01,
   constrain, contrastRatio, ctxOf, curve, curveOf, curves, degree, derive, disturb, dot3, hueOf,
-  distinctOrder, inHueArc, norm360, observer, palette, primary, rnd, runs, setRuns, syncProfiles, takeDisturbed, targetH, targetL,
+  distinctOrder, inHueArc, norm360, observer, palette, primary, rnd, runs, setRuns, syncProfiles, takeDisturbed,
   totalTurn, view, whereIs,
 } from './solver.js';
 
@@ -2009,7 +2007,6 @@ function sidebar() {
   // set it. Discrete only, with the term: a ramp is read as a surface and needs
   // its dark end, so there is nothing here for a continuous palette to answer.
   $('contrastrow').style.display = S.mode === 'discrete' ? '' : 'none';
-  $('orderrow').style.display = S.mode === 'discrete' ? '' : 'none';
   if (S.mode === 'discrete') {
     const bg = fromHex(S.cbg);
     const set = pal;
@@ -2509,7 +2506,7 @@ function applyScene(o) {
   // where it has one.
   S.w = Object.fromEntries(OBJ.map((t) => [t.key, o.w?.[t.key] ?? W_DEFAULT[t.key] ?? 1]));
   S.on = Object.fromEntries(OBJ.map((t) => [t.key, o.on?.[t.key] ?? !OPT_IN.includes(t.key)]));
-  // a stored profile keeps to the stored bounds, as an edited one does
+  // a stored profile keeps to the axis, as an edited one does
   S.lprof = S.lprof.map(PLOTS.L.clamp); S.hprof = S.hprof.map(PLOTS.H.clamp);
   S.sel = null;
   reframe(); layout(); buildShell(); capKey = null;   // a new chart moves everything
@@ -2876,7 +2873,8 @@ const HELP = {
   feas:     "How far the curve leaves the feasible set.",
   pair:     "Unevenness of the perceived steps along the ramp.",
   contr:    "Swatches below the contrast floor.",
-  lsep:     "Pairs too close in lightness to spread over the band.",
+  lsep:     "Pairs too close in lightness for what their hue and chroma tell apart.",
+  hsep:     "Pairs closer in hue than the even spacing round the arc.",
   bend:     "Bending of the ramp. A circle is 1, a straight line 0.",
   sym:      "Lightness difference between the two arms.",
   space:    "Unevenness of the control point spacing.",
@@ -3069,17 +3067,12 @@ const LPAD = { l: 36, r: 10, t: 10, b: 15 };
 const PLOTS = {
   L: { key: 'lprof', term: 'lramp', lo: 0, hi: 100, ticks: [0, 50, 100], hue: false,
        meas: (P) => P.map((p) => p[0]),
-       // the lightness band, not the axis: a target outside it is one the
-       // palette cannot reach
-       band: () => [S.lo[0], S.hi[0]],
-       clamp: targetL,
        excluded: () => [[0, S.lo[0]], [S.hi[0], 100]].filter(([a, b]) => b > a),
        fit: lprofFit, p1: lprofLine, p2: lprofArch, labels: ['line', 'arch'],
        tips: ['straight ramp · double-click to reverse',
               'tent · double-click for a dark middle'] },
   H: { key: 'hprof', term: 'hprof', lo: 0, hi: 360, ticks: [0, 90, 180, 270, 360], hue: true,
        meas: (P) => P.map(hueOf).map(norm360),
-       clamp: targetH,                                       // the arc: outside it, the nearer end
        excluded: () => {
          const [lo, hi] = S.hue;
          if (lo === 0 && hi === 360) return [];
@@ -3094,6 +3087,9 @@ for (const [id, p] of Object.entries(PLOTS)) {
   p.el = p.root.querySelector('canvas');
   p.ctx = p.el.getContext('2d');
   p.prof = () => S[p.key];
+  // A knot can sit anywhere on the axis, outside the band or the arc included:
+  // the bounds say where the palette may go, the profile says where it should.
+  p.clamp = p.hue ? norm360 : (v) => Math.min(p.hi, Math.max(p.lo, v));
 }
 const PLOTLIST = Object.values(PLOTS);
 
@@ -3173,11 +3169,11 @@ function lpstretch(p, d, y) {
   const lo = Math.min(...u), hi = Math.max(...u);
   const dv = lpv(p, y) - lpv(p, d.y);
   const put = (v, i) => (prof[i] = p.hue ? norm360(v) : v);
-  const [blo, bhi] = p.hue ? [p.lo, p.hi] : p.band();    // the band, where the axis has ends
+  const [blo, bhi] = [p.lo, p.hi];
 
   if (grip === 'move') {
-    // a circle simply turns; a bounded axis stops at the band rather than
-    // flattening the profile against it
+    // a circle simply turns; an axis with ends stops at them rather than
+    // flattening the profile against them
     const s = p.hue ? dv : Math.min(bhi - hi, Math.max(blo - lo, dv));
     u.forEach((v, i) => put(v + s, i));
     return;
@@ -3325,7 +3321,7 @@ for (const p of PLOTLIST) {
     if (lDrag?.p !== p) return;
     const [, y] = at(e);
     if (lDrag.grip) { lpstretch(p, lDrag, y); p.prof().forEach((v, i, a) => { a[i] = p.clamp(v); }); }
-    else p.prof()[lDrag.i] = p.clamp(lpv(p, y));     // to the band, no further
+    else p.prof()[lDrag.i] = p.clamp(lpv(p, y));     // to the axis, no further
     sidebar();
   });
   p.el.addEventListener('pointerup', () => { lDrag = null; });
@@ -3546,7 +3542,21 @@ const HIST = { past: [], future: [], last: null, timer: 0, depth: 60 };
  * run into a single entry, which is what you want to step back through — and no
  * edit path has to remember to call anything.
  */
+/**
+ * A discrete palette is kept in its most distinct order. Off the same debounce
+ * as the history, so a drag or a run reorders once, when it stops, rather than
+ * under the pointer; pins, marks and the selection follow their colors.
+ */
+function settle() {
+  if (S.mode !== 'discrete' || S.pts.length < 3 || running || drag) return false;
+  const o = distinctOrder(S.pts);
+  if (o.every((v, i) => v === i)) return false;
+  setRuns([{ nodes: o, closed: false }]);
+  sync();                                  // and its debounce brings commit back to record it
+  return true;
+}
 function commit() {
+  if (settle()) return;
   const now = sceneJSON();
   if (now === HIST.last) return;
   if (HIST.last !== null && HIST.past.push(HIST.last) > HIST.depth) HIST.past.shift();
@@ -4461,13 +4471,6 @@ $('panelbtn').onclick = () => {
 };
 
 $('loadbtn').onclick = () => { paintLoadList(); $('loaddlg').showModal(); };
-/** one run in farthest-first order; pins, marks and the selection follow their colors */
-$('orderbtn').onclick = () => {
-  if (S.mode !== 'discrete' || S.pts.length < 3) return;
-  setRuns([{ nodes: distinctOrder(S.pts), closed: false }]);
-  disturb(); sync();
-  announce('palette reordered, most distinct first');
-};
 $('loadclose').onclick = () => $('loaddlg').close();
 $('loaddlg').onclick = (e) => { if (e.target === $('loaddlg')) $('loaddlg').close(); };
 $('loadlist').onclick = (e) => {
@@ -4724,9 +4727,6 @@ function paintBounds() {
   drawWheel();
 }
 const boundsChanged = () => {
-  // the profiles follow the band in, so no target is left where the palette
-  // cannot go
-  S.lprof = S.lprof.map(PLOTS.L.clamp); S.hprof = S.hprof.map(PLOTS.H.clamp);
   paintBounds();
   sync({ colors: true });
 };
@@ -4817,7 +4817,6 @@ function paintGamutList() {
 const HINTS = {
   mode: 'Ramp or swatch set.',
   loadbtn: 'Load a published palette.',
-  orderbtn: 'Reorder: the two most distant first, then each as far as possible from those before it.',
   spacesel: 'Space for the panels and for distances.',
   gamutsel: 'Which colors are reachable. ICC\u2026 loads a profile, \u25b3 shows the chromaticity diagram.',
   cvd: 'Simulate a color vision deficiency.',

@@ -1,120 +1,20 @@
 # precept
 
-A palette design tool built on the finding that perceptual color space is **not
-Riemannian** — large color differences are perceived as less than the sum of
-the small steps that make them up.
+A browser tool for designing color palettes by optimization.
+Live at [zkingston.com/precept](https://zkingston.com/precept/).
 
-- Bujack, Teti, Miller, Caffrey & Turton, *The non-Riemannian nature of
-  perceptual color space*, PNAS 2022, [10.1073/pnas.2119753119](https://doi.org/10.1073/pnas.2119753119)
-- Bujack, Stark, Turton, Miller & Rogers, *The Geometry of Color in the Light of
-  a Non-Riemannian Space*, CGF 2025, [10.1111/cgf.70136](https://doi.org/10.1111/cgf.70136)
-- Machado, Oliveira & Fernandes, *A Physiologically-based Model for Simulation of
-  Color Vision Deficiency*, IEEE TVCG 15(6) 2009,
-  [10.1109/TVCG.2009.113](https://doi.org/10.1109/TVCG.2009.113) — the
-  simulation model, including the tabulated matrices for anomalous trichromacy
+[about.md](about.md) explains the tool, [formulation.md](formulation.md)
+defines the optimizer's terms and constraints, and [spaces.md](spaces.md)
+defines the color spaces.
 
 ## Run
 
 ```
 npm install
-npm run serve     # http://localhost:8080, docs/ rebuilt on every edit
+npm run serve     # http://localhost:8080, rebuilt on every edit
 npm run check     # self-check
-npm run browser   # drives the page in a local headless chromium: names, keys, contrast, sizes
-```
-
-The dev server serves the built copy, so what you see is what Pages ships, and
-rebuilds it whenever a source changes. `node serve.js .` serves the sources
-instead, with TypeScript types stripped on the way out, so a stack trace keeps
-its real names.
-
-## Deploy
-
-```
+npm run browser   # headless chromium checks
 npm run build     # writes docs/
 ```
 
-GitHub Pages is a plain static host, which the dev setup is not: browsers cannot
-parse TypeScript, and the import map points at absolute `/node_modules` paths
-that would resolve to the *domain* root on a project site. `build.js` lifts the
-page's inline module out of `index.html` and bundles it and the worker with
-esbuild, minified, with their shared code split into one chunk, so no import map
-is needed and only the parts of three the page reaches are shipped. MathJax, its
-Fira font and the interface fonts are copied under `docs/vendor/`, and the three
-markdown documents the dialogs fetch are copied beside `index.html`.
-
-`docs/` is a build artifact and is not committed. `.github/workflows/pages.yml`
-runs the self-check, builds it, and deploys it to GitHub Pages on every push to
-`main`; Pages is set to deploy from GitHub Actions.
-
-## The space
-
-`color-space.ts` is the whole model, as a triple **(M, g, f)**:
-
-| | | |
-|---|---|---|
-| **M** | chart | Oklab scaled by 100 |
-| **g** | metric | **local** structure, Riemannian, additive — arc length |
-| **f** | returns | **global** structure, concave, **not** additive — perceived difference |
-
-`f(s) = s₀·ln(1 + s/s₀)` with `s₀ = 100/a ≈ 18.7`, which is the paper's Eq. 18
-renormalized so `f'(0) = 1`. That collapses both fitted parameters into a single
-knee: below it differences add, above it they saturate.
-
-Two properties make the split workable, and the 2025 paper argues for exactly
-this construction:
-
-- `f` monotone ⇒ geodesics of `g` are unchanged. Plan with `g`.
-- `f` concave, `f(0) = 0` ⇒ `f∘s` is subadditive, so it is still a metric —
-  just not an intrinsic one.
-
-**Use arc length for anything integrated along a path** (spacing a continuous
-palette) **and perceived difference for anything compared as a jump**
-(separating a discrete one). Conflating the two is the bug the file exists to
-prevent.
-
-## The tool
-
-`index.html` is a three.js viewer: one scene, four scissored viewports (three
-orthographic cuts and a 3D view), so picking and dragging are a single code
-path across all of them.
-
-- **Palettes** — continuous trajectories (centripetal Catmull–Rom through
-  control points) or discrete sets. matplotlib colormaps and Tableau/Okabe–Ito/
-  ColorBrewer sets load as editable control points.
-- **Color vision** — Machado, Oliveira & Fernandes 2009, all three deficiencies
-  at any severity, applied to the swatches *and* the gamut solid. Severity is a
-  tabulated matrix per 0.1 step rather than a fade toward dichromacy, because
-  most color vision deficiency is anomalous trichromacy.
-- **Gamuts** — sRGB, Display P3, Adobe RGB, Rec.2020, ProPhoto, ACEScg, NTSC
-  1953. Derived from primaries and white point; the selector changes what is
-  *reachable*, the screen stays sRGB.
-- **Palettes** — matplotlib, Okabe-Ito, the [ColorBrewer](https://colorbrewer2.org/)
-  qualitative sets, four from seaborn, and Fabio Crameri's
-  [Scientific colour maps](https://www.fabiocrameri.ch/colourmaps/) v8 (MIT),
-  grouped as sequential, diverging, cyclic and categorical. Each is stored as
-  control points, fitted so the rendered ramp stays within one perceived unit
-  of every color in the published table.
-- **Spaces** — Oklab, CIELAB, CIELUV, IPT, ICtCp, CAM02-UCS, XYZ, sRGB. A
-  change of chart: points live in the chart, so switching view never moves a
-  palette.
-- **Constraints** — keep-out spheres, rotatable halfplanes, lightness/chroma/hue
-  bounds shaded into the views, and a hard gamut projection applied wherever
-  state becomes geometry.
-- **Optimization** — Adam over the control points, one step at a time or run
-  continuously, with per-term enable and weight, and pinnable endpoints.
-
-## Status
-
-Adam runs over the control points, either stepped or continuous. Each term's
-gradient is normalized before weighting, so a weight is a relative pull rather
-than a number that has to fight the term's units — these objectives span four
-orders of magnitude, and an unnormalized sum is just the largest one.
-
-Gradients are numeric (central differences over 3n coordinates), which is the
-dominant cost and caps the solver at roughly ten iterations a second; analytic
-gradients for the cheap terms are the obvious next win.
-
-Reconstructing a known colormap from its endpoints reproduces every property it
-was designed around — lightness linearity, monotonicity, CVD separation — but
-not its hue path, which was a human choice and has to be supplied as a
-constraint. With one hue arc, mean ΔE to viridis drops from 16.2 to 6.2.
+Pushes to `main` build and deploy to GitHub Pages.

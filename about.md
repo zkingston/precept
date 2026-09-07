@@ -45,9 +45,8 @@ provides a number of metrics to help design pleasing and scientifically validate
   **[** and **]** step the selection through the nodes, keep-out spheres and halfplanes, and
   **Delete** removes it. In the profile plots, left and right pick a knot and up and down move it; on
   the hue wheel, left and right move the start of the arc and up and down its end.
-- In a discrete palette, **order** puts the colors most distinct first: it opens with the two most
-  distant, and each color after is as far as possible from those before it, under every observer in
-  play.
+- A discrete palette keeps the order in which neighbors, cycling round, differ as much as possible
+  in total, under every observer in play, starting on the widest step.
 - Under **Optimize**, tick the terms to include and set how hard each one pulls in the **×**
   column — type a weight, or drag one up and down. Then press **run optimizer**.
 - Under **View**, **space** picks the coordinates the panels are drawn in and the metric distances
@@ -99,5 +98,7 @@ The picker contains matplotlib's ramps, Okabe and Ito's categorical set, the qua
 #### Credit
 
 Built by Zachary Kingston, using Claude Opus 5.
+Feel free to send suggestions or open PRs!
+Be warned: this is fully vibe coded.
 
-[zkingston.com](https://zkingston.com) / [zkingston@purdue.edu](mailto:zkingston@purdue.edu)
+[zkingston.com](https://zkingston.com) / [zkingston@purdue.edu](mailto:zkingston@purdue.edu) / [GitHub repository](https://github.com/zkingston/precept)

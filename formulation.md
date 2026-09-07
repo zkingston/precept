@@ -206,15 +206,31 @@ Each $v\in\mathcal{O}$ is a map on $M$.
   $\kappa$ is the [WCAG 2](https://en.wikipedia.org/wiki/Web_Content_Accessibility_Guidelines) contrast ratio against the background $\beta$, and $\kappa_{\min}$ is the target ratio.
   The hinge $[\cdot]_+$ makes the term zero once every probe meets the floor, so it has no effect on the other terms after that.
 
-- **lightness spread** <span class="d">every pair separable in grayscale</span>
+- **lightness floor** <span class="d">every pair separable once chroma fades</span>
 
   $$
-  F_{\text{lsep}}=\sum_{i<j}\bigl[\Delta_L-|L_i-L_j|\bigr]_+^2,\qquad
-     \Delta_L=\frac{L_+-L_-}{n-1}
+  F_{\text{lsep}}=\sum_{i<j}\Bigl[\Delta_L-\sqrt{(L_i-L_j)^2+\kappa^2\,\delta_{ij}^2}\Bigr]_+^2,\qquad
+     \Delta_L=\frac{L_+-L_-}{n-1},\qquad
+     \delta_{ij}=\min_{v\in\mathcal{V}}\bigl\|(a,b)_{v(p_i)}-(a,b)_{v(p_j)}\bigr\|
   $$
 
   This term is also a hinge.
-  $\Delta_L$ is the largest spacing $n$ swatches can have in the lightness band, so the term is zero only when they are spread evenly over the whole band.
+  $\Delta_L$ is the largest spacing $n$ swatches can have in the lightness band, so it is always reachable.
+  A pair is measured with its chroma attenuated by $\kappa$ rather than removed: a chromatic difference earns partial credit toward the floor, so a red and a blue may share a lightness while two blues must take their whole separation in lightness, and the even ladder is no longer forced.
+  $\delta_{ij}$ is the smallest chromatic difference any observer in $\mathcal{V}$ sees, since a red and a green are two blues to a deuteranope.
+  $\kappa=1/2$: at zero this is the grayscale floor, at one it is the ordinary repulsion.
+
+- **hue floor** <span class="d">every pair a hue of its own</span>
+
+  $$
+  F_{\text{hsep}}=\sum_{i<j}\bigl[\Delta_H-\angle(h_i,h_j)\bigr]_+^2,\qquad
+     \Delta_H=\begin{cases}360^\circ/n & \text{the full circle}\\ (H_+-H_-)/(n-1) & \text{an arc}\end{cases}
+  $$
+
+  A hinge on the angular hue difference of every pair.
+  $\Delta_H$ is the even spacing, the most $n$ hues can all be apart, so the term is zero exactly when the hues are spread evenly and the floor is reachable by construction.
+  Repulsion alone can separate a pair with lightness and chroma and leave the hues bunched; this is what makes a set read as $n$ colors rather than shades of two.
+  A near-neutral has no hue to speak of, so a pair with one in it is left out.
 
 #### Optimization
 
@@ -246,15 +262,8 @@ $$
    u_k=\begin{cases}\rho\,w_k & k=\text{feas}\\ w_k & \text{otherwise}\end{cases}
 $$
 
-The terms span four orders of magnitude, so without normalization the largest would dominate.
-With normalization, each $w_k$ is a relative weight: weight 2 pulls twice as hard as weight 1, whatever the terms measure.
-The feasibility term is multiplied by $\rho$ here rather than inside $F_{\text{feas}}$, because normalization would otherwise divide $\rho$ back out.
-
 [Adam](https://en.wikipedia.org/wiki/Stochastic_gradient_descent#Adam) steps along $D$ with $\beta_1=0.9$, $\beta_2=0.999$, and step size $\eta=1.2\,r$, where $r$ is the rate slider.
-The normalizer depends on $P$, so $D$ is not the gradient of any fixed function and there is no descent guarantee.
-
 Restarts are optional.
 A stall is an improvement of less than $5\times10^{-4}$ over $8T=200$ iterations.
 On a stall, every free coordinate gets uniform noise on $[-5,5]$ and the run continues.
-The noise is seeded and reset at the start of each run, so the same scene optimizes to the same palette every time, and a shared link reproduces its palette.
-The best iterate is kept, ordered first by $\max_k c_k$ and then by $\sum_k w_k F_k$, so a feasible palette always beats an infeasible one.
+The best iterate is kept, ordered first by $\max_k c_k$ and then by $\sum_k w_k F_k$.

@@ -1,8 +1,8 @@
 ### Spaces
 
 This setting picks the color space the palette is displayed in and the metric $g$ that measures the distance between colors.
-Colors are stored in Oklab, called the chart.
-Each space is a map from the chart to its own coordinates, with Jacobian $J$.
+Colors are stored in Oklab.
+Each space is a map from Oklab to its own coordinates, with Jacobian $J$.
 The metric is $g=J^{\top}AJ$, where $A$ is the identity for every space except CIEDE2000.
 The **Formulation** dialog, under Optimize, describes how the optimizer uses $g$.
 
@@ -23,7 +23,7 @@ A color space is a choice of coordinates on those three dimensions.
 In XYZ, the Euclidean distance between two colors is not a measure of how different they look.
 In the other spaces here, distance approximates perceived difference.
 They disagree with one another.
-In the equations below, $(X,Y,Z)$ are relative tristimulus values with $Y=1$ at the chart's white $(X_n,Y_n,Z_n)$.
+In the equations below, $(X,Y,Z)$ are relative tristimulus values with $Y=1$ at Oklab's white $(X_n,Y_n,Z_n)$.
 
 #### CIE XYZ (1931)
 
@@ -134,8 +134,6 @@ $$
 $$
 
 $M'$ and $S'$ are computed like $L'$.
-This tool divides the cone responses by those of the chart white before the power, so that gray lies exactly on the $I$ axis.
-The published space does not normalize.
 $I$ is intensity.
 $P$ runs green to red and $T$ blue to yellow.
 In IPT, lines of constant perceived hue are straight.
@@ -274,7 +272,7 @@ $$
 \begin{pmatrix}L'\\M'\\S'\end{pmatrix}
 $$
 
-PQ is absolute, in units of $10{,}000\ \mathrm{cd/m^2}$, and the chart is relative.
+PQ is absolute, in units of $10{,}000\ \mathrm{cd/m^2}$.
 The white at $Y=1$ is placed at $100\ \mathrm{cd/m^2}$, which is the division by 100 in the formula.
 That placement only scales $I$, and $K$ then rescales $I$ so that white reads 100, like every other lightness here.
 $I$ is intensity, $C_t$ is tritan chroma, and $C_p$ is protan chroma, the same meanings as IPT's axes.
@@ -284,7 +282,6 @@ PQ covers a luminance range far beyond an sRGB display, so inside the sRGB gamut
 #### Oklab (2020)
 
 [Oklab](https://en.wikipedia.org/wiki/Oklab_color_space) is [Ottosson's](https://bottosson.github.io/posts/oklab/) space, scaled by 100.
-Oklab is the chart: every color in this tool is stored in it, and the other spaces are views of it.
 The structure is IPT's, with a cube root as the nonlinearity.
 Both matrices are numerical fits to CAM16-UCS and IPT difference data.
 

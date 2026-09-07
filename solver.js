@@ -274,36 +274,84 @@ export function repulsionAt(P, views, i) {
 export const WARN_EPS = 0.005;    // below this a `bad` term reads 0.00, so do not flag it
 
 /**
- * Farthest-first order for a discrete palette: each next color is the remaining
- * one whose nearest placed color is farthest, by the perceived difference
- * repulsion uses, under every observer in play. Every prefix is then as spread
- * as it can be, which is how a categorical palette is used: the first k colors
- * for k classes.
+ * The order of a discrete palette: the tour through every color whose steps
+ * between neighbors add up to the most, by the perceived difference repulsion
+ * uses, under every observer in play. A tour rather than a path, because a
+ * palette cycles once there are more classes than colors, so the last color's
+ * neighbor is the first. Exact for up to fifteen colors, by the Held-Karp
+ * table over subsets; beyond that a farthest-next tour from every start,
+ * improved by 2-opt, which is the same thing without the guarantee. The tour
+ * is rotated to begin on its widest step, so the first two colors are the two
+ * most distinct neighbors in it.
  *
- * The start is chosen the same way. Every color is tried as the first, and the
- * run kept is the one whose prefix separations are largest, first pair first:
- * the opening pair is the two most distant colors, and the later prefixes
- * settle which of the two leads. The distances are computed once, so the scan
- * over starts is a cubic number of lookups.
+ * The order the palette already has is kept when it is as long as the best
+ * found: the reverse of a tour is as long as the tour, so without this a
+ * settled palette could flip on every look.
  */
 export function distinctOrder(P, views = criteria()) {
-  const g = M(), n = P.length;
+  const n = P.length;
+  if (n < 3) return P.map((_, i) => i);
+  const g = M();
   const D = P.map((a) => P.map((b) => Math.min(...views.map((v) => pd(v(a), v(b), g)))));
-  const from = (start) => {
-    const order = [start], left = new Set(P.map((_, i) => i)), near = D[start].slice(), mins = [];
-    left.delete(start);
-    while (left.size) {
-      let next = -1, best = -Infinity;
-      for (const j of left) if (near[j] > best) { best = near[j]; next = j; }
-      mins.push(best); order.push(next); left.delete(next);
-      for (const j of left) near[j] = Math.min(near[j], D[next][j]);
+  const id = P.map((_, i) => i);
+  let tour = n <= 15 ? exactTour(D) : heuristicTour(D);
+  if (tourLength(D, tour) <= tourLength(D, id) + 1e-9) tour = id;
+  let k = 0, w = -Infinity;
+  for (let i = 0; i < n; i++) { const e = D[tour[i]][tour[(i + 1) % n]]; if (e > w) { w = e; k = i; } }
+  return [...tour.slice(k), ...tour.slice(0, k)];
+}
+
+export const tourLength = (D, t) => t.reduce((a, v, i) => a + D[v][t[(i + 1) % t.length]], 0);
+
+/** Held-Karp: the best path from 0 over each subset, ending at each member */
+function exactTour(D) {
+  const n = D.length, N = 1 << n;
+  const dp = new Float64Array(N * n).fill(-Infinity), from = new Int8Array(N * n).fill(-1);
+  dp[1 * n] = 0;
+  for (let mask = 1; mask < N; mask += 2) {                  // every subset that holds 0
+    for (let j = 0; j < n; j++) {
+      const cur = dp[mask * n + j];
+      if (cur === -Infinity) continue;
+      for (let k = 1; k < n; k++) {
+        if (mask & (1 << k)) continue;
+        const nm = mask | (1 << k), v = cur + D[j][k];
+        if (v > dp[nm * n + k]) { dp[nm * n + k] = v; from[nm * n + k] = j; }
+      }
     }
-    return { order, mins };
-  };
-  const ahead = (a, b) => { for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) return a[k] > b[k]; return false; };
-  let best = null;
-  for (let s = 0; s < n; s++) { const c = from(s); if (!best || ahead(c.mins, best.mins)) best = c; }
-  return best ? best.order : [];
+  }
+  let best = -Infinity, end = 0;
+  for (let j = 1; j < n; j++) { const v = dp[(N - 1) * n + j] + D[j][0]; if (v > best) { best = v; end = j; } }
+  const tour = [];
+  for (let mask = N - 1, j = end; j !== -1;) { tour.push(j); const pj = from[mask * n + j]; mask &= ~(1 << j); j = pj; }
+  return tour.reverse();
+}
+
+/** farthest-next from every start, then 2-opt until no reversal lengthens it */
+function heuristicTour(D) {
+  const n = D.length;
+  let best = null, bw = -Infinity;
+  for (let s = 0; s < n; s++) {
+    const t = [s], left = new Set(D.map((_, i) => i)); left.delete(s);
+    while (left.size) {
+      let next = -1, far = -Infinity;
+      for (const j of left) if (D[t[t.length - 1]][j] > far) { far = D[t[t.length - 1]][j]; next = j; }
+      t.push(next); left.delete(next);
+    }
+    for (let improved = true; improved;) {
+      improved = false;
+      for (let i = 0; i < n - 1; i++) for (let j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        const a = t[i], b = t[i + 1], c = t[j], d = t[(j + 1) % n];
+        if (D[a][c] + D[b][d] > D[a][b] + D[c][d] + 1e-9) {
+          t.splice(i + 1, j - i, ...t.slice(i + 1, j + 1).reverse());
+          improved = true;
+        }
+      }
+    }
+    const w = tourLength(D, t);
+    if (w > bw) { bw = w; best = t; }
+  }
+  return best;
 }
 /**
  * Knots in the editable profile: one per swatch.
@@ -322,16 +370,9 @@ export let LK = 9;
 /** a lightness target kept to the band, and a hue target kept to the arc, at
  *  the nearer end when it is outside: a target the palette cannot reach is not
  *  a target */
-export const targetL = (v) => Math.min(S.hi[0], Math.max(S.lo[0], v));
-export const targetH = (v) => {
-  const h = norm360(v);
-  return inHueArc(h) ? h : angGap(h, S.hue[0]) <= angGap(h, S.hue[1]) ? S.hue[0] : S.hue[1];
-};
-
 /**
- * Resize the profiles when the palette does, keeping the shape they had, and
- * inside the bounds. Called from sync(), so nothing that adds or removes a
- * point has to remember.
+ * Resize the profiles when the palette does, keeping the shape they had.
+ * Called from sync(), so nothing that adds or removes a point has to remember.
  */
 export function syncProfiles() {
   const want = Math.max(2, S.pts.length);
@@ -343,8 +384,8 @@ export function syncProfiles() {
   };
   const [l, h] = [S.lprof, S.hprof];
   LK = want;
-  S.lprof = Array.from({ length: LK }, (_, k) => targetL(at(l, k, false)));
-  S.hprof = Array.from({ length: LK }, (_, k) => targetH(at(h, k, true)));
+  S.lprof = Array.from({ length: LK }, (_, k) => at(l, k, false));
+  S.hprof = Array.from({ length: LK }, (_, k) => at(h, k, true));
 }
 
 /**
@@ -484,7 +525,7 @@ export const apcaLc = (text, bg) => {
 };
 
 /**
- * The floor the lightness-spread term aims at: the lightness range the palette
+ * The floor the lightness-floor term aims at: the lightness range the palette
  * is allowed, over the gaps its swatches have to fill. Even steps, in other
  * words, which is what reads as separable in grayscale.
  *
@@ -497,10 +538,35 @@ export const apcaLc = (text, bg) => {
  * bounds, and tightening them is how you ask for less.
  */
 export let LSEP = 0;
+/**
+ * How much of a chromatic difference survives the viewer the spread term
+ * protects against. Zero is a photocopy, where only lightness is left; one
+ * would make the term the ordinary repulsion. At a half, a red and a blue at
+ * the chroma sRGB allows earn about ten: two floors of an eight-swatch
+ * palette, most of one for five. Two blues earn nothing, and neither do a red
+ * and a green, which a deuteranope sees alike. Measured in the chart, which is
+ * Oklab scaled, where the whole chromatic range is narrow beside lightness. A
+ * calibration knob, not a derived constant.
+ */
+export const CHROMA_CREDIT = 1 / 2;
 export function autoLsep() {
   const P = palette();
   if (S.mode !== 'discrete' || P.length < 2) return 0;
   return Math.max(0, S.hi[0] - S.lo[0]) / (P.length - 1);
+}
+
+/**
+ * The floor the hue-floor term aims at: the arc the palette is allowed, over
+ * the gaps its swatches have to fill. On the full circle n hues can be 360/n
+ * apart, since the last one's neighbor is the first; on an arc, span/(n-1).
+ */
+export let HSEP = 0;
+export function autoHsep() {
+  const P = palette();
+  if (S.mode !== 'discrete' || P.length < 2) return 0;
+  const [lo, hi] = S.hue;
+  const full = hi - lo >= 360 || (lo === 0 && hi === 360);
+  return full ? 360 / P.length : norm360(hi - lo) / (P.length - 1);
 }
 
 /**
@@ -790,7 +856,7 @@ export const OBJ = [
     f: (x) => { const bg = fromHex(S.cbg);
       return x.probe.reduce((a, p) => a + hinge(S.cmin - contrastRatio(p, bg)) ** 2, 0); } },
   /**
-   * Lightness spread, for a categorical set.
+   * Lightness floor, for a categorical set.
    *
    * `min Δ` is satisfied by swatches that differ in hue alone, and those become
    * one color the moment the figure is printed, photocopied, or read by anyone
@@ -805,13 +871,50 @@ export const OBJ = [
    * eight Set2 swatches at their chroma span 51 lightness, so a floor of 8
    * asks for 56 and the term pushes forever against a wall. LSEP measures what
    * the palette can actually reach and divides by the gaps it has to fill.
+   *
+   * Not lightness alone, though. A floor on |ΔL| for every pair asks the same
+   * of a red and a green, which no viewer confuses, as of two blues, and the
+   * only way to grant it is the even ladder, which spends the chroma range on
+   * pairs that never needed the help. So each pair is measured with its
+   * chroma attenuated rather than removed: a chromatic difference earns
+   * partial credit toward the floor, two blues earn almost none and take their
+   * whole separation in lightness, and the ladder is no longer forced. The
+   * credit is the least any observer in play would grant, since a red and a
+   * green ARE two blues to a deuteranope. Lightness stays in chart units, so
+   * the floor stays reachable.
    */
-  { key: 'lsep', label: 'lightness spread', mode: 'discrete', bad: true,
+  { key: 'lsep', label: 'lightness floor', mode: 'discrete', bad: true,
     f: (x) => {
-      const P = x.pal;
+      const P = x.pal, V = criteria().map((v) => P.map(v));
       let e = 0;
       for (let i = 0; i < P.length; i++)
-        for (let j = i + 1; j < P.length; j++) e += hinge(LSEP - Math.abs(P[i][0] - P[j][0])) ** 2;
+        for (let j = i + 1; j < P.length; j++) {
+          const dC = Math.min(...V.map((Q) => Math.hypot(Q[i][1] - Q[j][1], Q[i][2] - Q[j][2])));
+          e += hinge(LSEP - Math.hypot(P[i][0] - P[j][0], CHROMA_CREDIT * dC)) ** 2;
+        }
+      return e;
+    } },
+  /**
+   * Hue floor, for a categorical set.
+   *
+   * Repulsion separates pairs by perceived distance, and lightness and chroma
+   * can pay for that on their own, so the hues are free to bunch: a set that
+   * is distinct enough and still reads as shades of two colors. This asks that
+   * every pair differ in hue by at least the even spacing, which is the most
+   * n hues can all be apart, so the set reads as n colors. A floor again: met
+   * exactly when the hues are spread evenly, and silent from then on.
+   *
+   * A near-neutral has no hue to speak of, and the angle between two of them
+   * is noise, so a pair with one in it owes nothing — the same line hueGap
+   * draws for the arc.
+   */
+  { key: 'hsep', label: 'hue floor', mode: 'discrete', bad: true,
+    f: (x) => {
+      const P = x.pal, h = P.map(hueOf), chromatic = P.map((p) => Math.hypot(p[1], p[2]) >= 1);
+      let e = 0;
+      for (let i = 0; i < P.length; i++)
+        for (let j = i + 1; j < P.length; j++)
+          if (chromatic[i] && chromatic[j]) e += hinge(HSEP - angGap(h[i], h[j])) ** 2;
       return e;
     } },
 
@@ -819,7 +922,7 @@ export const OBJ = [
 
 /** Terms included in the combined step. Constraints on, shaping opt-in. */
 // Shaping terms that fight the rest of the palette unless you ask for them.
-export const OPT_IN = ['repcvd', 'contr', 'lsep', 'sym', 'bend'];
+export const OPT_IN = ['repcvd', 'contr', 'sym', 'bend'];
 S.on = Object.fromEntries(OBJ.map((o) => [o.key, !OPT_IN.includes(o.key)]));
 /**
  * Relative pull of each term in the combined step.
@@ -1276,10 +1379,34 @@ export function clampObs(q) {
  * step needs, not the metrically nearest one.
  *
  */
+/**
+ * A chroma floor the gamut cannot meet at this lightness. At white and at black
+ * every color is gray, so clampC lifts the chroma to the floor and toGamut puts
+ * it back to zero, twelve times, and the node stays white with the floor
+ * unmet. Move along lightness instead, toward the middle and on to the far end
+ * of the band if need be, to the nearest lightness where a color at the floor
+ * fits the gamut, and let the projections continue from there.
+ */
+function fitChromaFloor(q) {
+  const cmin = S.lo[1];
+  if (cmin <= 0) return q;
+  const h = hueOf(q), at = (L) => fromLCh([L, cmin, h]);
+  if (inGamut(at(q[0]))) return q;
+  const dir = q[0] < 50 ? 1 : -1, [lo0, hi0] = [S.lo[0], S.hi[0]];
+  let out = q[0], inn = null;
+  for (let L = q[0] + dir; L >= lo0 - 1e-9 && L <= hi0 + 1e-9; L += dir) {
+    if (inGamut(at(L))) { inn = L; break; }
+    out = L;
+  }
+  if (inn === null) return q;                    // no lightness in the band fits the floor
+  for (let k = 0; k < 20; k++) { const m = (out + inn) / 2; inGamut(at(m)) ? (inn = m) : (out = m); }
+  return at(inn);
+}
+
 export function feasify(p) {
   let q = toGamut(p);
   for (let it = 0; it < 12 && infeasibility(q) > 1e-4; it++)
-    q = toGamut(clampObs(clampPlanes(clampH(clampC(clampL(q))))));
+    q = toGamut(clampObs(clampPlanes(clampH(fitChromaFloor(clampC(clampL(q)))))));
   return q;
 }
 /**
@@ -1299,7 +1426,7 @@ export const takeDisturbed = () => { const d = disturbed; disturbed = false; ret
  * The page and the worker each hold their own copy of this module, so anything
  * derived that only one of them refreshed would quietly differ between the
  * palette you see and the one being optimized. Both were live bugs the moment
- * the solver moved off-thread: LSEP left at 0 makes the lightness-spread term
+ * the solver moved off-thread: LSEP left at 0 makes the lightness-floor term
  * identically zero, and a stale `view` optimizes for normal vision while the
  * Vision panel says protanopia. Deriving them in one place, called from both,
  * is what keeps that from being possible rather than merely unlikely.
@@ -1307,7 +1434,7 @@ export const takeDisturbed = () => { const d = disturbed; disturbed = false; ret
 export function derive() {
   syncPins(); syncRuns(); syncProfiles();
   setObserver(S.cvd === 'none' ? NORMAL : simulate(S.cvd, S.sev));
-  LSEP = autoLsep();
+  LSEP = autoLsep(); HSEP = autoHsep();
 }
 
 // ─── self-check ──────────────────────────────────────────────────────────────
@@ -1366,26 +1493,68 @@ function demo() {
   ok(term('space').f(setup('continuous', line(6, 7))) < 1e-9, 'spacing of equal gaps is 0');
   ok(term('space').f(setup('continuous', [...line(3, 7), [70, 5, -5]])) > 0.1, 'spacing sees an uneven gap');
 
-  S.lo = [20, 0]; S.hi = [80, 40]; S.hue = [30, 200];
-  ok(targetL(90) === 80 && targetL(5) === 20 && targetL(50) === 50, 'lightness targets keep to the band');
-  ok(targetH(0) === 30 && targetH(250) === 200 && targetH(100) === 100 && targetH(-20) === 30, 'hue targets keep to the arc');
-  S.hue = [300, 60];
-  ok(targetH(350) === 350 && targetH(30) === 30 && targetH(200) === 300 && targetH(160) === 60, 'and to an arc through zero');
-  S.lo = [0, 0]; S.hi = [100, 40]; S.hue = [0, 360];
-  ok(targetH(0) === 0 && targetL(100) === 100, 'a full circle and a full band keep everything');
-
-  // farthest-first, under one observer: a permutation that opens with the
-  // two most distant colors and leaves one of the two near-duplicate blues
-  // for last
+  // the order is the best tour: equal to brute force on six colors, and the
+  // heuristic beyond the exact limit is a permutation no worse than a greedy one
   {
     setup('discrete', ['#1f77b4', '#2a80c0', '#d62728', '#ff7f0e', '#2ca02c', '#9467bd'].map(fromHex));
-    const o = distinctOrder(S.pts, [NORMAL]), g = M();
+    const g = M(), P = S.pts;
+    const D = P.map((a) => P.map((b) => pd(a, b, g)));
+    const o = distinctOrder(P, [NORMAL]);
     ok([...o].sort((a, b) => a - b).join() === '0,1,2,3,4,5', 'distinctOrder is a permutation');
-    let widest = 0;
-    for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) widest = Math.max(widest, pd(S.pts[i], S.pts[j], g));
-    ok(Math.abs(pd(S.pts[o[0]], S.pts[o[1]], g) - widest) < 1e-9, 'it opens with the two most distant colors');
-    ok(o[5] === 0 || o[5] === 1, 'and ends on one of the two near-duplicate blues');
-    ok(distinctOrder(S.pts).length === 6 && distinctOrder([]).length === 0, 'under every observer it is still a full order, and empty stays empty');
+    let bestW = -Infinity;
+    const perm = (rest, acc) => {
+      if (!rest.length) { bestW = Math.max(bestW, tourLength(D, acc)); return; }
+      rest.forEach((v, i) => perm([...rest.slice(0, i), ...rest.slice(i + 1)], [...acc, v]));
+    };
+    perm([1, 2, 3, 4, 5], [0]);
+    ok(Math.abs(tourLength(D, o) - bestW) < 1e-9, `the six-color tour is the best of all ${120}, ${tourLength(D, o).toFixed(1)}`);
+    ok(D[o[0]][o[1]] >= Math.max(...o.map((v, i) => D[v][o[(i + 1) % 6]])) - 1e-9, 'and it opens on its widest step');
+    ok(distinctOrder(o.map((i) => P[i]), [NORMAL]).join() === '0,1,2,3,4,5', 'and, applied, it is a fixed point');
+    const many = Array.from({ length: 20 }, (_, k) => fromLCh([30 + (k % 7) * 9, 8 + (k % 3) * 6, (k * 47) % 360]));
+    setup('discrete', many);
+    const D20 = many.map((a) => many.map((b) => pd(a, b, M())));
+    const o20 = distinctOrder(many, [NORMAL]);
+    ok([...o20].sort((a, b) => a - b).join() === Array.from({ length: 20 }, (_, i) => i).join(), 'twenty colors: still a permutation');
+    const greedy = [0]; { const left = new Set(many.map((_, i) => i)); left.delete(0);
+      while (left.size) { let nx = -1, far = -Infinity; for (const j of left) if (D20[greedy[greedy.length - 1]][j] > far) { far = D20[greedy[greedy.length - 1]][j]; nx = j; } greedy.push(nx); left.delete(nx); } }
+    ok(tourLength(D20, o20) >= tourLength(D20, greedy) - 1e-9, 'and no shorter a tour than farthest-next from the first color');
+  }
+
+  // lightness floor: hue and chroma earn credit toward the floor, but only
+  // what every observer in play grants, and never for two of the same hue.
+  // Chroma 15 is about what sRGB allows at this lightness; the floor is set by
+  // hand, an eight-swatch one, so the pair is all the term sees.
+  {
+    const C = (L, h) => fromLCh([L, 15, h]);
+    const lsep = (pts) => { S.cvd = 'none'; setup('discrete', pts); LSEP = 8; return term('lsep').f(ctxOf(S.pts)); };
+    ok(lsep([C(50, 30), C(50, 280)]) === 0, 'a red and a blue may share a lightness');
+    ok(lsep([C(50, 30), C(50, 140)]) > 1, 'a red and a green may not: to a deuteranope they are two of a hue');
+    ok(lsep([C(50, 280), C(50, 295)]) > 1, 'two blues at one lightness are penalized');
+    ok(lsep([C(50, 280), C(58, 295)]) === 0, 'and a floor apart in lightness they are not');
+    derive();
+  }
+
+  // hue floor: the even spacing round the circle, or along the arc; grays sit out
+  {
+    const C = (h) => fromLCh([50, 10, h]);
+    const hsep = (pts, hue = [0, 360]) => { S.hue = hue; setup('discrete', pts); return term('hsep').f(ctxOf(S.pts)); };
+    ok(hsep([C(0), C(120), C(240)]) === 0 && HSEP === 120, 'three hues a third of a turn apart clear the floor');
+    ok(hsep([C(0), C(10), C(20)]) > 1, 'three bunched hues do not');
+    ok(hsep([C(0), C(180), [50, 0, 0]]) === 0, 'a gray owes no hue to anyone');
+    ok(hsep([C(0), C(45), C(90)], [0, 90]) === 0 && HSEP === 45, 'on an arc the floor is the arc over the gaps');
+    ok(hsep([C(0), C(20), C(90)], [0, 90]) > 1, 'and bunching on the arc is seen');
+    S.hue = [0, 360]; derive();
+  }
+
+  // a chroma floor at white: the node leaves white rather than staying gray
+  {
+    setup('discrete', [fromHex('#ffffff'), fromHex('#000000'), fromHex('#3b7dd8')]);
+    S.lo = [0, 15]; S.hi = [100, 40]; S.hue = [0, 360]; S.obs = []; S.planes = [];
+    const q = S.pts.map(feasify);
+    ok(q.every((p) => Math.hypot(p[1], p[2]) >= 15 - 1e-3 && inGamut(p)), 'white and black land in gamut at the chroma floor');
+    ok(q[0][0] < 100 && q[1][0] > 0, 'by moving along lightness');
+    ok(q[2].every((v, i) => Math.abs(v - S.pts[2][i]) < 1e-9), 'and a color already inside is untouched');
+    S.lo = [0, 0]; S.hi = [100, 40];
   }
 
   // the windowed repulsion is the whole thing, differentiated

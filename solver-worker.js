@@ -25,6 +25,15 @@ let running = false, id = 0;                  // the page's run counter, echoed 
  */
 const SLICE = 16;
 
+/**
+ * A discrete step is cheap enough that a slice held hundreds of them, and the
+ * swatches jumped to the answer in a few frames with nothing to watch. One a
+ * frame keeps the motion followable, and the rate slider is then the speed.
+ * A continuous step costs a frame or more on its own, so there the slice is
+ * the limit.
+ */
+const stepsPerFrame = () => (S.mode === 'discrete' ? 1 : Infinity);
+
 function receive(m) {
   Object.assign(S, m.S);
   Object.assign(params, m.params);
@@ -47,9 +56,9 @@ const finish = () => { running = false; postMessage({ t: 'final', pts: answer(),
 function loop() {
   if (!running) return;
   const until = performance.now() + SLICE;
-  let alive = true;
+  let alive = true, steps = 0;
   try {
-    do { alive = step(); } while (alive && performance.now() < until);
+    do { alive = step(); steps++; } while (alive && performance.now() < until && steps < stepsPerFrame());
   } catch (err) {
     // A throw in here used to end the run without ending it. loop was never
     // rescheduled, so neither `pts` nor `final` ever arrived and the page sat
@@ -63,7 +72,9 @@ function loop() {
   }
   postMessage({ t: 'pts', pts: S.pts, id, share: LAST.share, tick, restarts: RESTART.n });
   if (!alive) return finish();                 // converged: nothing moved
-  setTimeout(loop, 0);                         // yield, so `stop` can be heard
+  // the rest of the slice, so a cheap step runs once a frame rather than once
+  // per timer tick; and a yield either way, so `stop` can be heard
+  setTimeout(loop, Math.max(0, until - performance.now()));
 }
 
 onmessage = (e) => {
