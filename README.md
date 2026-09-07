@@ -1,10 +1,13 @@
 # precept
 
+> [!WARNING]
+> This was fully vibe coded!
+
 A browser tool for designing color palettes by optimization.
 Live at [zkingston.com/precept](https://zkingston.com/precept/).
 
-[about.md](about.md) explains the tool, [formulation.md](formulation.md)
-defines the optimizer's terms and constraints, and [spaces.md](spaces.md)
+[about.md](src/about.md) explains the tool, [formulation.md](src/formulation.md)
+defines the optimizer's terms and constraints, and [spaces.md](src/spaces.md)
 defines the color spaces.
 
 ## Run

@@ -16,7 +16,7 @@ const PORT = 9333, PAGE = 'http://localhost:8080/';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pack = (scene) => Buffer.from(deflateRawSync(Buffer.from(JSON.stringify(scene)))).toString('base64url');
 
-const server = spawn('node', ['serve.js', '.'], { cwd: REPO, stdio: 'ignore' });   // the sources: no build to wait for
+const server = spawn('node', ['scripts/serve.js', 'src'], { cwd: REPO, stdio: 'ignore' });   // the sources: no build to wait for
 const chrome = spawn(process.env.CHROMIUM ?? 'chromium', ['--headless=new', `--remote-debugging-port=${PORT}`,
   '--no-sandbox', '--disable-gpu', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
   '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });

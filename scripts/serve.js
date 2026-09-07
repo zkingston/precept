@@ -1,5 +1,5 @@
 // Dev server. Serves docs/, the built copy, and rebuilds it on every edit, so
-// what you see is what Pages will ship. `node serve.js .` serves the sources
+// what you see is what Pages will ship. `node scripts/serve.js src` serves the sources
 // instead: the browser cannot parse TypeScript, so the types are stripped on
 // the way out, and a stack trace keeps its real names.
 import { spawn } from 'node:child_process';
@@ -17,14 +17,15 @@ const TYPE = { '.html': 'text/html', '.js': 'text/javascript', '.ts': 'text/java
                '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff',
                '.md': 'text/markdown' };
 
+const REPO = join(import.meta.dirname, '..');
 const ROOT = process.argv[2] ?? 'docs';
 if (ROOT === 'docs') {
   // `node --watch build.js` would watch only what build.js imports, and
   // watching . would include docs/ and the scratch entry file, so the inputs
   // are named one by one.
   const SRC = ['index.html', 'color-space.ts', 'solver.js', 'solver-worker.js', 'about.md', 'formulation.md', 'spaces.md'];
-  const watch = spawn(process.execPath, [...SRC.map((f) => `--watch-path=${f}`), 'build.js'],
-                      { cwd: import.meta.dirname, stdio: 'inherit' });
+  const watch = spawn(process.execPath, [...SRC.map((f) => `--watch-path=src/${f}`), 'scripts/build.js'],
+                      { cwd: REPO, stdio: 'inherit' });
   // so a kill of this process does not leave the watcher rebuilding forever
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { watch.kill(sig); process.exit(); });
 }
@@ -32,7 +33,9 @@ if (ROOT === 'docs') {
 createServer(async (req, res) => {
   const [path, query] = req.url.split('?');
   const rel = normalize(decodeURI(path)).replace(/^(\.\.[/\\])+/, '');
-  const file = join(import.meta.dirname, ROOT, rel.endsWith('/') ? rel + 'index.html' : rel);
+  // the page names /node_modules absolutely, which lives at the repo root, not under src/
+  const base = rel.startsWith('/node_modules/') ? '' : ROOT;
+  const file = join(REPO, base, rel.endsWith('/') ? rel + 'index.html' : rel);
   try {
     const src = await readFile(file);                    // Buffer: see above
     res.writeHead(200, { 'content-type': TYPE[extname(file)] ?? 'text/plain', 'cache-control': 'no-store' });

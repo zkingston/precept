@@ -8,8 +8,8 @@
 // resolves every specifier at build time so no map is needed, and it keeps
 // only the parts of three the page actually reaches.
 //
-// `node serve.js` serves this bundle and reruns this script on every edit.
-// `node serve.js .` serves the sources untouched, for readable code with real
+// `npm run serve` serves this bundle and reruns this script on every edit.
+// `node scripts/serve.js src` serves the sources untouched, for readable code with real
 // names in a stack trace.
 //
 // docs/ is a build artifact and is not committed: the Pages workflow builds it
@@ -18,6 +18,7 @@ import { readFile, writeFile, mkdir, rm, cp, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { build } from 'esbuild';
 
+const SRC = 'src';
 const OUT = 'docs';
 
 await rm(OUT, { recursive: true, force: true });
@@ -28,12 +29,12 @@ await mkdir(join(OUT, 'vendor'), { recursive: true });
 // for something esbuild has to resolve imports from. So it goes to a scratch
 // file beside its own sources, where './color-space.ts' and './solver.js' mean
 // what they say, and comes back as one <script src>.
-const RAW = await readFile('index.html', 'utf8');
+const RAW = await readFile(join(SRC, 'index.html'), 'utf8');
 const OPEN = '<script type="module">', CLOSE = '</script>';
 const a = RAW.indexOf(OPEN), b = RAW.lastIndexOf(CLOSE);
 if (a < 0 || b < a) throw new Error('index.html: could not find the module script to bundle');
 
-const ENTRY = '.app-entry.js';
+const ENTRY = join(SRC, '.app-entry.js');
 // MathJax is a classic script fetched by URL at run time, so its path travels
 // inside the module rather than in the markup, and has to be rewritten here.
 const entry = RAW.slice(a + OPEN.length, b)
@@ -48,7 +49,7 @@ await writeFile(ENTRY, entry);
 let meta;
 try {
   ({ metafile: meta } = await build({
-    entryPoints: { app: ENTRY, 'solver-worker': 'solver-worker.js' },
+    entryPoints: { app: ENTRY, 'solver-worker': join(SRC, 'solver-worker.js') },
     bundle: true, splitting: true, format: 'esm', outdir: OUT,
     minify: true, legalComments: 'eof',        // three is MIT: keep the notice
     target: ['chrome111', 'firefox121', 'safari16.4'],
@@ -119,7 +120,7 @@ for (const f of ['fira-sans/files/fira-sans-latin-400-normal.woff2',
 // input, so they have to exist next to index.html on the deployed site. Their
 // renderer is not here any more — marked is imported dynamically, so esbuild
 // gives it its own chunk and the page still only pays for it on a ? click.
-for (const doc of ['about.md', 'formulation.md', 'spaces.md']) await copyInto(doc, doc);
+for (const doc of ['about.md', 'formulation.md', 'spaces.md']) await copyInto(join(SRC, doc), doc);
 
 // Jekyll would otherwise skip anything beginning with an underscore
 await writeFile(join(OUT, '.nojekyll'), '');
