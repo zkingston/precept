@@ -6,8 +6,8 @@
 A browser tool for designing color palettes by optimization.
 Live at [zkingston.com/precept](https://zkingston.com/precept/).
 
-[about.md](src/about.md) explains the tool, [formulation.md](src/formulation.md)
-defines the optimizer's terms and constraints, and [spaces.md](src/spaces.md)
+[about.md](src/text/about.md) explains the tool, [formulation.md](src/text/formulation.md)
+defines the optimizer's terms and constraints, and [spaces.md](src/text/spaces.md)
 defines the color spaces.
 
 ## Run

@@ -13,9 +13,16 @@ import { extname, join, normalize } from 'node:path';
 // that is not valid UTF-8 becomes U+FFFD and the file comes back near twice its
 // real size. The browser then rejects the font and falls back silently, which
 // on MathJax output means correct layout filled with the wrong glyphs.
-const TYPE = { '.html': 'text/html', '.js': 'text/javascript', '.ts': 'text/javascript', '.css': 'text/css',
-               '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff',
-               '.md': 'text/markdown' };
+const TYPE = {
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.ts': 'text/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.md': 'text/markdown',
+};
 
 const REPO = join(import.meta.dirname, '..');
 const ROOT = process.argv[2] ?? 'docs';
@@ -23,11 +30,26 @@ if (ROOT === 'docs') {
   // `node --watch build.js` would watch only what build.js imports, and
   // watching . would include docs/ and the scratch entry file, so the inputs
   // are named one by one.
-  const SRC = ['index.html', 'color-space.ts', 'solver.js', 'solver-worker.js', 'about.md', 'formulation.md', 'spaces.md'];
-  const watch = spawn(process.execPath, [...SRC.map((f) => `--watch-path=src/${f}`), 'scripts/build.js'],
-                      { cwd: REPO, stdio: 'inherit' });
+  const SRC = [
+    'index.html',
+    'scene.js',
+    'color-space.ts',
+    'solver.js',
+    'solver-worker.js',
+    'data',
+    'text',
+  ];
+  const watch = spawn(
+    process.execPath,
+    [...SRC.map((f) => `--watch-path=src/${f}`), 'scripts/build.js'],
+    { cwd: REPO, stdio: 'inherit' },
+  );
   // so a kill of this process does not leave the watcher rebuilding forever
-  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { watch.kill(sig); process.exit(); });
+  for (const sig of ['SIGINT', 'SIGTERM'])
+    process.on(sig, () => {
+      watch.kill(sig);
+      process.exit();
+    });
 }
 
 createServer(async (req, res) => {
@@ -37,8 +59,21 @@ createServer(async (req, res) => {
   const base = rel.startsWith('/node_modules/') ? '' : ROOT;
   const file = join(REPO, base, rel.endsWith('/') ? rel + 'index.html' : rel);
   try {
-    const src = await readFile(file);                    // Buffer: see above
-    res.writeHead(200, { 'content-type': TYPE[extname(file)] ?? 'text/plain', 'cache-control': 'no-store' });
+    // serving the sources: the prose is rendered on request, as the build renders it
+    const doc = ROOT !== 'docs' && /^\/text\/([\w-]+)\.html$/.exec(rel);
+    if (doc) {
+      const { renderDoc } = await import('./render-docs.js');
+      const html = await renderDoc(
+        await readFile(join(REPO, ROOT, 'text', `${doc[1]}.md`), 'utf8'),
+      );
+      res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' }).end(html);
+      return;
+    }
+    const src = await readFile(file); // Buffer: see above
+    res.writeHead(200, {
+      'content-type': TYPE[extname(file)] ?? 'text/plain',
+      'cache-control': 'no-store',
+    });
     res.end(extname(file) === '.ts' ? stripTypeScriptTypes(src.toString('utf8')) : src);
   } catch (err) {
     // A directory asked for without its trailing slash. Redirect rather than

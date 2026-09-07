@@ -12,11 +12,23 @@
  * of those messages is `stop`.
  */
 import {
-  S, RESTART, LAST, step, adamReset, resetTick, reseedJitter, better, derive, constrain, incumbent, tick,
+  S,
+  RESTART,
+  LAST,
+  step,
+  adamReset,
+  resetTick,
+  reseedJitter,
+  better,
+  derive,
+  constrain,
+  incumbent,
+  tick,
 } from './solver.js';
 import { params, GAMUTS } from './color-space.ts';
 
-let running = false, id = 0;                  // the page's run counter, echoed back
+let running = false,
+  id = 0; // the page's run counter, echoed back
 
 /**
  * The page cannot draw faster than a frame, so posting more often than this
@@ -37,12 +49,13 @@ const stepsPerFrame = () => (S.mode === 'discrete' ? 1 : Infinity);
 function receive(m) {
   Object.assign(S, m.S);
   Object.assign(params, m.params);
-  Object.assign(GAMUTS, m.gamuts);            // any ICC profile the page loaded
+  Object.assign(GAMUTS, m.gamuts); // any ICC profile the page loaded
   // this module instance has never seen a palette before, so everything it
   // keeps outside S — the knot count, the observer, the lightness floor — has
   // to be rebuilt from what just arrived
-  derive(); constrain();
-  if (m.disturbed) adamReset();               // edited out from under the moments
+  derive();
+  constrain();
+  if (m.disturbed) adamReset(); // edited out from under the moments
 }
 
 /** the run's answer: the best restart, or where it ended if that was better */
@@ -51,14 +64,21 @@ const answer = () => {
   return S.restart && best && better(best, S.pts) ? best : S.pts;
 };
 
-const finish = () => { running = false; postMessage({ t: 'final', pts: answer(), id }); };
+const finish = () => {
+  running = false;
+  postMessage({ t: 'final', pts: answer(), id });
+};
 
 function loop() {
   if (!running) return;
   const until = performance.now() + SLICE;
-  let alive = true, steps = 0;
+  let alive = true,
+    steps = 0;
   try {
-    do { alive = step(); steps++; } while (alive && performance.now() < until && steps < stepsPerFrame());
+    do {
+      alive = step();
+      steps++;
+    } while (alive && performance.now() < until && steps < stepsPerFrame());
   } catch (err) {
     // A throw in here used to end the run without ending it. loop was never
     // rescheduled, so neither `pts` nor `final` ever arrived and the page sat
@@ -71,7 +91,7 @@ function loop() {
     throw err;
   }
   postMessage({ t: 'pts', pts: S.pts, id, share: LAST.share, tick, restarts: RESTART.n });
-  if (!alive) return finish();                 // converged: nothing moved
+  if (!alive) return finish(); // converged: nothing moved
   // the rest of the slice, so a cheap step runs once a frame rather than once
   // per timer tick; and a yield either way, so `stop` can be heard
   setTimeout(loop, Math.max(0, until - performance.now()));
@@ -79,11 +99,19 @@ function loop() {
 
 onmessage = (e) => {
   const m = e.data;
-  if (m.t === 'state') { if (running) receive(m); return; }
-  if (m.t === 'stop') { if (running) finish(); return; }
+  if (m.t === 'state') {
+    if (running) receive(m);
+    return;
+  }
+  if (m.t === 'stop') {
+    if (running) finish();
+    return;
+  }
   if (m.t === 'start') {
     receive(m);
-    resetTick(); adamReset(); reseedJitter();
+    resetTick();
+    adamReset();
+    reseedJitter();
     Object.assign(RESTART, { n: 0, best: null, bestScore: 0, scale: {}, flat: 0, prev: Infinity });
     id = m.id;
     // a start that arrives while the previous run is still unwinding re-seeds
